@@ -73,6 +73,7 @@ documented, tested against real Redis, and released on Packagist.
 | D12 | Composer package name: **`uslanozan/laravel-cache-contract`** | ✅ agreed |
 | D13 | Redis client: start with **phpredis** (Laravel's default, compatible with PHP 8.3 + Laravel 11); predis support and Redis Cluster are decided once company production details are known | ⏳ to confirm with company |
 | D14 | Demo app lives in this repo under **`examples/`** (a full Laravel app that installs the package from the local path; excluded from the Composer dist). May move to its own repo later. | ✅ agreed |
+| D15 | Runtime facade name: **`CacheContract`** (matches the package name and the `cache-contract:` command prefix) | ✅ agreed |
 
 ## 5. Phases
 
@@ -133,7 +134,7 @@ Goal: a working vertical slice: define → validate → generate key → read/wr
 - Key factory ([ADR 0004](adr/0004-key-format.md)): project-wide
   `key_format`, version segment, readable scalar parameters, hashed complex
   parameters, explicit context (tenant, locale…), deterministic output
-- Runtime API (facade): `get`, `put`, `remember`, `flexible`, `refresh`,
+- Runtime API (`CacheContract` facade): `get`, `put`, `remember`, `flexible`, `refresh`,
   `forget`; unknown definition / wrong params → exception
 - Explicit semantics for miss vs cached `null` / `false` / `0` / empty list
 - Redis error policy (read failure, write failure) as config
@@ -268,7 +269,6 @@ fails CI on a direct `Cache::put` in app code.
 | Question | Owner | Needed by |
 | :--- | :--- | :--- |
 | Which Redis version and client do company projects run, and is Redis Cluster used? | Ozan | Phase 1 (D13) |
-| Facade name for the runtime API | Team | Phase 1 |
 | Do company projects run Laravel Octane? (Design is Octane-safe from day one regardless: no request state in singletons.) | Ozan | Phase 2 |
 
 ## 7. ADR backlog

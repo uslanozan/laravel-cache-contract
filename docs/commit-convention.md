@@ -63,7 +63,7 @@ version (`0.3.0` → `0.4.0`), following SemVer's rule for initial development.
 | `definitions` | Definition schema, loading, validation |
 | `registry` | Definition registry |
 | `keys` | Key generation, canonicalization |
-| `api` | Runtime API (facade) |
+| `api` | `CacheContract` runtime API |
 | `eloquent` | Model cache, bulk loading |
 | `invalidation` | Tags, versions, model events |
 | `scanner` | Source code scanning |

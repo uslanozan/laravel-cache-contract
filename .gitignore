@@ -1,30 +1,35 @@
+ozan/
+
+# Dependencies
 /vendor/
-node_modules/
-npm-debug.log
-yarn-error.log
+# Libraries do not commit composer.lock: consumers resolve their own versions,
+# and CI tests against the newest versions the constraints allow.
+composer.lock
 
-# Laravel 4 specific
-bootstrap/compiled.php
-app/storage/
-
-# Laravel 5 & Lumen specific
-public/storage
-public/hot
-
-# Laravel 5 & Lumen specific with changed public path
-public_html/storage
-public_html/hot
-
-storage/*.key
-.env
-Homestead.yaml
-Homestead.json
-/.vagrant
+# Test & tooling caches
+.phpunit.cache/
 .phpunit.result.cache
+.php-cs-fixer.cache
+.pint.cache
+/build/
+/coverage/
 
-/public/build
-/storage/pail
-.env.backup
-.env.production
-.phpactor.json
+# Laravel Workbench / Testbench output
+/workbench/bootstrap/cache/*
+!/workbench/bootstrap/cache/.gitkeep
+/workbench/storage/
+
+# Local environment
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
 auth.json
+
+# Editors & OS
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db

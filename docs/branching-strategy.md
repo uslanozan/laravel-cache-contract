@@ -5,7 +5,7 @@
 tag.
 
 ```text
-feat/CACHE-12-registry ──squash──▶ develop ──merge commit──▶ main (tag v0.2.0)
+feat/LRVL-12-registry ──squash──▶ develop ──merge commit──▶ main (tag v0.2.0)
                                       ▲                         │
                                       └──── back-merge ─────────┘ (after a hotfix)
 ```
@@ -23,8 +23,8 @@ by `-`. The prefix uses the same words as the commit types, so there is nothing
 to translate.
 
 ```text
-feat/CACHE-12-definition-registry
-fix/CACHE-31-null-value-treated-as-miss
+feat/LRVL-12-definition-registry
+fix/LRVL-31-null-value-treated-as-miss
 docs/readme-installation
 ```
 
@@ -37,10 +37,10 @@ merged.
 ```bash
 git switch develop
 git pull
-git switch -c feat/CACHE-12-definition-registry
+git switch -c feat/LRVL-12-definition-registry
 
 # work, commit (see commit-convention.md)
-git push -u origin feat/CACHE-12-definition-registry
+git push -u origin feat/LRVL-12-definition-registry
 gh pr create --base develop --fill   # or open it from the GitHub UI
 ```
 

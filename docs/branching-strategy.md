@@ -18,7 +18,7 @@ feat/LRVL-12-registry ──squash──▶ develop ──merge commit──▶ 
 | `release/vX.Y.Z` (optional) | `develop` | `main` | merge commit |
 | `hotfix/…` | `main` | `main`, then back-merge `main` → `develop` | merge commit |
 
-**Naming:** `<type>/<linear-id>-<short-description>`, lowercase, words separated
+**Naming:** `<type>/<linear-id>-<short-description>`; the description is lowercase, words separated
 by `-`. The prefix uses the same words as the commit types, so there is nothing
 to translate.
 

@@ -1,0 +1,131 @@
+# =============================================================================
+# CI: quality gates + test matrix
+# =============================================================================
+# Until composer.json exists the package jobs are skipped and "CI result"
+# still reports success, so this workflow can be a required status check from
+# day one and switches itself on when the package skeleton lands.
+#
+# Branch rulesets require ONE check from here: "CI result". Matrix job names
+# change whenever the matrix changes; an aggregator job keeps the required
+# check name stable.
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect package
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.check.outputs.package }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: |
+          if [ -f composer.json ]; then echo "package=true" >> "$GITHUB_OUTPUT"; else echo "package=false" >> "$GITHUB_OUTPUT"; fi
+
+  quality:
+    name: Quality (lint + static analysis)
+    needs: detect
+    if: needs.detect.outputs.package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: redis
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Code style (Pint)
+        run: composer lint
+
+      - name: Static analysis (Larastan)
+        run: composer analyse
+
+  tests:
+    name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }})
+    needs: detect
+    if: needs.detect.outputs.package == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.3", "8.4", "8.5"]
+        laravel: ["12.*", "13.*"]
+        stability: [prefer-lowest, prefer-stable]
+        include:
+          - laravel: "12.*"
+            testbench: "10.*"
+          - laravel: "13.*"
+            testbench: "11.*"
+
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: redis
+          coverage: none
+          tools: composer:v2
+
+      - name: Pin Laravel version
+        run: composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+
+      - name: Install dependencies
+        run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+
+      - name: Run tests
+        run: composer test
+
+  result:
+    # The single required status check. Passes when every job either
+    # succeeded or was skipped (no composer.json yet).
+    name: CI result
+    needs: [detect, quality, tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          for r in "${{ needs.detect.result }}" "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "A required job did not pass ($r)."; exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped."

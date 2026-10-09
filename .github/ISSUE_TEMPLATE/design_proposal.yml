@@ -1,0 +1,64 @@
+name: 🧭 Design proposal
+description: A decision that shapes architecture, public API or the definition schema
+title: "[Design]: "
+labels: ["type: design", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a change needs agreement **before** code is written.
+        An accepted proposal is recorded as an ADR under `docs/adr/`.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What forces are at play? What is true today, what constraint makes this decision necessary?
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: At least two options, each with pros, cons and what it costs to reverse later.
+      value: |
+        ### Option A:
+        - Pros:
+        - Cons:
+
+        ### Option B:
+        - Pros:
+        - Cons:
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which option and why. What would make you change your mind?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Definitions / registry / schema
+        - Key generation
+        - Runtime API
+        - Eloquent / model cache
+        - Invalidation
+        - Scanner / discovery / similarity
+        - Lint / CI enforcement
+        - Tooling / release
+    validations:
+      required: true
+
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions

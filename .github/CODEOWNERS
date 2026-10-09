@@ -1,0 +1,5 @@
+# Used for automatic review requests only. "Require review from code owners"
+# is deliberately OFF in the rulesets: any one team member's approval is enough.
+# Add contributors' handles per area once roles are agreed.
+
+* @uslanozan

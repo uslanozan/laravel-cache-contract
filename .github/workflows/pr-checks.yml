@@ -1,0 +1,69 @@
+# =============================================================================
+# PR checks: title format and branch flow
+# =============================================================================
+# Feature PRs are squash-merged, so the PR title becomes the commit message on
+# `develop`. Validating the title is what keeps the history semantic.
+# See docs/commit-convention.md and docs/branching-strategy.md.
+#
+# pull_request_target is used so the check also works for PRs from forks.
+# It is safe here because no PR code is checked out or executed.
+# =============================================================================
+name: PR checks
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            test
+            docs
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          # Subject starts lowercase and does not end with a period.
+          subjectPattern: ^(?![A-Z]).+[^.]$
+          subjectPatternError: |
+            The subject "{subject}" must start with a lowercase letter and must not end with a period.
+            Example: "feat(registry): reject duplicate definition ids"
+
+  branches:
+    name: Branch flow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check head and base branches
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          echo "PR: $HEAD -> $BASE"
+
+          # 1. Branch naming: <type>/<short-description>, optional Linear ID.
+          #    develop (release PR into main) and main (back-merge into develop) are allowed as-is.
+          if ! echo "$HEAD" | grep -Eq '^(develop|main)$|^(feat|fix|perf|refactor|test|docs|build|ci|chore|revert|release|hotfix|dependabot)/.+'; then
+            echo "::error::Branch '$HEAD' must start with a type prefix, e.g. feat/CACHE-12-definition-registry"
+            exit 1
+          fi
+
+          # 2. Only develop, release/* and hotfix/* may target main.
+          if [ "$BASE" = "main" ] && ! echo "$HEAD" | grep -Eq '^(develop|release/.+|hotfix/.+)$'; then
+            echo "::error::Only develop, release/* or hotfix/* can be merged into main. Target develop instead."
+            exit 1
+          fi

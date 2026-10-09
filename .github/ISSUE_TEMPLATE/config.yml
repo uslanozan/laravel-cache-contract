@@ -1,0 +1,10 @@
+# Every issue goes through a form so it is triageable on arrival.
+blank_issues_enabled: false
+
+contact_links:
+  - name: 💬 Question
+    url: https://github.com/uslanozan/laravel-cache-contract/discussions
+    about: Usage questions and ideas that are not actionable yet.
+  - name: 🔐 Security vulnerability
+    url: https://github.com/uslanozan/laravel-cache-contract/security/advisories/new
+    about: Report privately. Never open a public issue for security problems.

@@ -1,0 +1,40 @@
+version: 2
+
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["type: chore", "dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Dev tooling (Pest, Larastan, Pint, Testbench…) arrives as one PR.
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["type: chore", "dependencies"]
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      all-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: "/docker/php"
+    target-branch: develop
+    schedule:
+      interval: monthly
+    labels: ["type: chore", "dependencies"]
+    commit-message:
+      prefix: "build(deps)"

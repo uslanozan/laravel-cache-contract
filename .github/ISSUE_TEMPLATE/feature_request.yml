@@ -1,0 +1,60 @@
+name: ✨ Feature request
+description: Propose a new capability or an improvement
+title: "[Feature]: "
+labels: ["type: feature", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Motivation** and **Acceptance criteria** decide whether a request gets picked up.
+        For larger changes that need a design discussion (new schema fields, new
+        invalidation strategy, public API redesign) use the *Design proposal* form instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What should be possible?
+      description: Describe the behaviour from the package user's point of view, not the implementation.
+      placeholder: "`php artisan managed-cache:search users` should also match definitions whose entity is `user`."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this solve, for whom? What happens if we don't build it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example usage
+      description: How would the API / command / definition look?
+      render: php
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Each line must be objectively true or false.
+      value: |
+        - [ ] Given ... when ... then ...
+        - [ ] Existing behaviour is unchanged
+        - [ ] Covered by tests
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true

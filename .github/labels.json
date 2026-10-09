@@ -1,0 +1,17 @@
+[
+  { "name": "type: bug", "color": "d73a4a", "description": "Something behaves incorrectly" },
+  { "name": "type: feature", "color": "0e8a16", "description": "New capability or improvement" },
+  { "name": "type: design", "color": "5319e7", "description": "Needs a design decision / ADR before code" },
+  { "name": "type: docs", "color": "0075ca", "description": "Documentation only" },
+  { "name": "type: chore", "color": "c5def5", "description": "Tooling, dependencies, maintenance" },
+  { "name": "dependencies", "color": "0366d6", "description": "Dependency update (Dependabot)" },
+  { "name": "status: triage", "color": "fbca04", "description": "Not yet reviewed by a maintainer" },
+  { "name": "status: blocked", "color": "b60205", "description": "Waiting on a decision or another issue" },
+  { "name": "breaking change", "color": "b60205", "description": "Changes public API or key format" },
+  { "name": "good first issue", "color": "7057ff", "description": "Small, well-scoped, good for newcomers" },
+  { "name": "area: core", "color": "bfdadc", "description": "Definitions, registry, keys, runtime API" },
+  { "name": "area: eloquent", "color": "bfdadc", "description": "Model cache, bulk loading" },
+  { "name": "area: invalidation", "color": "bfdadc", "description": "Tags, versions, model events" },
+  { "name": "area: discovery", "color": "bfdadc", "description": "Scanner, search, similarity" },
+  { "name": "area: enforcement", "color": "bfdadc", "description": "Lint, PHPStan rules, CI" }
+]

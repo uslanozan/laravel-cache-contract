@@ -35,6 +35,7 @@ Definitions live in **one PHP config file**, grouped into **sections**:
 
 ```php
 // config/cache-contract.php
+use App\Models\Company;
 use App\Models\User;
 
 return [
@@ -51,6 +52,26 @@ return [
                 'version'     => 1,                  // bump when the cached shape changes (ADR 0004)
                 'description' => 'Active users of a tenant.',  // required, free text, any language
                 'tags'        => ['users'],          // optional, must be declared centrally
+            ],
+            'profile' => [
+                'subject'        => User::class,
+                'purpose'        => 'profile',
+                'type'           => 'array',
+                'params'         => ['user_id' => 'int'],
+                'ttl'            => 3600,
+                'description'    => 'Profile page data, including the company name.',
+                'invalidated_by' => [Company::class],  // optional: clear when a Company changes
+            ],
+        ],
+
+        // ── external ─────────────────────────────────────
+        'external' => [
+            'exchange_rates' => [
+                // no subject: the data does not belong to a model
+                'purpose'     => 'exchange_rates',
+                'type'        => 'array',
+                'ttl'         => 600,
+                'description' => 'Rates fetched from the central bank API.',
             ],
         ],
 
@@ -70,6 +91,20 @@ return [
 - `description` is required, but it is free text and is not used for
   similarity.
 - Unknown fields (e.g. a typo like `ttll`) are rejected.
+
+### Fields
+
+| Field | Required | Rule |
+| :--- | :--- | :--- |
+| `purpose` | yes | English, snake_case |
+| `type` | yes | one of `model`, `collection`, `array`, `string`, `int`, `float`, `bool`. Used for structural similarity in v1. |
+| `ttl` | yes | positive integer, seconds. **No "forever" entries in v1**: a missed invalidation would serve stale data indefinitely. |
+| `description` | yes | non-empty free text, any language |
+| `subject` | no | an existing Eloquent model class. Omitted for data that does not belong to a model (external APIs, settings, cross-table reports); such definitions are compared by name and structure only. |
+| `params` | no | name → type (`int`, `string`, `bool`, `float`, `array`). **Every declared parameter is required at call time in v1.** Optional parameters would let the same data live under two keys (with and without the parameter); if needed later, they come as parameters with a default value, so the key stays the same. |
+| `version` | no | positive integer, default `1` (ADR 0004) |
+| `tags` | no | list of centrally declared tag names |
+| `invalidated_by` | no | list of existing Eloquent model classes whose changes clear this definition. Part of the schema from v1 so it is validated early; the invalidation behaviour arrives in Phase 3. |
 - Model by-id caching needs no definition (see ADR 0006); only custom data
   (profiles, lists, statistics) is defined here.
 

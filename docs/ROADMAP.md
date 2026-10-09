@@ -60,7 +60,7 @@ documented, tested against real Redis, and released on Packagist.
 | # | Decision | Status |
 | :--- | :--- | :--- |
 | D1 | Public repo at `github.com/uslanozan/laravel-cache-contract`, MIT license | ✅ agreed |
-| D2 | Definitions live in **one PHP config file**, split into sections (`user`, `order`…). IDs are `section.name`, snake_case (`user.price_number`). Each definition has `subject` (model class) + `purpose`; the same pair twice is an exact duplicate. → [ADR 0002](adr/0002-definition-format.md) | ✅ agreed |
+| D2 | Definitions live in **one PHP config file**, split into sections (`user`, `order`…). IDs are `section.name`, snake_case (`user.price_number`). Required fields: `purpose`, `type`, `ttl` (no "forever"), `description`; optional: `subject`, `params` (all required at call time), `version`, `tags`, `invalidated_by`. Same `subject` + `purpose` twice is an exact duplicate. → [ADR 0002](adr/0002-definition-format.md) | ✅ agreed |
 | D3 | Contract rules are also enforced in **CI** (lint + static analysis) | ✅ agreed |
 | D4 | Local development runs in **Docker** (PHP + Redis) | ✅ agreed |
 | D5 | Target versions: **PHP `^8.3`, Laravel `^11.23 \|\| ^12.0 \|\| ^13.0`**, Redis 7.x. Company projects run PHP 8.3 + Laravel 11, so 11 is supported; 11.23 is the first release with `Cache::flexible`. Features added later (`Cache::memo` 12.9, failover store 12.35) cannot be required by the core. → [ADR 0003](adr/0003-supported-versions.md) | ✅ agreed |
@@ -70,7 +70,7 @@ documented, tested against real Redis, and released on Packagist.
 | D9 | Model API: a `ModelCache` service does the work; a `HasCache` trait on models is a shortcut to it and hooks model events. → [ADR 0006](adr/0006-model-api.md) | ✅ agreed |
 | D10 | Artisan commands use the package prefix `cache-contract:` (not Laravel's `cache:`). The "new definition" command only **shows** similar definitions; it does not edit the config file. | ✅ agreed |
 | D11 | No Laravel Sail in this repo (Sail is for applications; the package uses `docker-compose.yml`). The demo app may use Sail. | ✅ agreed |
-| D12 | Composer package name: **`uslanozan/laravel-cache-contract`** | ✅ agreed |
+| D12 | Composer package name **`uslanozan/laravel-cache-contract`**, PHP namespace **`UslanozanCacheContract`** | ✅ agreed |
 | D13 | Redis client: start with **phpredis** (Laravel's default, compatible with PHP 8.3 + Laravel 11); predis support and Redis Cluster are decided once company production details are known | ⏳ to confirm with company |
 | D14 | Demo app lives in this repo under **`examples/`** (a full Laravel app that installs the package from the local path; excluded from the Composer dist). May move to its own repo later. | ✅ agreed |
 | D15 | Runtime facade name: **`CacheContract`** (matches the package name and the `cache-contract:` command prefix) | ✅ agreed |

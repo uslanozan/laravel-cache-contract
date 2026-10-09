@@ -70,7 +70,7 @@ documented, tested against real Redis, and released on Packagist.
 | D9 | Model API: a `ModelCache` service does the work; a `HasCache` trait on models is a shortcut to it and hooks model events. → [ADR 0006](adr/0006-model-api.md) | ✅ agreed |
 | D10 | Artisan commands use the package prefix `cache-contract:` (not Laravel's `cache:`). The "new definition" command only **shows** similar definitions; it does not edit the config file. | ✅ agreed |
 | D11 | No Laravel Sail in this repo (Sail is for applications; the package uses `docker-compose.yml`). The demo app may use Sail. | ✅ agreed |
-| D12 | Composer package name **`uslanozan/laravel-cache-contract`**, PHP namespace **`UslanozanCacheContract`** | ✅ agreed |
+| D12 | Composer package name **`uslanozan/laravel-cache-contract`**, PHP namespace **`Uslanozan\CacheContract`** | ✅ agreed |
 | D13 | Redis client: start with **phpredis** (Laravel's default, compatible with PHP 8.3 + Laravel 11); predis support and Redis Cluster are decided once company production details are known | ⏳ to confirm with company |
 | D14 | Demo app lives in this repo under **`examples/`** (a full Laravel app that installs the package from the local path; excluded from the Composer dist). May move to its own repo later. | ✅ agreed |
 | D15 | Runtime facade name: **`CacheContract`** (matches the package name and the `cache-contract:` command prefix) | ✅ agreed |

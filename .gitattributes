@@ -12,6 +12,7 @@
 /.github            export-ignore
 /docker             export-ignore
 /docs               export-ignore
+/examples           export-ignore
 /tests              export-ignore
 /workbench          export-ignore
 /.dockerignore      export-ignore

@@ -70,6 +70,9 @@ documented, tested against real Redis, and released on Packagist.
 | D9 | Model API: a `ModelCache` service does the work; a `HasCache` trait on models is a shortcut to it and hooks model events. → [ADR 0006](adr/0006-model-api.md) | ✅ agreed |
 | D10 | Artisan commands use the package prefix `cache-contract:` (not Laravel's `cache:`). The "new definition" command only **shows** similar definitions; it does not edit the config file. | ✅ agreed |
 | D11 | No Laravel Sail in this repo (Sail is for applications; the package uses `docker-compose.yml`). The demo app may use Sail. | ✅ agreed |
+| D12 | Composer package name: **`uslanozan/laravel-cache-contract`** | ✅ agreed |
+| D13 | Redis client: start with **phpredis** (Laravel's default, compatible with PHP 8.3 + Laravel 11); predis support and Redis Cluster are decided once company production details are known | ⏳ to confirm with company |
+| D14 | Demo app lives in this repo under **`examples/`** (a full Laravel app that installs the package from the local path; excluded from the Composer dist). May move to its own repo later. | ✅ agreed |
 
 ## 5. Phases
 
@@ -264,13 +267,9 @@ fails CI on a direct `Cache::put` in app code.
 
 | Question | Owner | Needed by |
 | :--- | :--- | :--- |
-| Which Redis version and client (phpredis / predis) do company projects run? | Ozan | Phase 1 |
-| Composer package name: `uslanozan/laravel-cache-contract`? | Team | Phase 0 skeleton |
+| Which Redis version and client do company projects run, and is Redis Cluster used? | Ozan | Phase 1 (D13) |
 | Facade name for the runtime API | Team | Phase 1 |
-| Redis client: phpredis, predis, or both supported? | Team | Phase 1 |
-| Must it work under Laravel Octane from day one? | Team | Phase 2 |
-| Is Redis Cluster used in company production? | Ozan | Phase 3 |
-| Demo app: inside this repo (`workbench/`) or a separate repo? | Team | Phase 6 |
+| Do company projects run Laravel Octane? (Design is Octane-safe from day one regardless: no request state in singletons.) | Ozan | Phase 2 |
 
 ## 7. ADR backlog
 

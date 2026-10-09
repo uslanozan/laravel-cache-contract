@@ -1,0 +1,7 @@
+# The build context is docker/php only; this file guards against accidentally
+# building from the repo root and sending vendor/ and .git/ to the daemon.
+.git
+vendor
+build
+coverage
+.phpunit.cache

@@ -1,0 +1,40 @@
+# Local development environment. Nothing needs to be installed on the host
+# except Docker. See CONTRIBUTING.md for the everyday commands.
+#
+# Personal tweaks (other ports, extra services) go in docker-compose.override.yml,
+# which is git-ignored and merged automatically.
+name: laravel-cache-contract
+
+services:
+  php:
+    build:
+      context: docker/php
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+    volumes:
+      - .:/app
+      - composer-cache:/home/dev/.composer/cache
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Keeps the container up for `docker compose exec`; one-off commands can
+    # use `docker compose run --rm php …` instead.
+    command: ["sleep", "infinity"]
+
+  # No host port is published: the php container reaches Redis over the
+  # compose network (redis:6379), and many machines already run a Redis on
+  # 6379. To inspect it from the host, use `docker compose exec redis redis-cli`
+  # or publish a port in docker-compose.override.yml.
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  composer-cache:

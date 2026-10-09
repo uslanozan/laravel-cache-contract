@@ -63,7 +63,7 @@ documented, tested against real Redis, and released on Packagist.
 | D2 | Definitions are written in **PHP** (not JSON). A compile step can generate an enum for IDE autocompletion and find-usages. | ✅ agreed, details → ADR |
 | D3 | Contract rules are also enforced in **CI** (lint + static analysis) | ✅ agreed |
 | D4 | Local development runs in **Docker** (PHP + Redis) | ✅ agreed |
-| D5 | Target versions: **PHP `^8.3`, Laravel `^12.0 \|\| ^13.0`**, Redis 7.x | ⏳ provisional until company versions are known |
+| D5 | Target versions: **PHP `^8.3`, Laravel `^11.23 \|\| ^12.0 \|\| ^13.0`**, Redis 7.x. Company projects run PHP 8.3 + Laravel 11, so 11 is supported; 11.23 is the first release with `Cache::flexible`. Features added later (`Cache::memo` 12.9, failover store 12.35) cannot be required by the core. | ✅ agreed, details → ADR |
 | D6 | Git flow: `feat/*` → `develop` (squash) → `main` (merge commit, tagged) | ✅ agreed |
 | D7 | Cached values live in Redis; definitions in git; scan output is a regenerable artifact (no SQLite) | ✅ agreed in principle, details → ADR |
 
@@ -228,7 +228,7 @@ fails CI on a direct `Cache::put` in app code.
 
 | Question | Owner | Needed by |
 | :--- | :--- | :--- |
-| Which Laravel / PHP / Redis versions do company projects run? | Ozan | Phase 0 (D5) |
+| Which Redis version and client (phpredis / predis) do company projects run? | Ozan | Phase 1 |
 | Composer package name: `uslanozan/laravel-cache-contract`? | Team | Phase 0 skeleton |
 | Redis client: phpredis, predis, or both supported? | Team | Phase 1 |
 | Must it work under Laravel Octane from day one? | Team | Phase 2 |

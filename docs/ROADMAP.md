@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status:** draft v0.1, written 2026-10-09 before the first team meeting.
+> **Status:** draft v0.2, updated 2026-10-09 with the decisions from the team research documents.
 > It will change. Changes go through a PR like any other file.
 
 ## 1. Goal
@@ -60,12 +60,16 @@ documented, tested against real Redis, and released on Packagist.
 | # | Decision | Status |
 | :--- | :--- | :--- |
 | D1 | Public repo at `github.com/uslanozan/laravel-cache-contract`, MIT license | ✅ agreed |
-| D2 | Definitions are written in **PHP** (not JSON). A compile step can generate an enum for IDE autocompletion and find-usages. | ✅ agreed, details → ADR |
+| D2 | Definitions live in **one PHP config file**, split into sections (`user`, `order`…). IDs are `section.name`, snake_case (`user.price_number`). Each definition has `subject` (model class) + `purpose`; the same pair twice is an exact duplicate. → [ADR 0002](adr/0002-definition-format.md) | ✅ agreed |
 | D3 | Contract rules are also enforced in **CI** (lint + static analysis) | ✅ agreed |
 | D4 | Local development runs in **Docker** (PHP + Redis) | ✅ agreed |
-| D5 | Target versions: **PHP `^8.3`, Laravel `^11.23 \|\| ^12.0 \|\| ^13.0`**, Redis 7.x. Company projects run PHP 8.3 + Laravel 11, so 11 is supported; 11.23 is the first release with `Cache::flexible`. Features added later (`Cache::memo` 12.9, failover store 12.35) cannot be required by the core. | ✅ agreed, details → ADR |
+| D5 | Target versions: **PHP `^8.3`, Laravel `^11.23 \|\| ^12.0 \|\| ^13.0`**, Redis 7.x. Company projects run PHP 8.3 + Laravel 11, so 11 is supported; 11.23 is the first release with `Cache::flexible`. Features added later (`Cache::memo` 12.9, failover store 12.35) cannot be required by the core. → [ADR 0003](adr/0003-supported-versions.md) | ✅ agreed |
 | D6 | Git flow: `feat/*` → `develop` (squash) → `main` (merge commit, tagged) | ✅ agreed |
-| D7 | Cached values live in Redis; definitions in git; scan output is a regenerable artifact (no SQLite) | ✅ agreed in principle, details → ADR |
+| D7 | Cached values live in Redis; definitions in git; scan output is a regenerable artifact (no SQLite); no per-key index in Redis in v1. → [ADR 0005](adr/0005-where-data-lives.md) | ✅ agreed |
+| D8 | Physical keys are generated from one project-wide, configurable `key_format`. The default includes a definition version; complex parameters are hashed. → [ADR 0004](adr/0004-key-format.md) | ✅ agreed |
+| D9 | Model API: a `ModelCache` service does the work; a `HasCache` trait on models is a shortcut to it and hooks model events. → [ADR 0006](adr/0006-model-api.md) | ✅ agreed |
+| D10 | Artisan commands use the package prefix `cache-contract:` (not Laravel's `cache:`). The "new definition" command only **shows** similar definitions; it does not edit the config file. | ✅ agreed |
+| D11 | No Laravel Sail in this repo (Sail is for applications; the package uses `docker-compose.yml`). The demo app may use Sail. | ✅ agreed |
 
 ## 5. Phases
 
@@ -85,13 +89,14 @@ Goal: everyone can clone, run tests in Docker and open a PR that passes CI.
 - [x] Repository conventions: PR/issue templates, CI skeleton, PR checks,
       Dependabot, rulesets as code, commit & branching docs, CONTRIBUTING,
       SECURITY, LICENSE, Docker environment
-- [ ] GitHub setup (see checklist in section 8)
+- [x] GitHub setup (see checklist in section 8)
 - [ ] Linear team, weekly cycles, GitHub integration
-- [ ] Package skeleton: `composer.json` (name, autoload, constraints),
-      service provider, config file, Orchestra Testbench, Pest, Larastan,
-      Pint, Composer scripts `test` / `analyse` / `lint` / `format`
-- [ ] `docs/adr/` with template and first ADRs: D2 (contract format),
-      D5 (versions), D7 (storage)
+- [ ] Package skeleton (`spatie/package-skeleton-laravel` as reference,
+      `spatie/laravel-package-tools` for the provider): `composer.json`
+      (name, autoload, constraints), service provider, config file,
+      Orchestra Testbench, Pest, Larastan, Pint, Composer scripts
+      `test` / `analyse` / `lint` / `format`
+- [x] `docs/adr/` with template and first ADRs (0001–0006)
 - [ ] Learning track for the team (Laravel cache internals, service
       providers/facades, package development, Pest): short notes in
       `docs/learning/` are welcome
@@ -103,8 +108,11 @@ Goal: everyone can clone, run tests in Docker and open a PR that passes CI.
       constants, tags, `Redis::` direct use, helper vs facade vs injected
       repository). **Patterns only, no code copied.** Output:
       `docs/research/cache-usage-in-the-wild.md`.
-- [ ] Prior art: existing caching packages and what they do not solve.
-      Feeds the "considered alternatives" section of the architecture doc.
+- [ ] Prior art: existing caching packages and what they do not solve
+      (first pass done in the team's research report: genealabs/laravel-model-caching,
+      rennokki/laravel-eloquent-query-cache, cerbero/laravel-enum, iak/keys).
+      Move it into `docs/research/` in English. Feeds the "considered
+      alternatives" section of the architecture doc.
 
 **Exit:** CI green on an empty package with one passing test; first ADRs merged.
 
@@ -112,36 +120,42 @@ Goal: everyone can clone, run tests in Docker and open a PR that passes CI.
 
 Goal: a working vertical slice: define → validate → generate key → read/write.
 
-- Definition schema in PHP: id (snake_case), description (required), version,
-  TTL, typed parameters, entity, result type, optional tags/dependencies
-- Loader + validation: duplicate ids (definitions as a **list**, so duplicates
-  are not silently overwritten), invalid names, empty descriptions, bad
-  parameter specs
-- Registry: lookup by id, list, filter
-- Key factory: `{prefix}:{definition}:v{version}:{canonical params hash}`,
-  plus explicit context (tenant, locale, projection…); parameter
-  canonicalization that preserves types and meaningful list order
-- Runtime API (`ManagedCache`): `get`, `put`, `remember`, `refresh`, `forget`;
-  unknown definition / wrong params → exception
+- Definition schema ([ADR 0002](adr/0002-definition-format.md)): sections,
+  `subject`, `purpose`, `type`, `params`, `ttl` (required), `version`,
+  `description` (required), optional `tags`; unknown fields rejected
+- Loader + validation: invalid names, empty descriptions, missing TTL, bad
+  parameter specs, unknown subject classes; consistent, actionable error
+  messages ("did you mean …?")
+- Registry: lookup by id, list, filter by section / subject
+- Key factory ([ADR 0004](adr/0004-key-format.md)): project-wide
+  `key_format`, version segment, readable scalar parameters, hashed complex
+  parameters, explicit context (tenant, locale…), deterministic output
+- Runtime API (facade): `get`, `put`, `remember`, `flexible`, `refresh`,
+  `forget`; unknown definition / wrong params → exception
 - Explicit semantics for miss vs cached `null` / `false` / `0` / empty list
 - Redis error policy (read failure, write failure) as config
-- Commands: `managed-cache:list`, `managed-cache:inspect`
-- Compile step: generated enum of definition ids for IDE support (ADR first)
+- "Flush everything" only ever touches the package's own keys
+  (`Cache::flush()` ignores prefixes and would wipe a shared Redis)
+- Commands: `cache-contract:list`, `cache-contract:inspect`
 
-**Exit:** brief acceptance criteria for description / snake_case / duplicate /
-unknown-definition / key determinism all covered by tests.
+**Exit:** description / naming / TTL / unknown-definition / key determinism
+rules all covered by tests.
 
 ### Phase 2: Eloquent model cache *(≈ 2 cycles)* · Track A · → `v0.2.0`
 
 Goal: cache models without a class per model.
 
-- `ModelCache::for(User::class)->find($id)` and `->findMany($ids)`
-- Model catalog: standard by-id definitions derived from config, custom
-  queries defined explicitly
+- `ModelCache` service: `ModelCache::for(User::class)->find($id)` and
+  `->findMany($ids)`; `HasCache` trait shortcuts (`User::cached(5)`,
+  `User::cachedMany([...])`, `$user->forgetCache()`, `User::flushCache()`)
+  that delegate to the service ([ADR 0006](adr/0006-model-api.md))
+- Convention keys: by-id caching of a model needs no definition; template,
+  tag and default TTL are derived. Custom data (profile, lists, stats) is
+  defined in the config with `subject` pointing at the model
 - Bulk path: multi-get → collect misses → one scoped DB query → fill cache;
   documented result order and not-found behaviour
-- Serialization strategy (ADR): what is stored (attributes vs serialized
-  model), relations, class changes across deploys
+- Serialization strategy (ADR): proposed default is to store attributes only
+  and rebuild models with `newFromBuilder`; relations cached separately
 - Context-aware keys (tenant / connection / visibility); no mutable state
   leaking between requests (safe for queues and Octane)
 
@@ -154,9 +168,15 @@ Goal: data stays correct when it changes.
 
 - Strategy ADR: **Laravel tags vs. generation counters (namespace versions)**,
   decided with a small benchmark/spike
+- Tags are declared centrally in the config; `model:*` tags are reserved for
+  the package; no per-record tags (`user:5`). Scheduled
+  `cache:prune-stale-tags` documented for Redis
 - Manual API: invalidate a definition, a definition + context, an entity
-- Opt-in model event integration; invalidation **after commit**
-- Documented limits: mass updates, raw SQL, external writers
+- Model event integration through `HasCache`; invalidation **after commit**;
+  `invalidated_by` for related models
+- Documented limits: mass updates (`query()->update()`), `saveQuietly`,
+  raw SQL, external writers; `flushCache()` as the escape hatch
+- Stale-while-revalidate with `Cache::flexible` (available from Laravel 11.23)
 - Stampede protection with Laravel atomic locks; lock timeout behaviour
 - Stale-write protection (a slow loader must not overwrite fresh data after
   an invalidation)
@@ -169,15 +189,20 @@ stale write against real Redis.
 
 Goal: a developer finds the existing definition instead of creating a duplicate.
 
+- Exact duplicates are errors: same `subject` + `purpose`, same normalized
+  name, same key template
 - Name normalization: `active_users`, `active-user`, `activeUsers` → tokens
-- Scoring: exact, Levenshtein, token / n-gram overlap; structural comparison
-  (entity, parameters, result type, scope)
+- Scoring: Levenshtein + token overlap (pure PHP, deterministic); structural
+  comparison (subject, parameters, result type)
+- Threshold calibrated on a fixture of 30–50 hand-labelled similar /
+  not-similar pairs, kept as a test
+- Similarity behind an interface so the algorithm can be swapped later
 - Meaningful differences preserved (`active` vs `inactive`)
 - Finding types: `identifier_collision`, `key_collision`,
   `lexical_similarity`, `structural_duplicate_candidate`, each with reasons
-- `managed-cache:search <term>`
-- `make:cache-definition`: shows similar definitions **before** creating a
-  new one (the moment duplicates are cheapest to prevent)
+- `cache-contract:search <term>`
+- `cache-contract:make <id>`: lists similar definitions **before** one is
+  added; it does not write to the config file
 - Suppressions with a required reason
 
 **Exit:** `activeUsers` finds `active_users`; `inactive_users` is reported as
@@ -192,11 +217,17 @@ Goal: see every cache usage in an existing codebase and stop new bypasses.
   forget classification
 - Inventory: file, line, class/method, operation, key as exact / template /
   unresolved; unresolved usages always reported
-- Output: table and JSON; runs **on demand** (`managed-cache:scan`) and in CI
+- Output: table and JSON; runs **on demand** (`cache-contract:scan`) and in CI
 - Baseline file for accepted legacy usages, each with a reason
-- `managed-cache:lint`: contract checks + "no cache calls outside the
-  package" with configurable allowed paths; non-zero exit code in CI
+- `cache-contract:lint`: contract checks (including a duplicate array key
+  inside the config file, which PHP would silently overwrite, found by
+  parsing the file) + "no cache calls outside the package" with configurable
+  allowed paths; non-zero exit code in CI
+- Strictness by environment: warning locally, error in CI, silent and
+  zero-overhead in production
 - PHPStan rule for the same check inside static analysis
+- Optional dev-time listener on cache events that warns about keys written
+  outside the contract (catches dynamic keys static analysis misses)
 - Migration guide: legacy usage → central definition
 
 **Exit:** scanner reports fixtures built from the public-scan patterns; lint
@@ -221,6 +252,11 @@ fails CI on a direct `Cache::put` in app code.
 - Live Redis inspection: map keys back to definitions, report "orphan" keys
   that belong to no definition (`SCAN`, never `KEYS`)
 - Redis Cluster / Sentinel support (only once tested)
+- In-request memory layer with `Cache::memo` (Laravel 12.9+ only, so
+  optional and feature-detected)
+- Generated IDE helper / enum of definition IDs for autocompletion
+- `cache-contract:make` writing the new definition into the config file
+- Redis set index of written keys
 - YAML/JSON contract adapter
 - AI/embedding-based similarity, automatic merging, source rewriting
 
@@ -230,6 +266,7 @@ fails CI on a direct `Cache::put` in app code.
 | :--- | :--- | :--- |
 | Which Redis version and client (phpredis / predis) do company projects run? | Ozan | Phase 1 |
 | Composer package name: `uslanozan/laravel-cache-contract`? | Team | Phase 0 skeleton |
+| Facade name for the runtime API | Team | Phase 1 |
 | Redis client: phpredis, predis, or both supported? | Team | Phase 1 |
 | Must it work under Laravel Octane from day one? | Team | Phase 2 |
 | Is Redis Cluster used in company production? | Ozan | Phase 3 |
@@ -237,18 +274,19 @@ fails CI on a direct `Cache::put` in app code.
 
 ## 7. ADR backlog
 
-| ADR | Topic | Phase |
-| :--- | :--- | :--- |
-| 0001 | Record architecture decisions (process) | 0 |
-| 0002 | Definition format: PHP + generated enum | 0 |
-| 0003 | Supported PHP / Laravel / Redis versions | 0 |
-| 0004 | Where data lives: definitions, values, scan output, stats | 0 |
-| 0005 | Key format and parameter canonicalization | 1 |
-| 0006 | Miss vs cached falsy values; Redis error policy | 1 |
-| 0007 | Eloquent serialization strategy | 2 |
-| 0008 | Invalidation strategy: tags vs generation counters | 3 |
-| 0009 | Duplicate detection layers (registry, create-time, CI, scanner) | 4 |
-| 0010 | Scanner scope and limits | 5 |
+| ADR | Topic | Phase | Status |
+| :--- | :--- | :--- | :--- |
+| [0001](adr/0001-record-architecture-decisions.md) | Record architecture decisions | 0 | accepted |
+| [0002](adr/0002-definition-format.md) | Definition format: one sectioned PHP file, subject + purpose | 0 | accepted |
+| [0003](adr/0003-supported-versions.md) | Supported PHP / Laravel / Redis versions | 0 | accepted |
+| [0004](adr/0004-key-format.md) | Physical key format, versioning, parameter encoding | 0 | accepted |
+| [0005](adr/0005-where-data-lives.md) | Where data lives: definitions, values, scan output, stats | 0 | accepted |
+| [0006](adr/0006-model-api.md) | Model API: service + trait shortcut | 0 | accepted |
+| 0007 | Miss vs cached falsy values; Redis error policy | 1 | backlog |
+| 0008 | Eloquent serialization strategy | 2 | backlog |
+| 0009 | Invalidation strategy: tags vs generation counters | 3 | backlog |
+| 0010 | Duplicate detection layers (registry, create-time, CI, scanner) | 4 | backlog |
+| 0011 | Scanner scope and limits | 5 | backlog |
 
 ## 8. GitHub setup checklist (one-time)
 

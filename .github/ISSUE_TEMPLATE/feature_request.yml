@@ -15,7 +15,7 @@ body:
     attributes:
       label: What should be possible?
       description: Describe the behaviour from the package user's point of view, not the implementation.
-      placeholder: "`php artisan managed-cache:search users` should also match definitions whose entity is `user`."
+      placeholder: "`php artisan cache-contract:search users` should also match definitions whose subject is `User`."
     validations:
       required: true
 

@@ -14,7 +14,7 @@ body:
     attributes:
       label: What happened?
       description: One or two sentences. Details go below.
-      placeholder: "`ManagedCache::remember()` returns a cached `null` as a miss and calls the loader again."
+      placeholder: "`ModelCache::for(User::class)->find()` returns a cached `null` as a miss and calls the loader again."
     validations:
       required: true
 

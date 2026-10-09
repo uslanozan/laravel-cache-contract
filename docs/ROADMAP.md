@@ -252,12 +252,13 @@ fails CI on a direct `Cache::put` in app code.
 
 ## 8. GitHub setup checklist (one-time)
 
-- [ ] Create public repo `uslanozan/laravel-cache-contract`, push `main`
-- [ ] Create `develop` from `main`, set it as the **default branch**
-- [ ] Settings → General: allow **squash** and **merge commits**, disable
-      rebase merge; squash commit message = PR title; auto-delete head branches
-- [ ] Apply rulesets from `.github/rulesets/` (see its README)
-- [ ] Create labels from `.github/labels.json`
-- [ ] Enable private vulnerability reporting, Dependabot alerts, Discussions
+- [x] Create public repo `uslanozan/laravel-cache-contract`, push `main`
+- [x] Create `develop` from `main`, set it as the **default branch**
+- [x] Settings → General: allow **squash** and **merge commits**, disable
+      rebase merge; squash and merge commit title = PR title, body blank;
+      auto-delete head branches
+- [x] Apply rulesets from `.github/rulesets/` (see its README)
+- [x] Create labels from `.github/labels.json`
+- [x] Enable private vulnerability reporting, Dependabot alerts, Discussions
 - [ ] Add contributors with the **Write** role
 - [ ] Connect Linear (GitHub integration, branch-name linking)

@@ -11,7 +11,7 @@ changelog.
 
 [optional body: why, not what]
 
-[optional footer: BREAKING CHANGE: …, Refs: CACHE-12]
+[optional footer: BREAKING CHANGE: …, Refs: LRVL-12]
 ```
 
 - **subject:** imperative, lowercase, no trailing period, about 72 characters max.

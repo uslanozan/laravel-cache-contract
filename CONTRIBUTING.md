@@ -48,7 +48,7 @@ docker compose exec redis redis-cli ping   # PONG
 
 1. Pick or create an issue in Linear (or GitHub). Larger design changes start
    as a *Design proposal* issue and end as an ADR in `docs/adr/`.
-2. Branch from `develop`: `feat/CACHE-12-short-description`.
+2. Branch from `develop`: `feat/LRVL-12-short-description`.
    See [docs/branching-strategy.md](docs/branching-strategy.md).
 3. Commit using [Conventional Commits](docs/commit-convention.md).
 4. Open a PR into `develop`. Fill in the template; the **Why?** section and the

@@ -17,7 +17,7 @@
   and what you considered and rejected. Link the ADR if one exists.
 -->
 
-Closes <!-- Linear issue ID, e.g. CACHE-12, or GitHub issue #12 -->
+Closes <!-- Linear issue ID, e.g. LRVL-12, or GitHub issue #12 -->
 
 ## Type of change
 

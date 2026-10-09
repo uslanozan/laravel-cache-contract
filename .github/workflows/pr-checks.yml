@@ -58,7 +58,7 @@ jobs:
           # 1. Branch naming: <type>/<short-description>, optional Linear ID.
           #    develop (release PR into main) and main (back-merge into develop) are allowed as-is.
           if ! echo "$HEAD" | grep -Eq '^(develop|main)$|^(feat|fix|perf|refactor|test|docs|build|ci|chore|revert|release|hotfix|dependabot)/.+'; then
-            echo "::error::Branch '$HEAD' must start with a type prefix, e.g. feat/CACHE-12-definition-registry"
+            echo "::error::Branch '$HEAD' must start with a type prefix, e.g. feat/LRVL-12-definition-registry"
             exit 1
           fi
 

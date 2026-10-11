@@ -40,3 +40,19 @@ Several cache features we would like to use arrived at different times:
   since 11 no longer gets security fixes.
 - Redis version and client (phpredis / predis) used in company production are
   still to be confirmed.
+
+## Update 2026-10-11: Laravel 11 security advisories
+
+The first CI run with the real package (PR #6) showed that **every Laravel 11
+release, including the latest 11.57.0, is affected by published security
+advisories** that will not be patched: a high-severity CRLF injection in the
+default email validation rule, a medium-severity temporary signed URL path
+confusion and a low-severity XSS in the debug page (fixed only in 12.60+ /
+13.x). Composer refuses to install packages with known advisories by default.
+
+The decision above stands: Laravel 11 stays supported because company
+projects run it. In CI, the Laravel 11 jobs alone lift the advisory block for
+`laravel/framework`; Laravel 12 and 13 jobs keep it. The README tells users
+that Laravel 11 is end of life with known vulnerabilities and recommends
+upgrading. This strengthens the consequence above: Laravel 11 is the first
+version to drop.

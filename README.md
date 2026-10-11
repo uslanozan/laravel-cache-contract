@@ -19,6 +19,17 @@ reviewable contract, on top of Laravel's own cache and Redis.
 
 See the [roadmap](docs/ROADMAP.md) for the plan and current status.
 
+## Requirements
+
+- PHP 8.3 or newer
+- Laravel 11.23+, 12 or 13
+- Redis (phpredis) as the cache store
+
+> **Laravel 11 is end of life** and every 11.x release has known, unpatched
+> security advisories. The package supports it because existing projects still
+> run it, but upgrading to Laravel 12.60+ or 13 is strongly recommended. See
+> [ADR 0003](docs/adr/0003-supported-versions.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

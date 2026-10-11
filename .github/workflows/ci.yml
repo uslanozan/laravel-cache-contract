@@ -119,6 +119,15 @@ jobs:
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.framework }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
 
+      # Every Laravel 11 release has security advisories that will never be
+      # patched (end of life since 2026-03-12), and Composer refuses to install
+      # packages with known advisories. Company projects still run Laravel 11,
+      # so we keep testing it: the block is lifted for laravel/framework only,
+      # in this job only. Laravel 12/13 jobs keep the protection. See ADR 0003.
+      - name: Allow Laravel 11 despite its unpatched advisories
+        if: matrix.laravel == '11'
+        run: composer config policy.advisories.ignore --json '["laravel/framework"]'
+
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
 

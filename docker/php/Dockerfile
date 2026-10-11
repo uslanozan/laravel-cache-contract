@@ -30,3 +30,7 @@ ENV COMPOSER_HOME=/home/dev/.composer \
 
 USER dev
 WORKDIR /app
+
+# The project is mounted from the host and owned by another UID; without this
+# git refuses to read it and Composer cannot detect the package version.
+RUN git config --global --add safe.directory /app

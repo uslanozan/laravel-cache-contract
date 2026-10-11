@@ -32,6 +32,21 @@ Putting the Linear issue ID in the branch name links the branch and its PR to
 the issue automatically, and Linear moves the issue to *Done* when the PR is
 merged.
 
+**Getting the name from Linear:** open the issue and press `Ctrl+Shift+.`
+(*Copy git branch name*). Linear gives `lrvl-12-definition-registry`; add the
+type prefix yourself: `feat/lrvl-12-definition-registry`. The `Branch flow`
+check rejects branches without a prefix. Upper or lower case in the ID does
+not matter for linking.
+
+| Event on GitHub | Linear issue status |
+| :--- | :--- |
+| You start the work | move it to **In Progress** yourself, before the first commit |
+| PR opened and a reviewer requested (CODEOWNERS does this) | **In Review** (automatic) |
+| PR merged into `develop` | **Done** (automatic) |
+
+Work that ends without a PR (research, a decision taken in a meeting) is moved
+to *Done* by hand.
+
 ## Daily workflow
 
 ```bash

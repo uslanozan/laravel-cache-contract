@@ -46,15 +46,20 @@ docker compose exec redis redis-cli ping   # PONG
 
 ## Workflow
 
-1. Pick or create an issue in Linear (or GitHub). Larger design changes start
-   as a *Design proposal* issue and end as an ADR in `docs/adr/`.
-2. Branch from `develop`: `feat/LRVL-12-short-description`.
+1. Pick or create an issue in Linear (or GitHub) and move it to **In Progress**
+   before you start. Larger design changes start as a *Design proposal* issue
+   and end as an ADR in `docs/adr/`.
+2. Branch from `develop`: `feat/lrvl-12-short-description` (copy the name from
+   Linear with `Ctrl+Shift+.` and add the type prefix).
    See [docs/branching-strategy.md](docs/branching-strategy.md).
 3. Commit using [Conventional Commits](docs/commit-convention.md).
 4. Open a PR into `develop`. Fill in the template; the **Why?** section and the
    **Cache behaviour impact** section matter most.
 5. Get one approval, keep the checks green, resolve all threads, then merge
    (squash).
+
+The full set of working rules, also used by AI coding agents, is in
+[AGENTS.md](AGENTS.md).
 
 ## Standards
 

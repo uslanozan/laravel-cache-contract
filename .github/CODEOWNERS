@@ -1,5 +1,35 @@
-# Used for automatic review requests only. "Require review from code owners"
-# is deliberately OFF in the rulesets: any one team member's approval is enough.
-# Add contributors' handles per area once roles are agreed.
+# Area owners are requested as reviewers automatically. "Require review from
+# code owners" is deliberately OFF in the rulesets: any one teammate's approval
+# is enough. Ownership is described in docs/ROADMAP.md → "Team & ownership".
+#
+# Later rules override earlier ones for the same path.
 
-* @uslanozan
+# Default: mission lead
+*                       @uslanozan
+
+# Core contract and similarity engine (Ozan)
+/src/Contracts/         @uslanozan @baristp04 @ayselinaydogdu
+/src/Definitions/       @uslanozan
+/src/Keys/              @uslanozan
+/src/Runtime/           @uslanozan
+/src/Facades/           @uslanozan
+/src/Similarity/        @uslanozan
+/config/                @uslanozan
+
+# Scanner, lint, commands, CI and releases (Barış)
+/src/Scanner/           @baristp04
+/src/Lint/              @baristp04
+/src/Commands/          @baristp04
+/src/PHPStan/           @baristp04
+/.github/               @baristp04 @uslanozan
+/docker/                @baristp04
+/docker-compose.yml     @baristp04
+
+# Model cache, invalidation, diagnostics (Ayselin)
+/src/Eloquent/          @ayselinaydogdu
+/src/Invalidation/      @ayselinaydogdu
+/src/Diagnostics/       @ayselinaydogdu
+
+# Decisions and plans concern everyone
+/docs/adr/              @uslanozan @baristp04 @ayselinaydogdu
+/docs/ROADMAP.md        @uslanozan @baristp04 @ayselinaydogdu

@@ -47,13 +47,30 @@ documented, tested against real Redis, and released on Packagist.
 
 | Topic | Agreement |
 | :--- | :--- |
-| Planning | Linear, **1 cycle = 1 week**. Cycle planning at the start, short demo + retro at the end. |
-| Issues | Every PR links a Linear issue. Design questions become *Design proposal* issues first. |
+| Planning | Linear team `LRVL`, **1 cycle = 1 week, starting Thursday** (Cycle 1 = 2026-10-15). Thursday: planning + demo of last week; Monday: short check-in; Wednesday: the week's PRs are in review. Issues finished early let later ones move forward. |
+| Issues | Every PR links a Linear issue. Move the issue to **In Progress** when you start, before the first commit; it moves to **Done** when the PR is merged. Design questions become *Design proposal* issues first. See [`AGENTS.md`](../AGENTS.md). |
 | Branches & commits | [branching-strategy.md](branching-strategy.md), [commit-convention.md](commit-convention.md) |
 | Review | 1 approval from a teammate; all checks green; threads resolved. Aim to review within one working day. |
 | Definition of done | Merged to `develop`, tests and static analysis green, docs updated, Linear issue closed. |
 | Decisions | ADRs in `docs/adr/`, numbered, short (context, options, decision, consequences). |
 | Language | English in the repository. |
+
+### Team & ownership
+
+Each area has one owner who drives it and is the default reviewer
+([`.github/CODEOWNERS`](../.github/CODEOWNERS)). Ownership is about
+responsibility, not permission: anyone may contribute anywhere through a PR.
+
+| Owner | Areas | Directories |
+| :--- | :--- | :--- |
+| Ozan Uslan ([@uslanozan](https://github.com/uslanozan)), mission lead | Core contract, similarity engine, `list` / `inspect`, architecture document | `src/Contracts`, `src/Definitions`, `src/Keys`, `src/Runtime`, `src/Facades`, `src/Similarity`, `config/` |
+| Barış Tepe ([@baristp04](https://github.com/baristp04)) | Public scan research, scanner, lint, PHPStan rule, `scan` / `lint` / `search` / `make`, CI and releases | `src/Scanner`, `src/Lint`, `src/Commands`, `src/PHPStan`, `.github/`, `docker/` |
+| Ayselin Aydoğdu ([@ayselinaydogdu](https://github.com/ayselinaydogdu)) | Model cache, invalidation, production behaviour (ADR 0007–0009), dev-time listener | `src/Eloquent`, `src/Invalidation`, `src/Diagnostics` |
+
+Changes to `src/Contracts/` affect everyone and need **two** approvals.
+Some later tasks (lint–similarity integration, PHPStan rule, release
+automation, dev-time listener) are marked *Shareable* in Linear and can move
+to Ozan when their owner is overloaded; this is decided in Thursday planning.
 
 ## 4. Decisions so far
 
@@ -94,7 +111,7 @@ Goal: everyone can clone, run tests in Docker and open a PR that passes CI.
       Dependabot, rulesets as code, commit & branching docs, CONTRIBUTING,
       SECURITY, LICENSE, Docker environment
 - [x] GitHub setup (see checklist in section 8)
-- [ ] Linear team, weekly cycles, GitHub integration
+- [x] Linear team, weekly cycles, GitHub integration
 - [ ] Package skeleton (`spatie/package-skeleton-laravel` as reference,
       `spatie/laravel-package-tools` for the provider): `composer.json`
       (name, autoload, constraints), service provider, config file,
@@ -297,5 +314,5 @@ fails CI on a direct `Cache::put` in app code.
 - [x] Apply rulesets from `.github/rulesets/` (see its README)
 - [x] Create labels from `.github/labels.json`
 - [x] Enable private vulnerability reporting, Dependabot alerts, Discussions
-- [ ] Add contributors with the **Write** role
-- [ ] Connect Linear (GitHub integration, branch-name linking)
+- [x] Add contributors with the **Write** role
+- [x] Connect Linear (GitHub integration, branch-name linking)

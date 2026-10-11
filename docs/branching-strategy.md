@@ -41,7 +41,7 @@ not matter for linking.
 | Event on GitHub | Linear issue status |
 | :--- | :--- |
 | You start the work | move it to **In Progress** yourself, before the first commit |
-| PR opened | **In Review** (automatic) |
+| PR opened and a reviewer requested (CODEOWNERS does this) | **In Review** (automatic) |
 | PR merged into `develop` | **Done** (automatic) |
 
 Work that ends without a PR (research, a decision taken in a meeting) is moved

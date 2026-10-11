@@ -27,7 +27,9 @@ Read before changing anything substantial:
 4. **Commits and PR titles** follow [Conventional Commits](docs/commit-convention.md).
    The PR title becomes the squash commit on `develop`.
 5. **Open a PR into `develop`** and fill in the template, including
-   `Closes LRVL-<n>`. The issue moves to *In Review* by itself.
+   `Closes LRVL-<n>`. The issue moves to *In Review* by itself once a reviewer
+   is requested (CODEOWNERS requests one; if you own every changed file,
+   request a teammate yourself).
 6. **Merge** after one approval, green checks and resolved threads. The issue
    moves to *Done* by itself. Work that ends without a PR is moved to *Done*
    by hand, and only when its output exists.

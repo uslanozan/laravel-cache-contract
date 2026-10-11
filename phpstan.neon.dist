@@ -1,0 +1,11 @@
+includes:
+  - vendor/larastan/larastan/extension.neon
+
+parameters:
+  # Level 8 of 10, agreed on 2026-10-11 (LRVL-1). Raise it, never lower it.
+  level: 8
+  # config/ is not analysed: it only returns an array, and Larastan would flag
+  # its env() calls because it does not see it as an application config file.
+  paths:
+    - src
+  tmpDir: build/phpstan

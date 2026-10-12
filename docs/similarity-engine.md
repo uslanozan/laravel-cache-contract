@@ -3,9 +3,9 @@
 How the package recognises that a new cache definition resembles an existing
 one, and the decisions behind it. Owner: @uslanozan. Code: `src/Similarity/`.
 
-> Status: name scoring implemented (LRVL-9). The engine that turns scores into
-> findings (LRVL-10), threshold calibration (LRVL-11) and the decision record
-> for detection layers (ADR 0010) follow.
+> Status: name scoring (LRVL-9) and the engine that turns scores into findings
+> (LRVL-10) are implemented. Threshold calibration (LRVL-11) and the decision
+> record for detection layers (ADR 0010) follow.
 
 ## 1. Goal and scope
 
@@ -121,7 +121,52 @@ Detected from two curated lists (`Antonyms`), precision over recall:
 
 Both lists will grow with real names from the public scan.
 
-## 5. Reference results
+## 5. The engine: from signals to findings
+
+`DefaultSimilarityEngine::findSimilar($candidate, $existing)` compares the
+candidate with every existing definition and reports **at most one finding per
+definition**: the most serious one, carrying all reasons. Results are sorted
+by severity, then score, then id.
+
+### Severity
+
+| Severity | Meaning | Lint | `search` / `make` |
+| :--- | :--- | :--- | :--- |
+| **Error** | a certain duplicate | fails CI | shown |
+| **Warning** | probably a duplicate, worth a look | reported, CI passes | shown |
+| **Info** | for awareness, likely intentional | not shown | shown |
+
+### Policy (first matching row wins)
+
+| Situation | Example | Type | Severity |
+| :--- | :--- | :--- | :--- |
+| same id | adding `user.active_list` again | `IdentifierCollision` | Error |
+| same subject + purpose | ADR 0002 rule | `PurposeCollision` | Error |
+| same name apart from style / plural, **same section** | `user.active_user` ↔ `user.active_users` | `NameVariant` | Error |
+| … in **another section** | `member.active_users` ↔ `user.active_user` | `NameVariant` | Warning |
+| … in another section **with different subjects** | `company.summary` ↔ `user.summary` | `NameVariant` | Info |
+| opposite words | `inactive_users` ↔ `active_users` | `OppositeMeaning` | Info |
+| typo or reordered words, **any score** | `actve_users`, `member_tenants` | `LexicalSimilarity` | Warning |
+| shared words, score ≥ `SHARED_WORDS_THRESHOLD` (0.70) | `exchange_rates_eu` ↔ `exchange_rates` (0.74) | `LexicalSimilarity` | Warning |
+| same subject + result type + parameter set | `active_members` ↔ `active_users` (both User, collection, `tenant_id`) | `StructuralDuplicateCandidate` | Info |
+
+### Structural comparison
+
+Compares fields **exactly**, never words: the same `subject` class, the same
+`type`, and the same parameter set (names and types, any order). It is the v1
+answer to synonyms the name measures cannot see (`active_members` ↔
+`active_users`). It never applies without a subject: "an array by region" says
+nothing about which data it is (`external.weather` ↔ `external.exchange_rates`).
+It is Info, not Warning, because many legitimately different lists share a
+structure (`active_users`, `banned_users`, both User / collection / `tenant_id`).
+
+### Key collisions
+
+Not searched for: the key separator is fixed to `:`, which names cannot
+contain, so two definitions can never produce the same key (ADR 0004 update,
+2026-10-12).
+
+## 6. Reference results
 
 These pairs are tested in `tests/Unit/Similarity/NameSimilarityTest.php`.
 
@@ -138,7 +183,7 @@ These pairs are tested in `tests/Unit/Similarity/NameSimilarityTest.php`.
 | `active_users` ↔ `active_members` | 0.513 | 0.333 | 0.692 | shared words (synonym not seen) |
 | `user_profile` ↔ `member_info` | 0.083 | 0.000 | 0.167 | none (synonyms: known blind spot) |
 
-## 6. Decision log
+## 7. Decision log
 
 | # | Date | Decision | Why |
 | :--- | :--- | :--- | :--- |
@@ -152,13 +197,17 @@ These pairs are tested in `tests/Unit/Similarity/NameSimilarityTest.php`.
 | D-8 | 2026-10-12 | Signals describe the match; severity is decided by the engine | One place for policy; easier to calibrate |
 | D-9 | 2026-10-12 | Opposites from curated lists, not a generic prefix rule | Generic `in-`/`dis-` matched `invoice`/`voice`, `discount`/`count` |
 | D-10 | 2026-10-12 | Weights 0.5 / 0.5 as starting values, calibrated later | No data yet; labelled pairs arrive with LRVL-24 |
+| D-11 | 2026-10-12 | Three severities: Error (fails CI), Warning (reported), Info (search / make only) | Two levels forced every hint into either "blocks CI" or "silent" |
+| D-12 | 2026-10-12 | Policy table in section 5; style / plural variants are errors only within one section | A different section can be a deliberate split; different subjects make it very likely deliberate |
+| D-13 | 2026-10-12 | Typos and reordered words warn regardless of score; shared words warn from 0.70 | Typos and reordering are specific signals; shared words alone are a weak hint. 0.70 is a starting value, tuned over time (LRVL-11) |
+| D-14 | 2026-10-12 | Structural comparison = same subject + type + parameter set, exact; never without a subject; severity Info | Catches synonyms the name measures cannot see, but many different lists share a structure. Partial overlap and parameter-name similarity later (LRVL-48) |
+| D-15 | 2026-10-12 | No key-collision finding; the key separator is fixed to `:` instead | Prevents the collision instead of detecting it; the engine needs no key factory |
 
-## 7. Open work
+## 8. Open work
 
 | Issue | Topic |
 | :--- | :--- |
-| LRVL-10 | Structural comparison, finding types, the engine; severity per signal |
-| LRVL-11 | Calibrate weights and threshold with labelled pairs; ADR 0010 |
+| LRVL-11 | Calibrate weights and thresholds with labelled pairs; ADR 0010 |
 | LRVL-24 | Labelled pair dataset (Barış), from the public scan |
 | LRVL-48 | Abbreviation and synonym layer (`qty`, `cnt`, `users`/`members`), **planned, not v1** |
 | LRVL-49 | Semantic layer on `purpose` / `description` (dense embeddings), optional |

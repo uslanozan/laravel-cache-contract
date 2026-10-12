@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract;
 
 use Illuminate\Support\ServiceProvider;
+use Uslanozan\CacheContract\Contracts\SimilarityEngine;
+use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
  * Entry point Laravel loads for this package (auto-discovered through
@@ -21,6 +23,9 @@ class CacheContractServiceProvider extends ServiceProvider
         // Values from the application's config/cache-contract.php win; keys
         // the application does not define fall back to the package defaults.
         $this->mergeConfigFrom(__DIR__.'/../config/cache-contract.php', 'cache-contract');
+
+        // Stateless and deterministic: safe to share.
+        $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
     }
 
     public function boot(): void

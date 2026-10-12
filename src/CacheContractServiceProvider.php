@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Uslanozan\CacheContract;
 
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Uslanozan\CacheContract\Contracts\KeyFactory;
+use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
+use Uslanozan\CacheContract\Keys\KeyFormat;
+use Uslanozan\CacheContract\Keys\ParameterEncoder;
 
 /**
  * Entry point Laravel loads for this package (auto-discovered through
@@ -21,6 +27,21 @@ class CacheContractServiceProvider extends ServiceProvider
         // Values from the application's config/cache-contract.php win; keys
         // the application does not define fall back to the package defaults.
         $this->mergeConfigFrom(__DIR__.'/../config/cache-contract.php', 'cache-contract');
+
+        // The key format is read from config once; an invalid format fails on
+        // first use with InvalidKeyFormat.
+        $this->app->singleton(KeyFactory::class, function (Application $app): KeyFactory {
+            /** @var Repository $config */
+            $config = $app->make('config');
+
+            return new DefaultKeyFactory(
+                KeyFormat::fromString(
+                    (string) $config->get('cache-contract.key_format'),
+                    (string) $config->get('cache-contract.prefix', ''),
+                ),
+                new ParameterEncoder,
+            );
+        });
     }
 
     public function boot(): void

@@ -21,6 +21,8 @@ arch('value objects are immutable')
     ->expect([
         'Uslanozan\CacheContract\Definitions\Definition',
         'Uslanozan\CacheContract\Similarity\Finding',
+        'Uslanozan\CacheContract\Similarity\NameScore',
+        'Uslanozan\CacheContract\Similarity\TokenizedName',
     ])
     ->toBeReadonly()
     ->toBeFinal();

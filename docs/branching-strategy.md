@@ -16,7 +16,11 @@ feat/LRVL-12-registry ──squash──▶ develop ──merge commit──▶ 
 | :--- | :--- | :--- | :--- |
 | `feat/…`, `fix/…`, `perf/…`, `refactor/…`, `test/…`, `docs/…`, `build/…`, `ci/…`, `chore/…` | `develop` | `develop` | squash |
 | `release/vX.Y.Z` (optional) | `develop` | `main` | merge commit |
-| `hotfix/…` | `main` | `main`, then back-merge `main` → `develop` | merge commit |
+| `hotfix/…` | `main` | `main`, then back-merge `main` → `develop` | merge commit (back-merge: see below) |
+
+`develop` only offers **Squash and merge**; `main` only offers **Create a
+merge commit**. GitHub hides the other buttons, so the right method is the
+only one you can click.
 
 **Naming:** `<type>/<linear-id>-<short-description>`; the description is lowercase, words separated
 by `-`. The prefix uses the same words as the commit types, so there is nothing
@@ -65,7 +69,9 @@ While the PR is open:
 - If `develop` moves ahead, update your branch (GitHub's *Update branch* button,
   or `git rebase develop`). Rulesets require the branch to be up to date before merging.
 - Every new push dismisses earlier approvals, so ask for a re-review after changes.
-- The PR author merges once it is approved and green.
+- The PR author merges once it is approved and green, with **Squash and merge**
+  (the only option GitHub offers on `develop`). "Update branch" may add merge
+  commits to your branch; squashing folds them into one commit.
 
 ## Rules enforced on GitHub
 
@@ -84,3 +90,16 @@ is for emergencies and repository maintenance, not for routine work.
 
 The release tooling (changelog generation, tagging) is set up in a later
 phase; see the [roadmap](ROADMAP.md).
+
+## After a hotfix: back-merge `main` → `develop`
+
+A hotfix lands on `main` first, so `develop` must receive it too. This has to
+be a real merge (a squash would make the branches diverge), and `develop`
+accepts only squash through PRs. The repository owner therefore does it
+directly, using the admin bypass:
+
+```bash
+git switch develop && git pull
+git merge --no-ff origin/main -m "chore: back-merge main into develop after vX.Y.Z"
+git push
+```

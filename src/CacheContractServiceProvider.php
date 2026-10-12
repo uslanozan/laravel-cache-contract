@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract;
 
 use Illuminate\Support\ServiceProvider;
+use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
+use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
 
 /**
  * Entry point Laravel loads for this package (auto-discovered through
@@ -21,6 +23,9 @@ class CacheContractServiceProvider extends ServiceProvider
         // Values from the application's config/cache-contract.php win; keys
         // the application does not define fall back to the package defaults.
         $this->mergeConfigFrom(__DIR__.'/../config/cache-contract.php', 'cache-contract');
+
+        // Definitions are the same for every request: safe to share.
+        $this->app->singleton(DefinitionRegistry::class, ConfigDefinitionRegistry::class);
     }
 
     public function boot(): void

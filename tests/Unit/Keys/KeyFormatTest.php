@@ -15,9 +15,9 @@ it('renders the default format', function () {
 });
 
 it('allows leaving out the prefix and the version', function () {
-    $format = KeyFormat::fromString('{section}.{name}|{params}');
+    $format = KeyFormat::fromString('{section}:{name}:{params}');
 
-    expect($format->render(DefinitionBuilder::make('company.summary'), '-'))->toBe('company.summary|-');
+    expect($format->render(DefinitionBuilder::make('company.summary'), '-'))->toBe('company:summary:-');
 });
 
 it('rejects a format that cannot produce unique keys', function (string $pattern, string $reason) {
@@ -29,6 +29,10 @@ it('rejects a format that cannot produce unique keys', function (string $pattern
     'no params' => ['{prefix}:{section}:{name}', '{params} must appear exactly once'],
     'params twice' => ['{section}:{name}:{params}:{params}', '{params} must appear exactly once'],
     'unknown placeholder' => ['{section}:{name}:{tenant}:{params}', 'unknown placeholder {tenant}'],
+    'underscore separator' => ['{section}_{name}_{params}', 'only ":" and lowercase letters or digits may appear around placeholders, found "_"'],
+    'slash separator' => ['{prefix}/{section}/{name}/{params}', 'found "/"'],
+    'no separator' => ['{section}{name}:{params}', 'placeholders must be separated by ":"'],
+    'separator replaced by letters' => ['{section}x{name}:{params}', 'placeholders must be separated by ":"'],
 ]);
 
 it('rejects {prefix} with an empty prefix setting', function () {

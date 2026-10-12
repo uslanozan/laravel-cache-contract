@@ -13,7 +13,8 @@ use Uslanozan\CacheContract\Exceptions\InvalidKeyFormat;
  *
  * {section}, {name} and {params} are required: without any of them two
  * different definitions or parameter sets could share a key.
- * {prefix} and {version} are optional.
+ * {prefix} and {version} are optional. Placeholders are always separated by
+ * ":"; other separators may be offered as options later.
  */
 final readonly class KeyFormat
 {
@@ -46,6 +47,27 @@ final readonly class KeyFormat
         foreach (self::REQUIRED as $placeholder) {
             if (substr_count($pattern, $placeholder) !== 1) {
                 throw InvalidKeyFormat::because($pattern, sprintf('%s must appear exactly once', $placeholder));
+            }
+        }
+
+        // The separator is fixed to ":" (2026-10-12). Names cannot contain ":",
+        // so segment boundaries are never ambiguous and two definitions can
+        // never produce the same key. "_" or "/" would allow collisions such
+        // as user_a + b and user + a_b both giving "user_a_b".
+        $literals = preg_split('/\{[a-z]+\}/', $pattern) ?: [];
+
+        foreach ($literals as $index => $literal) {
+            if (preg_match('/^[a-z0-9:]*$/', $literal) !== 1) {
+                throw InvalidKeyFormat::because($pattern, sprintf(
+                    'only ":" and lowercase letters or digits may appear around placeholders, found "%s"',
+                    $literal,
+                ));
+            }
+
+            $between = $index > 0 && $index < count($literals) - 1;
+
+            if ($between && ! str_contains($literal, ':')) {
+                throw InvalidKeyFormat::because($pattern, 'placeholders must be separated by ":"');
             }
         }
 

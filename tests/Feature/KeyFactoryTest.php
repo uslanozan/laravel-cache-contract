@@ -36,10 +36,10 @@ it('separates tenants, versions and sections', function () {
 });
 
 it('follows the configured format and prefix', function () {
-    config()->set('cache-contract.key_format', '{prefix}/{section}/{name}/{params}');
+    config()->set('cache-contract.key_format', 'app:{prefix}:{section}:{name}:{params}');
     config()->set('cache-contract.prefix', 'shop');
 
-    expect(app(KeyFactory::class)->make(DefinitionBuilder::make('user.profile'), []))->toBe('shop/user/profile/-');
+    expect(app(KeyFactory::class)->make(DefinitionBuilder::make('user.profile'), []))->toBe('app:shop:user:profile:-');
 });
 
 it('fails loudly on an invalid configured format', function () {

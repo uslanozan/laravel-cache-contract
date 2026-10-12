@@ -14,6 +14,7 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
 use Uslanozan\CacheContract\Similarity\Finding;
 use Uslanozan\CacheContract\Similarity\FindingType;
+use Uslanozan\CacheContract\Similarity\Severity;
 use Uslanozan\CacheContract\Tests\Fakes\FakeKeyFactory;
 use Uslanozan\CacheContract\Tests\Fakes\FakeSimilarityEngine;
 use Uslanozan\CacheContract\Tests\Fakes\InMemoryDefinitionRegistry;
@@ -97,9 +98,9 @@ describe('FakeSimilarityEngine', function () {
     it('returns the given findings, highest score first, never the candidate itself', function () {
         $candidate = DefinitionBuilder::make('user.active_users');
         $engine = new FakeSimilarityEngine([
-            new Finding(FindingType::LexicalSimilarity, DefinitionBuilder::make('user.inactive_list'), 0.6),
-            new Finding(FindingType::PurposeCollision, DefinitionBuilder::make('user.active_list'), 1.0),
-            new Finding(FindingType::IdentifierCollision, $candidate, 1.0),
+            new Finding(FindingType::LexicalSimilarity, Severity::Warning, DefinitionBuilder::make('user.inactive_list'), 0.6),
+            new Finding(FindingType::PurposeCollision, Severity::Error, DefinitionBuilder::make('user.active_list'), 1.0),
+            new Finding(FindingType::IdentifierCollision, Severity::Error, $candidate, 1.0),
         ]);
 
         $findings = $engine->findSimilar($candidate, []);

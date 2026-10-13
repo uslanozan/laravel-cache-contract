@@ -47,7 +47,7 @@ documented, tested against real Redis, and released on Packagist.
 
 | Topic | Agreement |
 | :--- | :--- |
-| Planning | Linear team `LRVL`, **1 cycle = 1 week, starting Thursday** (Cycle 1 = 2026-10-15). Thursday: planning + demo of last week; Monday: short check-in; Wednesday: the week's PRs are in review. Issues finished early let later ones move forward. |
+| Planning | Linear team `LRVL`, **1 cycle = 1 week, starting Thursday** (Cycle 1 = 2026-10-08 to 2026-10-14; development started on Thursday 2026-10-08). Thursday: planning + demo of last week; Monday: short check-in; Wednesday: the week's PRs are in review. Issues finished early let later ones move forward. |
 | Issues | Every PR links a Linear issue. Move the issue to **In Progress** when you start, before the first commit; it moves to **Done** when the PR is merged. Design questions become *Design proposal* issues first. See [`AGENTS.md`](../AGENTS.md). |
 | Branches & commits | [branching-strategy.md](branching-strategy.md), [commit-convention.md](commit-convention.md) |
 | Review | 1 approval from a teammate; all checks green; threads resolved. Aim to review within one working day. |
@@ -209,6 +209,7 @@ stale write against real Redis.
 ### Phase 4: Discovery & similarity *(≈ 2 cycles)* · Track B · → `v0.4.0`
 
 Goal: a developer finds the existing definition instead of creating a duplicate.
+Design, measures and decision log: [similarity-engine.md](similarity-engine.md).
 
 - Exact duplicates are errors: same `subject` + `purpose`, same normalized
   name, same key template

@@ -7,10 +7,14 @@ namespace Uslanozan\CacheContract;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
+use Uslanozan\CacheContract\Contracts\SimilarityEngine;
+use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
 use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
+use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
  * Entry point Laravel loads for this package (auto-discovered through
@@ -28,6 +32,9 @@ class CacheContractServiceProvider extends ServiceProvider
         // the application does not define fall back to the package defaults.
         $this->mergeConfigFrom(__DIR__.'/../config/cache-contract.php', 'cache-contract');
 
+        // Definitions are the same for every request: safe to share.
+        $this->app->singleton(DefinitionRegistry::class, ConfigDefinitionRegistry::class);
+
         // The key format is read from config once; an invalid format fails on
         // first use with InvalidKeyFormat.
         $this->app->singleton(KeyFactory::class, function (Application $app): KeyFactory {
@@ -42,6 +49,9 @@ class CacheContractServiceProvider extends ServiceProvider
                 new ParameterEncoder,
             );
         });
+
+        // Stateless and deterministic: safe to share.
+        $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
     }
 
     public function boot(): void

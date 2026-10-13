@@ -22,6 +22,8 @@ arch('value objects are immutable')
         'Uslanozan\CacheContract\Definitions\Definition',
         'Uslanozan\CacheContract\Similarity\Finding',
         'Uslanozan\CacheContract\Definitions\ValidationError',
+        'Uslanozan\CacheContract\Similarity\NameScore',
+        'Uslanozan\CacheContract\Similarity\TokenizedName',
     ])
     ->toBeReadonly()
     ->toBeFinal();

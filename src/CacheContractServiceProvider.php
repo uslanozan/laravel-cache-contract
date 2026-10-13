@@ -6,7 +6,9 @@ namespace Uslanozan\CacheContract;
 
 use Illuminate\Support\ServiceProvider;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
+use Uslanozan\CacheContract\Contracts\SimilarityEngine;
 use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
+use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
  * Entry point Laravel loads for this package (auto-discovered through
@@ -26,6 +28,9 @@ class CacheContractServiceProvider extends ServiceProvider
 
         // Definitions are the same for every request: safe to share.
         $this->app->singleton(DefinitionRegistry::class, ConfigDefinitionRegistry::class);
+
+        // Stateless and deterministic: safe to share.
+        $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
     }
 
     public function boot(): void

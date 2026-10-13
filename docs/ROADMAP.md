@@ -209,6 +209,7 @@ stale write against real Redis.
 ### Phase 4: Discovery & similarity *(≈ 2 cycles)* · Track B · → `v0.4.0`
 
 Goal: a developer finds the existing definition instead of creating a duplicate.
+Design, measures and decision log: [similarity-engine.md](similarity-engine.md).
 
 - Exact duplicates are errors: same `subject` + `purpose`, same normalized
   name, same key template

@@ -27,15 +27,17 @@ beforeEach(function () {
     ]);
 });
 
+// Several checks on one output: read it whole. Chained expectsOutputToContain()
+// calls match output lines differently on Laravel 11 and 12+.
 it('shows the definition and the key pattern', function () {
-    $this->artisan('cache-contract:inspect', ['id' => 'user.profile'])
-        ->expectsOutputToContain('Profile page data.')
-        ->expectsOutputToContain(User::class)
-        ->expectsOutputToContain('user_id: int')
-        ->expectsOutputToContain(Company::class)
-        ->expectsOutputToContain('cc:user:profile:v2:user_id={int}')
-        ->expectsOutputToContain('Pass --param=name=value')
-        ->assertSuccessful();
+    $exit = Artisan::call('cache-contract:inspect', ['id' => 'user.profile']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0);
+
+    foreach (['Profile page data.', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
+        expect($output)->toContain($expected);
+    }
 });
 
 it('builds a concrete key from terminal parameters', function () {

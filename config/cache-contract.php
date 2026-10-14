@@ -32,6 +32,43 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Cache store
+    |--------------------------------------------------------------------------
+    |
+    | The store from config/cache.php that holds the package's entries. Null
+    | uses the application's default store. Redis is recommended; set
+    | "timeout" and "read_timeout" on its connection, or a Redis outage can
+    | make every cache call wait up to 60 seconds (ADR 0007).
+    |
+    */
+
+    'store' => env('CACHE_CONTRACT_STORE'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Redis errors
+    |--------------------------------------------------------------------------
+    |
+    | What happens when Redis cannot be reached (ADR 0007), per operation:
+    | "report" passes the error to report() and continues without the cache,
+    | "throw" rethrows it. Only connection errors follow this setting.
+    |
+    | read:       report → treated as a miss: the loader runs, nothing is written
+    | write:      report → the value is returned but not cached
+    | invalidate: report → the old entry stays until its TTL ends
+    |
+    | Consider "throw" for all three in your test suite, so failures show.
+    |
+    */
+
+    'redis_errors' => [
+        'read' => 'report',
+        'write' => 'report',
+        'invalidate' => 'report',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Definitions
     |--------------------------------------------------------------------------
     |

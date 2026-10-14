@@ -1,7 +1,7 @@
 # 0007. Cached falsy values and the Redis error policy
 
-- **Status:** proposed
-- **Date:** 2026-10-13
+- **Status:** accepted
+- **Date:** 2026-10-14
 
 ## Context
 
@@ -71,11 +71,17 @@ read. An absent key is the only miss.
 Each operation either **throws** or **reports**: passes the exception to
 Laravel's `report()` (log, error tracker) and continues.
 
-| Operation | If it reports | Risk |
+| Operation | If it throws | If it reports |
 | :--- | :--- | :--- |
-| Read | Treated as a miss: the loader runs, the database answers | Load moves to the database |
-| Write | The loaded value is returned, just not cached | Next read misses again |
-| Invalidation | The change is already committed; the old entry stays until its TTL | **Stale data**, which principle 1 counts as wrong data |
+| Read | The request fails, although the database could answer | Treated as a miss: the loader runs, the database answers; load moves to the database |
+| Write | The request fails, although the value was loaded | The loaded value is returned, just not cached; the next read misses again |
+| Invalidation | Invalidation runs **after commit**, so the request fails **after the data was saved**: the user is told it failed, and a retry can write the data **twice**. The stale entry stays until its TTL | The user gets the correct answer; the stale entry stays until its TTL; the failure is visible in logs and the error tracker |
+
+In both invalidation modes the stale entry lives until its TTL: throwing does
+not remove it, it only adds a misleading error. Removing it as soon as Redis
+is back needs a guaranteed retry, for example a transactional outbox (the
+"forget" is recorded in the same database transaction and a worker retries
+it), which needs a table and a worker.
 
 ## Decision
 
@@ -91,23 +97,24 @@ Laravel's `report()` (log, error tracker) and continues.
   definition's TTL and returned exactly as written. `remember` caches `null`;
   `has()` is true for a cached `null`.
 
-**Errors: one setting per operation, `throw` or `report`.** Proposed config
-(final key names are fixed with the facade):
+**Errors: one setting per operation, `throw` or `report`, all `report` by
+default.** Config (final key names are fixed with the facade):
 
 ```php
 'redis_errors' => [
-    'read' => 'report',       // miss: run the loader; skip the write that would follow
-    'write' => 'report',      // return the loaded value without caching it
-    'invalidate' => 'throw',  // a skipped invalidation leaves stale data
+    'read' => 'report',        // miss: run the loader; skip the write that would follow
+    'write' => 'report',       // return the loaded value without caching it
+    'invalidate' => 'report',  // the stale entry lives until its TTL
 ],
 ```
 
-- Read and write report by default: the database stays the source of truth,
-  so the answer is still correct; the cache only speeds it up. This matches
-  the team research report (the app stays up when Redis is down).
-- Invalidation throws by default, following principle 1. Apps that prefer
-  availability can set it to `report`; the required TTL (ADR 0002) bounds how
-  long stale data can live.
+- Read and write report: the database stays the source of truth, so the
+  answer is still correct; the cache only speeds it up. This matches the team
+  research report (the app stays up when Redis is down).
+- Invalidation reports as well: throwing after commit tells the user a saved
+  change failed, invites duplicate writes on retry, and does not remove the
+  stale entry. The required TTL (ADR 0002) bounds how long it lives. Apps can
+  still choose `throw`.
 - The policy covers connection errors only: phpredis' `RedisException` (and
   Predis' connection exception if Predis is supported later, D13). Any other
   exception, such as an unreadable entry, always propagates.
@@ -130,5 +137,10 @@ Laravel's `report()` (log, error tracker) and continues.
   change the connection itself.
 - There is no circuit breaker in v1: during an outage each call pays the
   connection timeout. Revisit if that proves too slow in practice.
+- A failed invalidation leaves stale data until the TTL ends. Strict
+  consistency is the application's responsibility for now: the docs will
+  recommend short TTLs for critical data and a transactional outbox where it
+  matters. A guaranteed retry in the package is future work (LRVL-51,
+  phase 3 backlog).
 - Revisit this ADR if a Laravel release changes any behaviour pinned by the
   characterization tests.

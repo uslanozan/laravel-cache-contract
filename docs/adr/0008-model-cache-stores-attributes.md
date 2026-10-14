@@ -7,9 +7,8 @@
 
 `ModelCache` (ADR 0006) writes Eloquent models to Redis and reads them back.
 Before it is built we have to decide what an entry holds: the whole model
-object, or only its column values. ADR 0007 (proposed) wraps every value in a
-one-element envelope; this decision is about what goes inside it and holds
-either way.
+object, or only its column values. ADR 0007 wraps every value in a
+one-element envelope; this decision is about what goes inside it.
 
 A spike (LRVL-34) compared both on one model with array, boolean, enum and
 datetime casts, a hidden `password` column and a `belongsTo` relation, on

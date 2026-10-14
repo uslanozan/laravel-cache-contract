@@ -35,7 +35,9 @@ it('shows the definition and the key pattern', function () {
 
     expect($exit)->toBe(0);
 
-    foreach (['Profile page data.', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
+    // "Profile page data" without the final period: Laravel 11's
+    // twoColumnDetail() strips trailing punctuation from values.
+    foreach (['Profile page data', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
         expect($output)->toContain($expected);
     }
 });

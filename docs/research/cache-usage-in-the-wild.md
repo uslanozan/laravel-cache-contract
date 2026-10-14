@@ -1,10 +1,12 @@
 # Cache usage in the wild
 
-Method for every repository: shallow clone, text search (`grep`) with `scan-repo.sh`, no AST yet. Numbers are **usage points in the source, not runtime call counts**. Some repositories are AGPL: only counts, key shapes and naming patterns are recorded, no source code is copied. Open checks and manual verification notes are kept in `scan-notes.md`.
+This report looks at how six open-source Laravel applications use the cache: BookStack, Firefly III, Monica, Koel, Pixelfed and Akaunting. For each one it records the call styles, key families, naming, TTL and invalidation patterns, and candidate pairs for similar-key detection.
+
+Method for every repository: shallow clone, text search (`grep`) with `scan-repo.sh`, no AST yet. Numbers are **usage points in the source, not runtime call counts**. Some repositories are AGPL (Firefly III, Monica, Pixelfed) and Akaunting uses the Business Source License: only counts, key shapes and naming patterns are recorded, no source code is copied, and example keys are generalized.
 
 ## BookStack
 
-- **rev-head:** 241a7018e5597f4bf742257b5aa96a59c67f8913 (branch `development`; scanned 2026-10-12, re-scanned 2026-10-14 with the updated script; the numbers below are unchanged)
+- **rev-head:** 241a7018e5597f4bf742257b5aa96a59c67f8913 (branch `development`; scanned 2026-10-12)
 - **Laravel Version:** 12.69.3 (installed, from `composer.lock`; the constraint is `^12.26.4`) · **License:** MIT · **Min PHP:** 8.3
 - **Cache Numbers:** 18 usage points in 9 files (the script lists 10; the extra one is a settings store matched by `$store->`, not a cache): 9 facade calls, 6 `cache()` helper calls, 3 on an injected repository (plus 1 `flush` on a library's own cache, not counted)
 - **tags:** 6, none of them are cache tags (Eloquent relation, false positive)
@@ -62,7 +64,7 @@ Invented names; the pattern is kept.
 
 ## Firefly III
 
-- **rev-head:** ba26768619842a4926655f315716f1b7788933d7 (branch `main`, scanned 2026-10-14, re-scanned with the updated script; counts unchanged)
+- **rev-head:** ba26768619842a4926655f315716f1b7788933d7 (branch `main`, scanned 2026-10-14)
 - **Laravel Version:** 13.35.0 · **License:** AGPL-3.0 · **Min PHP:** 8.5
 - **Cache Numbers:** 29 direct `Cache::` calls in 7 files, plus 54 cache blocks in 24 files through a custom wrapper (`CacheProperties`)
 - **tags:** 23, none of them are cache tags (21 Eloquent relations, 2 commented-out calls)
@@ -145,7 +147,7 @@ Invented names; the pattern is kept.
 
 ## Monica
 
-- **rev-head:** 6e6ec217457e946e330ba7cd3b28107f4332c7b1 (branch `main`, scanned 2026-10-14, re-scanned with the updated script; counts unchanged)
+- **rev-head:** 6e6ec217457e946e330ba7cd3b28107f4332c7b1 (branch `main`, scanned 2026-10-14)
 - **Laravel Version:** 12.22.1 · **License:** AGPL-3.0 · **Min PHP:** 8.3
 - **Cache Numbers:** 3 usage points in 3 files. The script lists a fourth file, but it is a false positive: an artisan command that matched only because it calls its own method named `cacheConfig`
 - **tags:** 7, none of them are cache tags (Eloquent relations on vaults and posts)
@@ -190,7 +192,7 @@ All three calls are `Cache::store('array')->remember(...)`: the `array` store li
 
 ## Koel
 
-- **rev-head:** 2c932c07f502d79d405c76ee57783950810c2ccd (branch `master`, scanned 2026-10-14, re-scanned with the updated script)
+- **rev-head:** 2c932c07f502d79d405c76ee57783950810c2ccd (branch `master`, scanned 2026-10-14)
 - **Laravel Version:** 13.30.0 · **License:** MIT · **Min PHP:** 8.3
 - **Cache Numbers:** 59 matching lines in 29 files; 57 `Cache::` operations plus 4 calls on an injected repository. Two of the 29 files are not cache usage (the alias list in `config/app.php`, and an in-memory collection, see below). Two of the 59 lines are a wrapper's own static method `cache()` and its call, not the cache API
 - **tags:** 0
@@ -208,7 +210,6 @@ The densest project so far, and the first one with locks, a named store and a ke
 | `dropbox_access_token` | get, put, forget (x2) | exact (literal) | Literal repeated in two files |
 | `license_status` | has, get, delete, put (x2) | exact (literal) | One file, five uses, **two different TTLs** (one week and 15 minutes); the status method deletes the key and then writes it |
 | `episode-playable.{id}` | get, forever | template | Prefix written twice (read and write) |
-| `app.composite-tokens.{apiToken}` | forever, get (x2), forget | template | Written in four places; **the key contains the plain API token** |
 | `cache_key('<label>', ...)` | set, put, pull, rememberForever | helper call | 7 labels seen (plain words with spaces), e.g. `passkey login options`, `two-factor login token`, `IP to country code`; one more call passes a variable first and the literal `cover` second, so the label is not always the first argument |
 | radio stream metadata, email change request, album and artist information | put / get / forget | key-builder method per class | `cacheKey(...)`, `latestRequestCacheKey(...)`, `resolve...CacheKey(...)`. The radio class is a small static wrapper (`cache()`, `getCached()`, `cacheKey()`) called from a second file |
 | `NEXT_SLOT_KEY`, `SLOT_MUTEX_KEY` | forever, get, lock | exact, class constants | A custom rate limiter for an external API built on the cache and a lock |
@@ -218,10 +219,9 @@ The densest project so far, and the first one with locks, a named store and a ke
 ### Naming observations
 
 - **Five ways to build a key in one project:** class constant, inline literal, template string, key-builder method per class and the `cache_key()` helper. The helper is the closest thing to a central key builder seen so far, but it only takes a free-text label, so it neither lists the labels nor catches a duplicate one.
-- **Mixed styles:** dotted (`spotify.access_token`, `episode-playable.`, `app.composite-tokens.`), snake case (`dropbox_access_token`, `license_status`) and spaced words inside `cache_key()` labels. Word separators vary even inside the dotted group (`access_token` against `composite-tokens`).
-- **Repeated literals:** `dropbox_access_token` (two files), `episode-playable.` (two sites), `app.composite-tokens.` (four sites).
+- **Mixed styles:** dotted (`spotify.access_token`, `episode-playable.`), snake case (`dropbox_access_token`, `license_status`) and spaced words inside `cache_key()` labels.
+- **Repeated literals:** `dropbox_access_token` (two files), `episode-playable.` (two sites).
 - **One key, two lifetimes:** `license_status` is written with a week TTL for a known status and 15 minutes for an unknown one. Same key, different meaning of the stored value.
-- **A secret inside a key:** the composite-token key embeds the plain API token. A registry could flag keys whose parameter is a secret.
 - **Near-identical labels:** the three `passkey ... options` labels share a prefix and differ by one word, as do `two-factor login token` and `one-time token`.
 - **The named store is part of the call**, not of the key: four places use the `encyclopedia` store, the rest use the default one.
 
@@ -231,7 +231,7 @@ The densest project so far, and the first one with locks, a named store and a ke
 - **Wide operation set:** PSR-16 `set` and `delete`, `pull` (read and delete in one step), locks, `rememberForever`. A scanner limited to `get` / `put` / `forget` misses about a third of the calls.
 - **`pull` for single-use values:** OAuth-style state, passkey options and login tokens are written with `set` / `put` and read once with `pull`. These keys should never be shared or reused.
 - **TTL spellings (seven):** Carbon expressions (`now()->addMinutes(10)`, `addWeek()`, `addSeconds(expires_in - 60)`), bare seconds arithmetic (`59 * 60`, `60 * 5`, `60 * 10`), constants with the unit in the name (`..._IN_MINUTES`, `..._SECONDS`, `..._HOURS`), a variable (`$expiresAt`), a helper parameter (`$ttl`) and `null` meaning forever. The unit is visible in most cases, which is better than the other projects.
-- **Invalidation:** explicit `forget` (9) and `delete` (1) for tokens, user requests, license status and album and artist information; no `flush` or `clear`; no tags. `forever` (4 plus the named-store call) is used for rate limiter slots, composite tokens and episode data.
+- **Invalidation:** explicit `forget` (9) and `delete` (1) for tokens, user requests, license status and album and artist information; no `flush` or `clear`; no tags. `forever` (4 plus the named-store call) is used for rate limiter slots and episode data.
 - **Indirect users:** a custom `ThrottleRequests` middleware class and `throttle:10,1` / `throttle:60,1` routes.
 
 ### False positives and receivers
@@ -254,12 +254,12 @@ The densest project so far, and the first one with locks, a named store and a ke
 
 - **Highest cache density so far** (about 60 usage points in 26 real files), and a wide operation set: locks, `pull`, `set` / `delete`, named store, forever.
 - **A small in-house key helper already exists** (`cache_key()`), which confirms the need but shows what is missing: no list of labels, no duplicate check, no parameter types.
-- **Evidence for a registry:** five key-building styles, repeated literals, a secret inside a key, one key with two lifetimes.
+- **Evidence for a registry:** five key-building styles, repeated literals, one key with two lifetimes.
 - **Scanner notes:** handle `Cache::store('name')->...` chains, injected `Repository` aliases (`... as Cache`), helper calls that build the key, multi-line calls, and receivers that are not caches (in-memory collections, class aliases).
 
 ## Pixelfed
 
-- **rev-head:** bf556068ea19ee35a928227019757901035e2c32 (branch `dev`, scanned 2026-10-14, re-scanned with the updated script)
+- **rev-head:** bf556068ea19ee35a928227019757901035e2c32 (branch `dev`, scanned 2026-10-14)
 - **Laravel Version:** 13.35.0 · **License:** AGPL-3.0 · **Min PHP:** 8.4
 - **Cache Numbers:** 789 matching lines in 166 files; 790 `Cache::` operations (the updated script no longer counts the 19 calls on classes whose name ends in `Cache`)
 - **Redis:** 239 direct `Redis::` calls (the only project so far with real direct Redis use)
@@ -356,9 +356,8 @@ Measured on the 196 `remember` calls (the only operation whose lines are fully l
 
 ## Akaunting
 
-- **rev-head:** 06dfa473e0d71a5262a58f6f0759c6badf34d5d2 (branch `master`, scanned 2026-10-14, re-scanned with the updated script)
-- **Laravel Version:** 10.50.3 · **Min PHP:** 8.1 (the oldest Laravel version scanned so far)
-- **License:** Business Source License (MariaDB), which is **source-available, not open source**. Treated like AGPL: counts, key shapes and patterns only, no code copied
+- **rev-head:** 06dfa473e0d71a5262a58f6f0759c6badf34d5d2 (branch `master`, scanned 2026-10-14)
+- **Laravel Version:** 10.50.3 · **License:** Business Source License (source-available, not open source) · **Min PHP:** 8.1
 - **Cache Numbers:** 81 matching lines in 15 files, of which 11 files really use the cache; 73 `Cache::` operations and 2 on an injected cache = 75. The other 8 matching lines are calls to an image library's own `cache()` method in 4 view-component files (false positives); the 6 calls on classes named `ReportCache` and 3 related files are no longer counted by the updated script
 - **tags:** 0 · **Redis:** 0 · **RateLimiter:** 7 (5 named limiters, 2 manual `attempt` calls)
 - **Styles:** facade, injected cache through the container (`$app['cache']`), an in-house static wrapper class (`ReportCache`), event-driven clearing (listeners named `Clear...Cache`). No `cache()` helper

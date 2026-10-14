@@ -22,8 +22,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | One format for every key in the project (ADR 0004). Placeholders:
-    | {prefix}, {section}, {name}, {version}, {params}. Changing it later
-    | changes every key at once, which empties the cache until it warms up.
+    | {prefix}, {section}, {name}, {version}, {params}, always separated by ":".
+    | Changing it later changes every key at once, which empties the cache
+    | until it warms up.
     |
     */
 

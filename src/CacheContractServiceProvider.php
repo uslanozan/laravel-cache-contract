@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace Uslanozan\CacheContract;
 
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
+use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
 use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
+use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
+use Uslanozan\CacheContract\Keys\KeyFormat;
+use Uslanozan\CacheContract\Keys\ParameterEncoder;
 use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
@@ -28,6 +34,21 @@ class CacheContractServiceProvider extends ServiceProvider
 
         // Definitions are the same for every request: safe to share.
         $this->app->singleton(DefinitionRegistry::class, ConfigDefinitionRegistry::class);
+
+        // The key format is read from config once; an invalid format fails on
+        // first use with InvalidKeyFormat.
+        $this->app->singleton(KeyFactory::class, function (Application $app): KeyFactory {
+            /** @var Repository $config */
+            $config = $app->make('config');
+
+            return new DefaultKeyFactory(
+                KeyFormat::fromString(
+                    (string) $config->get('cache-contract.key_format'),
+                    (string) $config->get('cache-contract.prefix', ''),
+                ),
+                new ParameterEncoder,
+            );
+        });
 
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);

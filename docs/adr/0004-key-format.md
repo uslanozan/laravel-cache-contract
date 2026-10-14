@@ -62,3 +62,15 @@ as a trade-off.
   definition only.
 - Hashed parameters cannot be read back from the key; `cache-contract:inspect`
   shows how a key was built from its inputs.
+
+## Update 2026-10-12: the separator is fixed to ":"
+
+The format stays configurable (which placeholders, `prefix` and `version`
+optional, literal text such as `v` before `{version}`), but placeholders must
+always be separated by `:`, and only `:`, lowercase letters and digits may
+appear around them. Definition names cannot contain `:`, so segment
+boundaries are never ambiguous and two definitions can never produce the
+same key. With `_` or no separator they could: `user_a` + `b` and
+`user` + `a_b` would both give `user_a_b`. Other separators may be offered
+as options later. Enforced by `KeyFormat` (LRVL-6); the similarity engine
+therefore does not need to look for key collisions.

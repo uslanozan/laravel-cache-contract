@@ -301,7 +301,7 @@ fails CI on a direct `Cache::put` in app code.
 | [0006](adr/0006-model-api.md) | Model API: service + trait shortcut | 0 | accepted |
 | [0007](adr/0007-cached-falsy-values-and-redis-errors.md) | Miss vs cached falsy values; Redis error policy | 1 | accepted |
 | [0008](adr/0008-model-cache-stores-attributes.md) | Eloquent serialization strategy | 2 | accepted |
-| 0009 | Invalidation strategy: tags vs generation counters | 3 | backlog |
+| [0009](adr/0009-invalidation-with-generation-counters.md) | Invalidation strategy: tags vs generation counters | 3 | accepted |
 | 0010 | Duplicate detection layers (registry, create-time, CI, scanner) | 4 | backlog |
 | 0011 | Scanner scope and limits | 5 | backlog |
 

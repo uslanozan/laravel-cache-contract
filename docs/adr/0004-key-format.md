@@ -74,3 +74,13 @@ same key. With `_` or no separator they could: `user_a` + `b` and
 `user` + `a_b` would both give `user_a_b`. Other separators may be offered
 as options later. Enforced by `KeyFormat` (LRVL-6); the similarity engine
 therefore does not need to look for key collisions.
+
+## Update 2026-10-15: generation segment (ADR 0009)
+
+Keys of entries that depend on generation counters (tags, `invalidated_by`)
+get a generation segment, e.g. `cc:user:profile:v2:user_id=42:~g8123`. It is
+**not** a `key_format` placeholder: the key factory always appends it, like
+context, so a custom format can never drop it and turn invalidation off. The
+caller reads the counters and passes the generations in; the key factory
+stays pure and never talks to Redis. See
+[ADR 0009](0009-invalidation-with-generation-counters.md).

@@ -7,6 +7,8 @@ namespace Uslanozan\CacheContract;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Uslanozan\CacheContract\Commands\InspectCommand;
+use Uslanozan\CacheContract\Commands\ListCommand;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
@@ -37,18 +39,20 @@ class CacheContractServiceProvider extends ServiceProvider
 
         // The key format is read from config once; an invalid format fails on
         // first use with InvalidKeyFormat.
-        $this->app->singleton(KeyFactory::class, function (Application $app): KeyFactory {
+        $this->app->singleton(KeyFormat::class, function (Application $app): KeyFormat {
             /** @var Repository $config */
             $config = $app->make('config');
 
-            return new DefaultKeyFactory(
-                KeyFormat::fromString(
-                    (string) $config->get('cache-contract.key_format'),
-                    (string) $config->get('cache-contract.prefix', ''),
-                ),
-                new ParameterEncoder,
+            return KeyFormat::fromString(
+                (string) $config->get('cache-contract.key_format'),
+                (string) $config->get('cache-contract.prefix', ''),
             );
         });
+
+        $this->app->singleton(KeyFactory::class, fn (Application $app): KeyFactory => new DefaultKeyFactory(
+            $app->make(KeyFormat::class),
+            new ParameterEncoder,
+        ));
 
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
@@ -61,6 +65,11 @@ class CacheContractServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/cache-contract.php' => config_path('cache-contract.php'),
             ], 'cache-contract-config');
+
+            $this->commands([
+                ListCommand::class,
+                InspectCommand::class,
+            ]);
         }
     }
 }

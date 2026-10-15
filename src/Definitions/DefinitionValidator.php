@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Definitions;
 
 use Illuminate\Database\Eloquent\Model;
+use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 
 /**
  * Checks the raw "definitions" config against the rules of ADR 0002.
@@ -41,6 +42,13 @@ final class DefinitionValidator
 
             if (! $this->isSnakeCase($section)) {
                 $errors[] = new ValidationError($section, 'section name must be snake_case');
+            }
+
+            if ($section === ModelCacheFactory::SECTION) {
+                $errors[] = new ValidationError($section, sprintf(
+                    'section "%s" is reserved for the model cache (ADR 0006); choose another name',
+                    ModelCacheFactory::SECTION,
+                ));
             }
 
             if (! is_array($entries)) {

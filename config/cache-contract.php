@@ -69,6 +69,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Model cache
+    |--------------------------------------------------------------------------
+    |
+    | ModelCache::for(User::class)->find(5) needs no definition (ADR 0006).
+    | Its key is built from the table, the ID and the connection, e.g.
+    | "cc:model:users:v1:id=5:@connection=mysql".
+    |
+    | ttl:        seconds a model entry lives; required, never forever
+    | overrides:  per model class:
+    |             ttl         its own TTL
+    |             version     bump it when the table's columns change (ADR 0008)
+    |             safe_scopes global scopes that never change which row an ID
+    |                         returns (e.g. one that only adds an order). Any
+    |                         other global scope needs withContext([...]).
+    |
+    | 'overrides' => [
+    |     App\Models\User::class => ['ttl' => 600, 'version' => 2],
+    | ],
+    |
+    */
+
+    'models' => [
+        'ttl' => 3600,
+        'overrides' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Definitions
     |--------------------------------------------------------------------------
     |

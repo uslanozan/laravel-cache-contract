@@ -16,6 +16,8 @@ use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
 use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
+use Uslanozan\CacheContract\Runtime\CacheContractManager;
+use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
@@ -56,6 +58,22 @@ class CacheContractServiceProvider extends ServiceProvider
 
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
+
+        // Immutable and without context: withContext() returns a copy, so the
+        // shared instance never carries a tenant into the next request.
+        $this->app->singleton(CacheContractManager::class, function (Application $app): CacheContractManager {
+            /** @var Repository $config */
+            $config = $app->make('config');
+            $store = $config->get('cache-contract.store');
+
+            return new CacheContractManager(
+                $app->make('cache'),
+                $app->make(DefinitionRegistry::class),
+                $app->make(KeyFactory::class),
+                RedisErrorPolicy::fromConfig((array) $config->get('cache-contract.redis_errors', [])),
+                is_string($store) && $store !== '' ? $store : null,
+            );
+        });
     }
 
     public function boot(): void

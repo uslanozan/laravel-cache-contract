@@ -28,6 +28,13 @@ arch('value objects are immutable')
     ->toBeReadonly()
     ->toBeFinal();
 
+// The manager is a singleton: if it could change, a tenant set in one request
+// could leak into the next one on the same Octane or queue worker.
+arch('the cache manager is immutable')
+    ->expect('Uslanozan\CacheContract\Runtime\CacheContractManager')
+    ->toBeReadonly()
+    ->toBeFinal();
+
 arch('no debugging calls are left behind')
     ->expect(['dd', 'dump', 'ray', 'var_dump', 'print_r'])
     ->not->toBeUsed();

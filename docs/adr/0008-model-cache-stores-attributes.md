@@ -1,7 +1,7 @@
 # 0008. The model cache stores attributes, not serialized models
 
-- **Status:** proposed
-- **Date:** 2026-10-14
+- **Status:** accepted
+- **Date:** 2026-10-15
 
 ## Context
 

@@ -47,7 +47,7 @@ function serializationKey(): string
     return 'k:'.bin2hex(random_bytes(8));
 }
 
-function rebuild(mixed $attributes): Member
+function serializationRebuild(mixed $attributes): Member
 {
     return (new Member)->newFromBuilder($attributes);
 }
@@ -95,7 +95,7 @@ it('round-trips casts through both payloads', function () {
     $this->cache->put($whole, [$member], 60);
     $this->cache->put($attributes, [$member->getAttributes()], 60);
 
-    foreach ([$this->cache->get($whole)[0], rebuild($this->cache->get($attributes)[0])] as $read) {
+    foreach ([$this->cache->get($whole)[0], serializationRebuild($this->cache->get($attributes)[0])] as $read) {
         expect($read)->toBeInstanceOf(Member::class)
             ->and($read->exists)->toBeTrue()
             ->and($read->isDirty())->toBeFalse()
@@ -116,7 +116,7 @@ it('keeps the cast configuration a whole model was written with', function () {
     $this->cache->put($attributes, [$member->getAttributes()], 60);
 
     expect($this->cache->get($whole)[0]->settings)->toBeInstanceOf(Collection::class)
-        ->and(rebuild($this->cache->get($attributes)[0])->settings)->toBe(['theme' => 'dark']);
+        ->and(serializationRebuild($this->cache->get($attributes)[0])->settings)->toBe(['theme' => 'dark']);
 });
 
 it('reads a whole model whose class no longer exists as an incomplete object', function () {
@@ -148,7 +148,7 @@ it('stores columns only, without relations, in an attributes payload', function 
 
     expect($member->getAttributes())->toHaveKeys(['id', 'organization_id', 'name', 'settings'])
         ->not->toHaveKey('organization')
-        ->and(rebuild($member->getAttributes())->relationLoaded('organization'))->toBeFalse();
+        ->and(serializationRebuild($member->getAttributes())->relationLoaded('organization'))->toBeFalse();
 });
 
 it('writes hidden columns to Redis in both payloads', function () {
@@ -178,6 +178,6 @@ it('fires the retrieved event only when rebuilding from attributes', function ()
     $this->cache->get($whole);
     expect($retrieved)->toBe(0);
 
-    rebuild($this->cache->get($attributes)[0]);
+    serializationRebuild($this->cache->get($attributes)[0]);
     expect($retrieved)->toBe(1);
 });

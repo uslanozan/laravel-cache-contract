@@ -62,7 +62,10 @@
         "laravel": {
             "providers": [
                 "Uslanozan\\CacheContract\\CacheContractServiceProvider"
-            ]
+            ],
+            "aliases": {
+                "CacheContract": "Uslanozan\\CacheContract\\Facades\\CacheContract"
+            }
         }
     },
     "config": {

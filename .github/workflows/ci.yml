@@ -1,13 +1,11 @@
 # =============================================================================
 # CI: quality gates + test matrix
 # =============================================================================
-# Until composer.json exists the package jobs are skipped and "CI result"
-# still reports success, so this workflow can be a required status check from
-# day one and switches itself on when the package skeleton lands.
-#
 # Branch rulesets require ONE check from here: "CI result". Matrix job names
 # change whenever the matrix changes; an aggregator job keeps the required
-# check name stable.
+# check name stable. It passes only when every job it depends on succeeded:
+# a skipped job counts as a failure, so a broken condition cannot turn the
+# whole matrix off and still report green.
 # =============================================================================
 name: CI
 
@@ -25,21 +23,8 @@ permissions:
   contents: read
 
 jobs:
-  detect:
-    name: Detect package
-    runs-on: ubuntu-latest
-    outputs:
-      package: ${{ steps.check.outputs.package }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: check
-        run: |
-          if [ -f composer.json ]; then echo "package=true" >> "$GITHUB_OUTPUT"; else echo "package=false" >> "$GITHUB_OUTPUT"; fi
-
   quality:
     name: Quality (lint + static analysis)
-    needs: detect
-    if: needs.detect.outputs.package == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -54,6 +39,24 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict
 
+      # The ISO week in the key starts a new cache entry every week. An exact
+      # key hit is never saved again, so without it the cache would keep the
+      # package versions of its first run until composer.json changes.
+      - name: Get Composer cache directory and week
+        id: composer-cache
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: |
+            composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}-
+            composer-${{ runner.os }}-quality-
+
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction --no-progress
 
@@ -65,35 +68,48 @@ jobs:
 
   tests:
     name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }})
-    needs: detect
-    if: needs.detect.outputs.package == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Supported range: see ADR on versions / docs/ROADMAP.md D5.
-      # Laravel 11 starts at 11.23 (first release with Cache::flexible) and
-      # supports PHP up to 8.4 only. Its security support ended 2026-03-12;
-      # it stays in the matrix because company projects still run it.
+      # Supported range: ADR 0003 / docs/ROADMAP.md D5. Each floor is the
+      # lowest release our test tooling can install, so prefer-lowest tests
+      # exactly what composer.json claims (ADR 0003, update 2026-10-17):
+      # - Laravel 11.44.2: Collision, pulled in by Pest, conflicts with anything
+      #   older. It includes Cache::flexible (11.23+). Its security support
+      #   ended 2026-03-12; it stays because company projects still run it.
+      # - Laravel 12.0.1: Testbench 10 requires it.
+      # - Laravel 13.0.0.
       matrix:
         php: ["8.3", "8.4", "8.5"]
         laravel: ["11", "12", "13"]
         stability: [prefer-lowest, prefer-stable]
         include:
           - laravel: "11"
-            framework: "^11.23"
+            framework: "^11.44.2"
             testbench: "^9.0"
           - laravel: "12"
-            framework: "^12.0"
+            framework: "^12.0.1"
             testbench: "^10.0"
           - laravel: "13"
             framework: "^13.0"
             testbench: "^11.0"
+          # Laravel 12 supports PHP 8.5 from 12.40.0 (laravel/framework#57835,
+          # "PHP 8.5 Compatibility"). Older 12.x releases break in their Redis
+          # tag code on PHP 8.5, so this cell starts at 12.40.0.
+          - php: "8.5"
+            laravel: "12"
+            framework: "^12.40.0"
         exclude:
+          # A support-policy exclusion, not a Composer conflict: Laravel 11's
+          # composer.json has no PHP upper bound, but Laravel supports 11 on
+          # PHP 8.2-8.4 only, and ADR 0003 claims support for exactly this
+          # matrix "minus Laravel 11 on PHP 8.5".
           - laravel: "11"
             php: "8.5"
 
     services:
       redis:
+        # Keep in sync with the redis service in docker-compose.yml.
         image: redis:7.4-alpine
         ports: ["6379:6379"]
         options: >-
@@ -116,37 +132,73 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # Before "Pin Laravel version", so the key hashes the committed
+      # composer.json rather than the one rewritten for this cell. The ISO
+      # week keeps the cache fresh (see the quality job).
+      - name: Get Composer cache directory and week
+        id: composer-cache
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}-
+            composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-
+
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.framework }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
 
-      # Every Laravel 11 release has security advisories that will never be
-      # patched (end of life since 2026-03-12), and Composer refuses to install
-      # packages with known advisories. Company projects still run Laravel 11,
-      # so we keep testing it: the block is lifted for laravel/framework only,
-      # in this job only. Laravel 12/13 jobs keep the protection. See ADR 0003.
-      - name: Allow Laravel 11 despite its unpatched advisories
-        if: matrix.laravel == '11'
+      # Composer refuses to install releases with known security advisories.
+      # The block is lifted for laravel/framework only, in two cases:
+      # - Laravel 11: every release has advisories that will never be patched
+      #   (end of life since 2026-03-12), and company projects still run it.
+      # - prefer-lowest: the floor we claim must be the floor we test. With the
+      #   block on, each new advisory silently raised the installed floor
+      #   (Laravel 12 had moved to 12.69.0, Laravel 13 to 13.30.0).
+      # Laravel 12/13 prefer-stable jobs keep the protection. See ADR 0003.
+      - name: Allow laravel/framework releases with advisories
+        if: matrix.laravel == '11' || matrix.stability == 'prefer-lowest'
         run: composer config policy.advisories.ignore --json '["laravel/framework"]'
 
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
 
+      # The service health check already waits for Redis; this fails fast with
+      # one clear message if phpredis is missing or the host/port are wrong,
+      # instead of every integration test failing with a RedisException.
+      - name: Check Redis is reachable
+        run: |
+          php <<'PHP'
+          <?php
+          $redis = new Redis();
+          $redis->connect(getenv('REDIS_HOST'), (int) getenv('REDIS_PORT'), 2.0);
+          if (! $redis->ping()) {
+              fwrite(STDERR, "Redis did not answer PING.\n");
+              exit(1);
+          }
+          echo 'Redis is reachable at '.getenv('REDIS_HOST').':'.getenv('REDIS_PORT').PHP_EOL;
+          PHP
+
       - name: Run tests
         run: composer test
 
   result:
-    # The single required status check. Passes when every job either
-    # succeeded or was skipped (no composer.json yet).
+    # The single required status check (see the header).
     name: CI result
-    needs: [detect, quality, tests]
+    needs: [quality, tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          for r in "${{ needs.detect.result }}" "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "A required job did not pass ($r)."; exit 1
+          for r in "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "A required job did not succeed ($r)."; exit 1
             fi
           done
-          echo "All jobs passed or were skipped."
+          echo "All jobs succeeded."

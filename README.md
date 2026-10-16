@@ -22,12 +22,13 @@ See the [roadmap](docs/ROADMAP.md) for the plan and current status.
 ## Requirements
 
 - PHP 8.3 or newer
-- Laravel 11.23+, 12 or 13
+- Laravel 11.44.2+, 12.0.1+ or 13 (on PHP 8.5: Laravel 12.40+ or 13)
 - Redis (phpredis) as the cache store
 
 > **Laravel 11 is end of life** and every 11.x release has known, unpatched
 > security advisories. The package supports it because existing projects still
-> run it, but upgrading to Laravel 12.60+ or 13 is strongly recommended. See
+> run it, but upgrading to Laravel 12.69+ or 13.30+ (the lowest releases with
+> no known advisories as of October 2026) is strongly recommended. See
 > [ADR 0003](docs/adr/0003-supported-versions.md).
 
 ## Contributing

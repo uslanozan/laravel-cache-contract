@@ -45,7 +45,8 @@ final class ModelNotCachable extends LogicException implements CacheContractExce
             '%s has global scopes (%s) that can change which row an ID returns, for example per tenant. '
             .'Pass the values they depend on with withContext([...]) so they become part of the key '
             .'(the context must contain them, such as the tenant; an unrelated value turns this check off), '
-            .'or list the scopes under cache-contract.models.overrides.%s.safe_scopes if they never change the row.',
+            .'or list the scopes under cache-contract.models.overrides.%s.safe_scopes if their result does not depend on '
+            .'the request, the user or the tenant (they only order rows, or apply the same filter on every request).',
             $class,
             implode(', ', $scopes),
             $class,

@@ -47,7 +47,7 @@ final readonly class ModelCache
 
     /**
      * @param  class-string<TModel>  $class
-     * @param  list<string>  $safeScopes  global scopes that never change which row an ID returns
+     * @param  list<string>  $safeScopes  global scopes whose result does not depend on the request, user or tenant
      * @param  array<string, scalar>  $context
      */
     public function __construct(

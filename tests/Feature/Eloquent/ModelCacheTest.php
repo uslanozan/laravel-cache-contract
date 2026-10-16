@@ -187,6 +187,9 @@ describe('global scopes', function () {
     });
 
     it('keeps tenants apart', function () {
+        expect(ModelCache::for(Project::class)->withContext(['tenant_id' => 7])->key(5))
+            ->not->toBe(ModelCache::for(Project::class)->withContext(['tenant_id' => 8])->key(5));
+
         expect(ModelCache::for(Project::class)->withContext(['tenant_id' => 7])->find(5)?->name)->toBe('Apollo');
 
         app()->instance('fixture.tenant', 8);
@@ -206,6 +209,14 @@ describe('global scopes', function () {
         config()->set('cache-contract.models.overrides', [Ranking::class => ['safe_scopes' => [LatestFirstScope::class]]]);
 
         expect(ModelCache::for(Ranking::class)->find(1)?->name)->toBe('First');
+    });
+
+    it('keeps refusing while one scope is not listed as safe', function () {
+        config()->set('cache-contract.models.overrides', [Project::class => ['safe_scopes' => [LatestFirstScope::class]]]);
+
+        // Only the unlisted scope is named: the safe one is allowed, scope by scope.
+        expect(fn () => ModelCache::for(Project::class)->find(5))
+            ->toThrow(ModelNotCachable::class, '('.TenantScope::class.')');
     });
 
     it('needs no context for SoftDeletes alone', function () {

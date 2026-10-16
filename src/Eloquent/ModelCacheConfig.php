@@ -106,7 +106,8 @@ final readonly class ModelCacheConfig
     }
 
     /**
-     * Global scopes of this model that never change which row an ID returns.
+     * Global scopes of this model whose result does not depend on the request,
+     * the user or the tenant, so they need no context.
      *
      * @param  class-string<Model>  $class
      * @return list<string>

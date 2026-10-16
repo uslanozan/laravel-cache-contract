@@ -86,11 +86,17 @@ return [
     | overrides:  per model class:
     |             ttl         its own TTL
     |             version     bump it when the table's columns change (ADR 0008)
-    |             safe_scopes global scopes that never change which row an ID
-    |                         returns (e.g. one that only adds an order)
+    |             safe_scopes global scopes that need no context
+    |
+    | A global scope is safe when its result does not depend on the request,
+    | the user or the tenant: it only orders rows, or applies the same filter
+    | on every request (e.g. is_published = 1). A scope that reads the
+    | current tenant, user or locale is not safe: give withContext() instead.
+    | Only listed scopes are allowed; any other scope still needs a context.
     |
     | 'overrides' => [
     |     App\Models\User::class => ['ttl' => 600, 'version' => 2],
+    |     App\Models\Post::class => ['safe_scopes' => [App\Models\Scopes\PublishedScope::class]],
     | ],
     |
     */

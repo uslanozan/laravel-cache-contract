@@ -73,9 +73,27 @@ it('rejects values of the wrong type instead of converting them', function (Para
     'int for bool' => [ParameterType::Bool, 1, 'int'],
     'int for float' => [ParameterType::Float, 1, 'int'],
     'infinite float' => [ParameterType::Float, INF, 'float'],
+    'numeric string for float' => [ParameterType::Float, '1.5', 'string'],
+    'boolean string for bool' => [ParameterType::Bool, 'true', 'string'],
     'string for array' => [ParameterType::Array, 'a,b', 'string'],
     'null for int' => [ParameterType::Int, null, 'null'],
 ]);
+
+// Definition parameters stay strict (ADR 0004), so the message says how to fix
+// a request string without a blind (int) cast.
+it('explains how to pass a request value to a number or bool parameter', function (ParameterType $type, string $rule) {
+    expect(fn () => encodeParams(['value' => $type], ['value' => '7']))
+        ->toThrow(InvalidParameters::class, "Request values are strings: validate them first (e.g. \$request->validate([... => '{$rule}'])), then cast");
+})->with([
+    'int' => [ParameterType::Int, 'integer'],
+    'float' => [ParameterType::Float, 'numeric'],
+    'bool' => [ParameterType::Bool, 'boolean'],
+]);
+
+it('gives no request hint when the value is not a string', function () {
+    expect(fn () => encodeParams(['value' => ParameterType::Int], ['value' => 1.5]))
+        ->toThrow(fn (InvalidParameters $e) => expect($e->getMessage())->not->toContain('Request values'));
+});
 
 it('rejects missing and unexpected parameters', function () {
     $declared = ['tenant_id' => ParameterType::Int];

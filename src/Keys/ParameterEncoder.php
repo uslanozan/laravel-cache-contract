@@ -78,10 +78,11 @@ final class ParameterEncoder
         foreach ($definition->params as $name => $type) {
             if (! $this->matches($type, $params[$name])) {
                 throw InvalidParameters::forDefinition($definition->id, sprintf(
-                    '"%s" must be %s, %s given',
+                    '"%s" must be %s, %s given%s',
                     $name,
                     $type->value,
                     get_debug_type($params[$name]),
+                    $this->hint($type, $params[$name]),
                 ));
             }
         }
@@ -100,6 +101,24 @@ final class ParameterEncoder
                 get_debug_type($value),
             ));
         }
+    }
+
+    /**
+     * A string for a number or bool usually comes straight from the request.
+     * Definition parameters stay strict (ADR 0004), so say how to fix it
+     * without a blind cast: (int) "abc" is 0, a valid but wrong key.
+     */
+    private function hint(ParameterType $type, mixed $value): string
+    {
+        if (! is_string($value) || ! in_array($type, [ParameterType::Int, ParameterType::Float, ParameterType::Bool], true)) {
+            return '';
+        }
+
+        return sprintf(
+            '. Request values are strings: validate them first (e.g. $request->validate([... => \'%s\'])), '
+            .'then cast; a plain cast turns invalid input such as "abc" into a valid-looking value',
+            $type === ParameterType::Bool ? 'boolean' : ($type === ParameterType::Int ? 'integer' : 'numeric'),
+        );
     }
 
     private function matches(ParameterType $type, mixed $value): bool

@@ -13,6 +13,7 @@
 /docker             export-ignore
 /docs               export-ignore
 /examples           export-ignore
+/scripts            export-ignore
 /tests              export-ignore
 /workbench          export-ignore
 /.dockerignore      export-ignore

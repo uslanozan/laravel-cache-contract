@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 /*
  * Runs the similarity pair candidates of the public scan report
- * (cache-usage-in-the-wild.md) through the current similarity engine and
- * prints a Markdown table for similarity-vs-public-scan.md.
+ * (docs/research/cache-usage-in-the-wild.md) through the current similarity
+ * engine and prints the results table of docs/research/similarity-vs-public-scan.md.
  *
- *     docker compose exec php php docs/research/similarity-vs-public-scan.php
+ *     docker compose exec php php scripts/research/similarity-vs-public-scan.php
  *
  * Each key is mapped by hand to the definition a team would write for it:
  * placeholders become parameters, so they are dropped from the name, and the

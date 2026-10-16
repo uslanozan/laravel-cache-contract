@@ -50,8 +50,8 @@ only misses are three pairs that share meaning but hardly any words.
 - **Engine:** `DefaultSimilarityEngine` with its current constants
   (`SHARED_WORDS_THRESHOLD` = 0.70; word and character weight 0.5 each; a typo
   is at most one edit in words of five or more letters).
-- **Reproduce:** `docker compose exec php php docs/research/similarity-vs-public-scan.php`
-  ([script](similarity-vs-public-scan.php)) prints the table below.
+- **Reproduce:** `docker compose exec php php scripts/research/similarity-vs-public-scan.php`
+  ([script](../../scripts/research/similarity-vs-public-scan.php)) prints the table below.
 
 ## Results
 

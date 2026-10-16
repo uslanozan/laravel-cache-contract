@@ -8,13 +8,15 @@ to see whether it reports what a reviewer would want. It is the first test of
 the engine on real naming, ahead of the labelled dataset (LRVL-24) and the
 threshold calibration (LRVL-11).
 
-**Result:** the engine reports no false error. It catches every duplicate. Its
-only misses are three pairs that share meaning but hardly any words.
+**Result:** the engine reports no false error, and it catches all six
+duplicates as the keys are mapped here. It misses three pairs that share
+meaning but hardly any words. A follow-up probe also shows a gap the pairs did
+not cover: words that move between the section and the name (finding 6).
 
 | | Pairs | ok | mild | miss | bad |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `duplicate` | 7 | 7 | | | |
-| `distinct` | 12 | 12 | 0 | | 0 |
+| `duplicate` | 6 | 6 | | | |
+| `distinct` | 13 | 13 | 0 | | 0 |
 | `similar` | 3 | | | 3 | |
 | **All** | **22** | **19** | **0** | **3** | **0** |
 
@@ -74,7 +76,7 @@ only misses are three pairs that share meaning but hardly any words.
 | Pixelfed | `profile:following_count:{id}` / `profile:follower_count:{id}` | `profile.following_count` / `profile.follower_count` | distinct | 0.57 | shared_words | none | ok |
 | Pixelfed | `pf:acct:settings:hidden-following:{id}` / `pf:acct-trans:hideFollowing:{id}` | `acct_settings.hidden-following` / `acct_trans.hideFollowing` | distinct | 0.60 | shared_words | none | ok |
 | Pixelfed | `api:v1:instance-data-response-v1` / `api_v1_instance_data_response_v1` | `api.v1:instance-data-response-v1` / `api.v1_instance_data_response_v1` | duplicate | 1.00 | style_variant | name_variant (error) | ok |
-| Akaunting | `apps.testimonials.{k}` / `apps.{alias}.testimonials.{k}` | `apps.testimonials` / `apps.app_testimonials` | distinct | 0.62 | shared_words | none | ok |
+| Akaunting | `apps.testimonials.{k}` / `apps.{alias}.testimonials.{k}` | `apps.testimonials` / `apps.app_testimonials` (invented name) | distinct | 0.62 | shared_words | none | ok |
 | Akaunting | `apps.pre_sale.{k}` / `apps.paid.{k}` | `apps.pre_sale` / `apps.paid` | distinct | 0.12 | - | none | ok |
 | Akaunting | `apps.pre_sale.{k}` / `apps.free.{k}` | `apps.pre_sale` / `apps.free` | distinct | 0.19 | - | none | ok |
 | Akaunting | `apps.paid.{k}` / `apps.free.{k}` | `apps.paid` / `apps.free` | distinct | 0.00 | - | none | ok |
@@ -82,12 +84,14 @@ only misses are three pairs that share meaning but hardly any words.
 
 ## Findings
 
-1. **Every duplicate is caught as an error.** All seven `duplicate` pairs differ
+1. **All six duplicates are caught as errors, as mapped here.** They differ
    only in style: case, separators, camelCase. The tokenizer reduces both sides
    to the same words, the engine reports `style_variant`, and the finding is
    an `error` because both sit in the same section. This is the most common
-   real problem in the scan, and it would fail CI.
-2. **No false error, no false warning.** None of the twelve hard negatives
+   real problem in the scan, and it would fail CI. The result depends on both
+   keys keeping the same words in the *name*. See finding 6 and the mapping
+   limit below.
+2. **No false error, no false warning.** None of the thirteen hard negatives
    produces a finding. `following_count` / `follower_count` was the pair most
    likely to fail: it is *not* read as a typo, because the words are three
    edits apart and the typo rule allows one. The scores of the hard negatives
@@ -109,6 +113,22 @@ only misses are three pairs that share meaning but hardly any words.
    both would be `apps.testimonials`. The registry rejects that as a duplicate
    ID, and the team has to name the second one differently.
 
+6. **Words that move between the section and the name are not compared.**
+   The engine compares names only; the section takes part only in the
+   severity. So a duplicate is missed when one definition carries a word in
+   its section and the other in its name. A probe outside the 22 pairs:
+
+   | Definitions | Finding |
+   | :--- | :--- |
+   | `billing.plans.limits` / `billing.plans-limits` | `name_variant` (error) |
+   | `plans.limits` / `billing.plans-limits` | none |
+   | `plans.limits` / `plans.plans-limits` | none, same section |
+   | `user.profile` / `account.user_profile` | none |
+
+   The last row is a realistic duplicate: the same data under a new section,
+   with the old section folded into the name. This is an engine gap, tracked
+   in LRVL-64.
+
 ## What this means for the next issues
 
 - **LRVL-11 (calibration):** keep `SHARED_WORDS_THRESHOLD` at 0.70 or higher
@@ -124,8 +144,8 @@ only misses are three pairs that share meaning but hardly any words.
 - **LRVL-26 (`search`):** "show related definitions side by side", which the
   report asks for in the `similar` rows, fits a search over all definitions in
   a section better than a CI finding does.
-
-No engine bug was found, so no fix issue is opened from this note.
+- **Engine follow-up:** compare the words of the whole ID (section and name)
+  as well as the name, so finding 6 is caught (LRVL-64).
 
 ## Limits
 
@@ -134,5 +154,16 @@ No engine bug was found, so no fix issue is opened from this note.
 - The mapping from key to definition is a judgement call. It keeps the key's
   words and style; a team that renames while migrating would give the engine
   an easier task.
+- **The key → definition mapping is not applied consistently.** Firefly III's
+  `report.expenses-by-period` is split at the dot (section `report`), while
+  Akaunting's `plans.limits` keeps the dot in the name, and the Pixelfed
+  `api:` / `api_` pair is lined up by hand. Split the same way as `report`,
+  `plans.limits` would become `limits` vs. `plans-limits`, and the duplicate
+  would be missed (finding 6). "All duplicates are caught" therefore depends
+  partly on the mapping.
+- **Most section names are invented** (`page`, `auth`, `services`, …), and so
+  is one name: `app_testimonials` for Akaunting's `{alias}` key, marked in the
+  table. They do not change the name scores, but they are not from the
+  scanned code.
 - Only name similarity is tested. Every definition here has the same type and
   no subject, so subject, purpose and structural findings are not exercised.

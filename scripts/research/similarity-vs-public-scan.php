@@ -26,7 +26,8 @@ use Uslanozan\CacheContract\Similarity\Severity;
 
 require __DIR__.'/../../vendor/autoload.php';
 
-// [project, key A, key B, label, section A, name A, section B, name B]
+// [project, key A, key B, label, section A, name A, section B, name B, note]
+// A note marks a name that is not in the key, e.g. one invented for the contract.
 $pairs = [
     ['BookStack', 'custom-head-web:{hash}', 'custom-head-export:{hash}', 'distinct', 'page', 'custom-head-web', 'page', 'custom-head-export'],
     ['BookStack', 'api-docs::{v}', 'api_docs:{v}', 'duplicate', 'docs', 'api-docs', 'docs', 'api_docs'],
@@ -46,7 +47,7 @@ $pairs = [
     ['Pixelfed', 'pf:acct:settings:hidden-following:{id}', 'pf:acct-trans:hideFollowing:{id}', 'distinct', 'acct_settings', 'hidden-following', 'acct_trans', 'hideFollowing'],
     ['Pixelfed', 'api:v1:instance-data-response-v1', 'api_v1_instance_data_response_v1', 'duplicate', 'api', 'v1:instance-data-response-v1', 'api', 'v1_instance_data_response_v1'],
     // In the contract, {alias} becomes a parameter; the second definition needs its own name.
-    ['Akaunting', 'apps.testimonials.{k}', 'apps.{alias}.testimonials.{k}', 'distinct', 'apps', 'testimonials', 'apps', 'app_testimonials'],
+    ['Akaunting', 'apps.testimonials.{k}', 'apps.{alias}.testimonials.{k}', 'distinct', 'apps', 'testimonials', 'apps', 'app_testimonials', 'invented name'],
     ['Akaunting', 'apps.pre_sale.{k}', 'apps.paid.{k}', 'distinct', 'apps', 'pre_sale', 'apps', 'paid'],
     ['Akaunting', 'apps.pre_sale.{k}', 'apps.free.{k}', 'distinct', 'apps', 'pre_sale', 'apps', 'free'],
     ['Akaunting', 'apps.paid.{k}', 'apps.free.{k}', 'distinct', 'apps', 'paid', 'apps', 'free'],
@@ -82,7 +83,9 @@ $names = new NameSimilarity;
 $rows = [];
 $totals = ['ok' => 0, 'mild' => 0, 'miss' => 0, 'bad' => 0];
 
-foreach ($pairs as [$project, $keyA, $keyB, $label, $sectionA, $nameA, $sectionB, $nameB]) {
+foreach ($pairs as $pair) {
+    [$project, $keyA, $keyB, $label, $sectionA, $nameA, $sectionB, $nameB] = $pair;
+    $note = $pair[8] ?? null;
     $a = definition($sectionA, $nameA);
     $b = definition($sectionB, $nameB);
     $finding = $engine->findSimilar($a, [$b])[0] ?? null;
@@ -91,12 +94,13 @@ foreach ($pairs as [$project, $keyA, $keyB, $label, $sectionA, $nameA, $sectionB
     $totals[$verdict]++;
 
     $rows[] = sprintf(
-        '| %s | `%s` / `%s` | `%s` / `%s` | %s | %.2f | %s | %s | %s |',
+        '| %s | `%s` / `%s` | `%s` / `%s`%s | %s | %.2f | %s | %s | %s |',
         $project,
         $keyA,
         $keyB,
         $a->id,
         $b->id,
+        $note === null ? '' : " ({$note})",
         $label,
         $score->score,
         $score->signals === [] ? '-' : implode(', ', array_map(fn ($s) => $s->value, $score->signals)),

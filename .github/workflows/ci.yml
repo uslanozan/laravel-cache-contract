@@ -39,16 +39,23 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict
 
-      - name: Get Composer cache directory
+      # The ISO week in the key starts a new cache entry every week. An exact
+      # key hit is never saved again, so without it the cache would keep the
+      # package versions of its first run until composer.json changes.
+      - name: Get Composer cache directory and week
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer packages
         uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}
-          restore-keys: composer-${{ runner.os }}-quality-
+          key: composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: |
+            composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}-
+            composer-${{ runner.os }}-quality-
 
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction --no-progress
@@ -126,17 +133,22 @@ jobs:
           tools: composer:v2
 
       # Before "Pin Laravel version", so the key hashes the committed
-      # composer.json rather than the one rewritten for this cell.
-      - name: Get Composer cache directory
+      # composer.json rather than the one rewritten for this cell. The ISO
+      # week keeps the cache fresh (see the quality job).
+      - name: Get Composer cache directory and week
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer packages
         uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}
-          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}-
+            composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-
 
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.framework }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update

@@ -53,7 +53,8 @@ CI runs the same scripts against real Redis on PHP 8.3–8.5 × Laravel 11/12/13
 
 ## Code rules
 
-- Supported range: PHP `^8.3`, Laravel `^11.23 || ^12.0 || ^13.0` (ADR 0003).
+- Supported range: PHP `^8.3`, Laravel `^11.44.2 || ^12.0.1 || ^13.0`;
+  on PHP 8.5, Laravel 12.40+ (ADR 0003).
   Do not use `Cache::memo` or the failover store in the core; they do not exist
   in Laravel 11.
 - Reuse Laravel's cache repository, locks and events. Do not open separate

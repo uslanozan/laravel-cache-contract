@@ -13,6 +13,8 @@ use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
 use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
+use Uslanozan\CacheContract\Eloquent\ModelCacheConfig;
+use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
@@ -59,21 +61,36 @@ class CacheContractServiceProvider extends ServiceProvider
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
 
+        // One policy for every cache operation of the package (ADR 0007), so the
+        // facade and the model cache follow the same "redis_errors" setting.
+        $this->app->singleton(RedisErrorPolicy::class, fn (Application $app): RedisErrorPolicy => RedisErrorPolicy::fromConfig(
+            (array) $this->config($app)->get('cache-contract.redis_errors', []),
+        ));
+
         // Immutable and without context: withContext() returns a copy, so the
         // shared instance never carries a tenant into the next request.
-        $this->app->singleton(CacheContractManager::class, function (Application $app): CacheContractManager {
-            /** @var Repository $config */
-            $config = $app->make('config');
-            $store = $config->get('cache-contract.store');
+        $this->app->singleton(CacheContractManager::class, fn (Application $app): CacheContractManager => new CacheContractManager(
+            $app->make('cache'),
+            $app->make(DefinitionRegistry::class),
+            $app->make(KeyFactory::class),
+            $app->make(RedisErrorPolicy::class),
+            $this->store($app),
+        ));
 
-            return new CacheContractManager(
-                $app->make('cache'),
-                $app->make(DefinitionRegistry::class),
-                $app->make(KeyFactory::class),
-                RedisErrorPolicy::fromConfig((array) $config->get('cache-contract.redis_errors', [])),
-                is_string($store) && $store !== '' ? $store : null,
-            );
-        });
+        // The "models" section is read once; an invalid value fails on first use
+        // with InvalidConfiguration.
+        $this->app->singleton(ModelCacheConfig::class, fn (Application $app): ModelCacheConfig => ModelCacheConfig::fromConfig(
+            (array) $this->config($app)->get('cache-contract.models', []),
+        ));
+
+        // Holds no request state: the ModelCache it builds is immutable too.
+        $this->app->singleton(ModelCacheFactory::class, fn (Application $app): ModelCacheFactory => new ModelCacheFactory(
+            $app->make('cache'),
+            $app->make(KeyFactory::class),
+            $app->make(RedisErrorPolicy::class),
+            $app->make(ModelCacheConfig::class),
+            $this->store($app),
+        ));
     }
 
     public function boot(): void
@@ -89,5 +106,21 @@ class CacheContractServiceProvider extends ServiceProvider
                 InspectCommand::class,
             ]);
         }
+    }
+
+    private function config(Application $app): Repository
+    {
+        /** @var Repository $config */
+        $config = $app->make('config');
+
+        return $config;
+    }
+
+    /** The cache store for package entries; null means the default store. */
+    private function store(Application $app): ?string
+    {
+        $store = $this->config($app)->get('cache-contract.store');
+
+        return is_string($store) && $store !== '' ? $store : null;
     }
 }

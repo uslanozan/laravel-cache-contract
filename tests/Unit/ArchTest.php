@@ -35,6 +35,26 @@ arch('the cache manager is immutable')
     ->toBeReadonly()
     ->toBeFinal();
 
+// Built per model and shared through the singleton factory: like the manager,
+// a model cache must not be able to keep a tenant from one call to the next.
+arch('the model cache is immutable')
+    ->expect([
+        'Uslanozan\CacheContract\Eloquent\ModelCache',
+        'Uslanozan\CacheContract\Eloquent\ModelCacheFactory',
+        'Uslanozan\CacheContract\Eloquent\ModelCacheConfig',
+    ])
+    ->toBeReadonly()
+    ->toBeFinal();
+
+// The model cache is built on top of definitions and keys, never the other way.
+arch('the core does not depend on the model cache')
+    ->expect([
+        'Uslanozan\CacheContract\Contracts',
+        'Uslanozan\CacheContract\Definitions',
+        'Uslanozan\CacheContract\Keys',
+    ])
+    ->not->toUse('Uslanozan\CacheContract\Eloquent');
+
 arch('no debugging calls are left behind')
     ->expect(['dd', 'dump', 'ray', 'var_dump', 'print_r'])
     ->not->toBeUsed();

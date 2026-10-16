@@ -69,6 +69,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Model cache
+    |--------------------------------------------------------------------------
+    |
+    | ModelCache::for(User::class)->find(5) needs no definition (ADR 0006).
+    | Its key is built from the table, the ID, the connection and its
+    | database, e.g. "cc:model:users:v1:id=5:@connection=mysql:@database=app".
+    |
+    | A model with global scopes (other than SoftDeletes) needs
+    | withContext([...]) with the values those scopes depend on, such as the
+    | tenant: ->withContext(['tenant_id' => 7])->find(5). The package cannot
+    | tell which value a scope uses, so any context turns the check off; an
+    | unrelated one (e.g. only the locale) caches rows without the tenant.
+    |
+    | ttl:        seconds a model entry lives; required, never forever
+    | overrides:  per model class:
+    |             ttl         its own TTL
+    |             version     bump it when the table's columns change (ADR 0008)
+    |             safe_scopes global scopes that need no context
+    |
+    | A global scope is safe when its result does not depend on the request,
+    | the user or the tenant: it only orders rows, or applies the same filter
+    | on every request (e.g. is_published = 1). A scope that reads the
+    | current tenant, user or locale is not safe: give withContext() instead.
+    | Only listed scopes are allowed; any other scope still needs a context.
+    |
+    | 'overrides' => [
+    |     App\Models\User::class => ['ttl' => 600, 'version' => 2],
+    |     App\Models\Post::class => ['safe_scopes' => [App\Models\Scopes\PublishedScope::class]],
+    | ],
+    |
+    */
+
+    'models' => [
+        'ttl' => 3600,
+        'overrides' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Definitions
     |--------------------------------------------------------------------------
     |

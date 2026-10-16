@@ -88,6 +88,12 @@ it('rejects section and definition names that are not snake_case', function () {
     ]);
 });
 
+it('reserves the "model" section for the model cache', function () {
+    expect(errorsFor(['model' => ['users' => validDefinition()]]))->toBe([
+        'model: section "model" is reserved for the model cache (ADR 0006); choose another name',
+    ]);
+});
+
 it('rejects the same subject and purpose under two names', function () {
     expect(errorsFor(['user' => [
         'active_list' => validDefinition(),

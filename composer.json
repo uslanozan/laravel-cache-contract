@@ -64,7 +64,8 @@
                 "Uslanozan\\CacheContract\\CacheContractServiceProvider"
             ],
             "aliases": {
-                "CacheContract": "Uslanozan\\CacheContract\\Facades\\CacheContract"
+                "CacheContract": "Uslanozan\\CacheContract\\Facades\\CacheContract",
+                "ModelCache": "Uslanozan\\CacheContract\\Facades\\ModelCache"
             }
         }
     },

@@ -1,13 +1,11 @@
 # =============================================================================
 # CI: quality gates + test matrix
 # =============================================================================
-# Until composer.json exists the package jobs are skipped and "CI result"
-# still reports success, so this workflow can be a required status check from
-# day one and switches itself on when the package skeleton lands.
-#
 # Branch rulesets require ONE check from here: "CI result". Matrix job names
 # change whenever the matrix changes; an aggregator job keeps the required
-# check name stable.
+# check name stable. It passes only when every job it depends on succeeded:
+# a skipped job counts as a failure, so a broken condition cannot turn the
+# whole matrix off and still report green.
 # =============================================================================
 name: CI
 
@@ -25,21 +23,8 @@ permissions:
   contents: read
 
 jobs:
-  detect:
-    name: Detect package
-    runs-on: ubuntu-latest
-    outputs:
-      package: ${{ steps.check.outputs.package }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: check
-        run: |
-          if [ -f composer.json ]; then echo "package=true" >> "$GITHUB_OUTPUT"; else echo "package=false" >> "$GITHUB_OUTPUT"; fi
-
   quality:
     name: Quality (lint + static analysis)
-    needs: detect
-    if: needs.detect.outputs.package == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -54,6 +39,17 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict
 
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-quality-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ runner.os }}-quality-
+
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction --no-progress
 
@@ -65,15 +61,13 @@ jobs:
 
   tests:
     name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }})
-    needs: detect
-    if: needs.detect.outputs.package == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Supported range: see ADR on versions / docs/ROADMAP.md D5.
-      # Laravel 11 starts at 11.23 (first release with Cache::flexible) and
-      # supports PHP up to 8.4 only. Its security support ended 2026-03-12;
-      # it stays in the matrix because company projects still run it.
+      # Supported range: ADR 0003 / docs/ROADMAP.md D5.
+      # Laravel 11 starts at 11.23 (first release with Cache::flexible). Its
+      # security support ended 2026-03-12; it stays in the matrix because
+      # company projects still run it.
       matrix:
         php: ["8.3", "8.4", "8.5"]
         laravel: ["11", "12", "13"]
@@ -89,11 +83,16 @@ jobs:
             framework: "^13.0"
             testbench: "^11.0"
         exclude:
+          # A support-policy exclusion, not a Composer conflict: Laravel 11's
+          # composer.json has no PHP upper bound, but Laravel supports 11 on
+          # PHP 8.2-8.4 only, and ADR 0003 claims support for exactly this
+          # matrix "minus Laravel 11 on PHP 8.5".
           - laravel: "11"
             php: "8.5"
 
     services:
       redis:
+        # Keep in sync with the redis service in docker-compose.yml.
         image: redis:7.4-alpine
         ports: ["6379:6379"]
         options: >-
@@ -116,6 +115,19 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # Before "Pin Laravel version", so the key hashes the committed
+      # composer.json rather than the one rewritten for this cell.
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ matrix.stability }}-
+
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.framework }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
 
@@ -131,22 +143,37 @@ jobs:
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
 
+      # The service health check already waits for Redis; this fails fast with
+      # one clear message if phpredis is missing or the host/port are wrong,
+      # instead of every integration test failing with a RedisException.
+      - name: Check Redis is reachable
+        run: |
+          php <<'PHP'
+          <?php
+          $redis = new Redis();
+          $redis->connect(getenv('REDIS_HOST'), (int) getenv('REDIS_PORT'), 2.0);
+          if (! $redis->ping()) {
+              fwrite(STDERR, "Redis did not answer PING.\n");
+              exit(1);
+          }
+          echo 'Redis is reachable at '.getenv('REDIS_HOST').':'.getenv('REDIS_PORT').PHP_EOL;
+          PHP
+
       - name: Run tests
         run: composer test
 
   result:
-    # The single required status check. Passes when every job either
-    # succeeded or was skipped (no composer.json yet).
+    # The single required status check (see the header).
     name: CI result
-    needs: [detect, quality, tests]
+    needs: [quality, tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          for r in "${{ needs.detect.result }}" "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "A required job did not pass ($r)."; exit 1
+          for r in "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "A required job did not succeed ($r)."; exit 1
             fi
           done
-          echo "All jobs passed or were skipped."
+          echo "All jobs succeeded."

@@ -64,24 +64,34 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Supported range: ADR 0003 / docs/ROADMAP.md D5.
-      # Laravel 11 starts at 11.23 (first release with Cache::flexible). Its
-      # security support ended 2026-03-12; it stays in the matrix because
-      # company projects still run it.
+      # Supported range: ADR 0003 / docs/ROADMAP.md D5. Each floor is the
+      # lowest release our test tooling can install, so prefer-lowest tests
+      # exactly what composer.json claims (ADR 0003, update 2026-10-17):
+      # - Laravel 11.44.2: Collision, pulled in by Pest, conflicts with anything
+      #   older. It includes Cache::flexible (11.23+). Its security support
+      #   ended 2026-03-12; it stays because company projects still run it.
+      # - Laravel 12.0.1: Testbench 10 requires it.
+      # - Laravel 13.0.0.
       matrix:
         php: ["8.3", "8.4", "8.5"]
         laravel: ["11", "12", "13"]
         stability: [prefer-lowest, prefer-stable]
         include:
           - laravel: "11"
-            framework: "^11.23"
+            framework: "^11.44.2"
             testbench: "^9.0"
           - laravel: "12"
-            framework: "^12.0"
+            framework: "^12.0.1"
             testbench: "^10.0"
           - laravel: "13"
             framework: "^13.0"
             testbench: "^11.0"
+          # Laravel 12 supports PHP 8.5 from 12.40.0 (laravel/framework#57835,
+          # "PHP 8.5 Compatibility"). Older 12.x releases break in their Redis
+          # tag code on PHP 8.5, so this cell starts at 12.40.0.
+          - php: "8.5"
+            laravel: "12"
+            framework: "^12.40.0"
         exclude:
           # A support-policy exclusion, not a Composer conflict: Laravel 11's
           # composer.json has no PHP upper bound, but Laravel supports 11 on
@@ -131,13 +141,16 @@ jobs:
       - name: Pin Laravel version
         run: composer require "laravel/framework:${{ matrix.framework }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
 
-      # Every Laravel 11 release has security advisories that will never be
-      # patched (end of life since 2026-03-12), and Composer refuses to install
-      # packages with known advisories. Company projects still run Laravel 11,
-      # so we keep testing it: the block is lifted for laravel/framework only,
-      # in this job only. Laravel 12/13 jobs keep the protection. See ADR 0003.
-      - name: Allow Laravel 11 despite its unpatched advisories
-        if: matrix.laravel == '11'
+      # Composer refuses to install releases with known security advisories.
+      # The block is lifted for laravel/framework only, in two cases:
+      # - Laravel 11: every release has advisories that will never be patched
+      #   (end of life since 2026-03-12), and company projects still run it.
+      # - prefer-lowest: the floor we claim must be the floor we test. With the
+      #   block on, each new advisory silently raised the installed floor
+      #   (Laravel 12 had moved to 12.69.0, Laravel 13 to 13.30.0).
+      # Laravel 12/13 prefer-stable jobs keep the protection. See ADR 0003.
+      - name: Allow laravel/framework releases with advisories
+        if: matrix.laravel == '11' || matrix.stability == 'prefer-lowest'
         run: composer config policy.advisories.ignore --json '["laravel/framework"]'
 
       - name: Install dependencies

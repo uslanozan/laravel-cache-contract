@@ -65,6 +65,11 @@ CI runs the same scripts against real Redis on PHP 8.3–8.5 × Laravel 11/12/13
 - New behaviour comes with tests in the same PR. Anything that depends on
   Redis semantics (TTL, locks, tags, atomicity) gets an integration test
   against real Redis, not only the `array` store.
+- New or changed user-facing behaviour (API, config, commands, errors) updates
+  its page in `docs/guide/` in the same PR, and creates the page if it does not
+  exist yet. The README stays short: what the package does, installation, a
+  quick example and links. `docs/guide/` is for package users; `docs/adr/`,
+  `docs/research/` and the roadmap are for the team.
 - Keep PRs small: one logical change.
 
 ## Repository rules

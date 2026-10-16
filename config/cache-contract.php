@@ -73,16 +73,21 @@ return [
     |--------------------------------------------------------------------------
     |
     | ModelCache::for(User::class)->find(5) needs no definition (ADR 0006).
-    | Its key is built from the table, the ID and the connection, e.g.
-    | "cc:model:users:v1:id=5:@connection=mysql".
+    | Its key is built from the table, the ID, the connection and its
+    | database, e.g. "cc:model:users:v1:id=5:@connection=mysql:@database=app".
+    |
+    | A model with global scopes (other than SoftDeletes) needs
+    | withContext([...]) with the values those scopes depend on, such as the
+    | tenant: ->withContext(['tenant_id' => 7])->find(5). The package cannot
+    | tell which value a scope uses, so any context turns the check off; an
+    | unrelated one (e.g. only the locale) caches rows without the tenant.
     |
     | ttl:        seconds a model entry lives; required, never forever
     | overrides:  per model class:
     |             ttl         its own TTL
     |             version     bump it when the table's columns change (ADR 0008)
     |             safe_scopes global scopes that never change which row an ID
-    |                         returns (e.g. one that only adds an order). Any
-    |                         other global scope needs withContext([...]).
+    |                         returns (e.g. one that only adds an order)
     |
     | 'overrides' => [
     |     App\Models\User::class => ['ttl' => 600, 'version' => 2],

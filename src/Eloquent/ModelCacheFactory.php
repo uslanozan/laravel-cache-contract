@@ -8,6 +8,7 @@ use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Database\Eloquent\Model;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Definitions\DefinitionValidator;
 use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Definitions\ResultType;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
@@ -26,9 +27,6 @@ use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
  */
 final readonly class ModelCacheFactory
 {
-    /** Section of every convention key; user definitions may not use it. */
-    public const SECTION = 'model';
-
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
 
     public function __construct(
@@ -67,7 +65,7 @@ final readonly class ModelCacheFactory
         };
 
         $definition = new Definition(
-            section: self::SECTION,
+            section: DefinitionValidator::MODEL_SECTION,
             name: $table,
             purpose: 'by_id',
             type: ResultType::Model,

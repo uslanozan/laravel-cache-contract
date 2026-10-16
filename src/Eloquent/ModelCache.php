@@ -27,7 +27,10 @@ use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
  *     ModelCache::for(User::class)->withContext(['tenant_id' => 7])->find(5);
  *
  * The key is "{prefix}:model:{table}:v{version}:id={id}" plus the connection
- * name and any context, e.g. "cc:model:users:v1:id=5:@connection=mysql".
+ * name, the database name and any context, e.g.
+ * "cc:model:users:v1:id=5:@connection=mysql:@database=app". The database is
+ * part of the key because multi-database tenancy keeps the connection name
+ * and switches its database per tenant.
  * An entry holds the row's raw attributes in the ADR 0007 envelope, and a
  * read rebuilds the model with newFromBuilder() (ADR 0008). An ID with no row
  * is cached too, as null.
@@ -40,7 +43,7 @@ use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 final readonly class ModelCache
 {
     /** Context names the model cache sets itself. */
-    private const RESERVED_CONTEXT = ['connection', 'trashed'];
+    private const RESERVED_CONTEXT = ['connection', 'database', 'trashed'];
 
     /**
      * @param  class-string<TModel>  $class
@@ -194,7 +197,10 @@ final readonly class ModelCache
 
     private function makeKey(Model $model, int|string $id): string
     {
-        $context = $this->context + ['connection' => $this->connectionName($model)];
+        $context = $this->context + [
+            'connection' => $this->connectionName($model),
+            'database' => (string) $model->getConnection()->getDatabaseName(),
+        ];
 
         if ($this->withTrashed) {
             $context['trashed'] = 'with';

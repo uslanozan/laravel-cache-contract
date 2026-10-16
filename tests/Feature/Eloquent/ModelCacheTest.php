@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Schema;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
@@ -34,6 +36,14 @@ function modelCacheQueries(Closure $operation): int
     DB::disableQueryLog();
 
     return count(DB::getQueryLog());
+}
+
+/** Points the "tenant" connection at this SQLite file, as a tenancy package would. */
+function modelCacheUseTenantDatabase(string $path): void
+{
+    config()->set('database.connections.tenant', ['driver' => 'sqlite', 'database' => $path, 'prefix' => '']);
+    config()->set('database.default', 'tenant');
+    DB::purge('tenant');
 }
 
 beforeEach(function () {
@@ -67,8 +77,8 @@ describe('find', function () {
             ->and(modelCacheQueries(fn () => expect(ModelCache::for(Member::class)->find(999))->toBeNull()))->toBe(0);
     });
 
-    it('builds the key from the table, the version, the ID and the connection', function () {
-        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v1:id=1:@connection=testing');
+    it('builds the key from the table, the version, the ID, the connection and its database', function () {
+        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v1:id=1:@connection=testing:@database=%3Amemory%3A');
     });
 
     it('accepts a numeric string for an integer key and rejects anything else', function () {
@@ -82,7 +92,7 @@ describe('find', function () {
         $cache = ModelCache::for(Token::class);
 
         expect($cache->find('abc-123')?->name)->toBe('API')
-            ->and($cache->key('abc-123'))->toBe('cc:model:tokens:v1:id=abc-123:@connection=testing');
+            ->and($cache->key('abc-123'))->toBe('cc:model:tokens:v1:id=abc-123:@connection=testing:@database=%3Amemory%3A');
     });
 
     it('keeps model entries out of the definition registry', function () {
@@ -106,7 +116,7 @@ describe('configuration', function () {
         ModelCache::for(Member::class)->find(1);
         $this->travel(61)->seconds();
 
-        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v2:id=1:@connection=testing')
+        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v2:id=1:@connection=testing:@database=%3Amemory%3A')
             ->and(modelCacheQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
     });
 
@@ -128,20 +138,46 @@ describe('configuration', function () {
     });
 });
 
+describe('databases', function () {
+    it('keeps two databases behind one connection name apart', function () {
+        // Multi-database tenancy: the connection name stays "tenant", its database changes per tenant.
+        $databases = [];
+        foreach (['tenant_a' => 'Ayşe', 'tenant_b' => 'Mehmet'] as $tenant => $name) {
+            $databases[$tenant] = tempnam(sys_get_temp_dir(), $tenant.'_');
+            modelCacheUseTenantDatabase($databases[$tenant]);
+            Schema::create('tokens', function (Blueprint $table) {
+                $table->string('id')->primary();
+                $table->string('name');
+            });
+            Token::create(['id' => 'user-5', 'name' => $name]);
+        }
+
+        modelCacheUseTenantDatabase($databases['tenant_a']);
+        $keyA = ModelCache::for(Token::class)->key('user-5');
+        expect(ModelCache::for(Token::class)->find('user-5')?->name)->toBe('Ayşe');
+
+        modelCacheUseTenantDatabase($databases['tenant_b']);
+        expect(ModelCache::for(Token::class)->key('user-5'))->not->toBe($keyA)
+            ->and(ModelCache::for(Token::class)->find('user-5')?->name)->toBe('Mehmet');
+
+        array_map(unlink(...), $databases);
+    });
+});
+
 describe('context', function () {
     it('adds the context to the key and returns a new instance', function () {
         $shared = ModelCache::for(Project::class);
         $tenant = $shared->withContext(['tenant_id' => 7]);
 
         expect($tenant)->not->toBe($shared)
-            ->and($tenant->key(5))->toBe('cc:model:projects:v1:id=5:@connection=testing:@tenant_id=7')
+            ->and($tenant->key(5))->toBe('cc:model:projects:v1:id=5:@connection=testing:@database=%3Amemory%3A:@tenant_id=7')
             ->and(app(ModelCacheFactory::class))->toBe(app(ModelCacheFactory::class));
     });
 
     it('rejects context names the model cache sets itself', function (string $name) {
         expect(fn () => ModelCache::for(Member::class)->withContext([$name => 'x']))
             ->toThrow(InvalidParameters::class, 'reserved');
-    })->with(['connection', 'trashed']);
+    })->with(['connection', 'database', 'trashed']);
 });
 
 describe('global scopes', function () {
@@ -184,7 +220,7 @@ describe('soft deletes', function () {
 
         expect($cache->find(1))->toBeNull()
             ->and($cache->withTrashed()->find(1)?->trashed())->toBeTrue()
-            ->and($cache->withTrashed()->key(1))->toBe('cc:model:articles:v1:id=1:@connection=testing:@trashed=with')
+            ->and($cache->withTrashed()->key(1))->toBe('cc:model:articles:v1:id=1:@connection=testing:@database=%3Amemory%3A:@trashed=with')
             ->and($cache->find(1))->toBeNull();
     });
 

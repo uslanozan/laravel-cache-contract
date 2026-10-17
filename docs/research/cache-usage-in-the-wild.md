@@ -2,7 +2,7 @@
 
 This report looks at how six open-source Laravel applications use the cache: BookStack, Firefly III, Monica, Koel, Pixelfed and Akaunting. For each one it records the call styles, key families, naming, TTL and invalidation patterns, and candidate pairs for similar-key detection.
 
-Method for every repository: shallow clone, text search (`grep`) with `scan-repo.sh`, no AST yet. Numbers are **usage points in the source, not runtime call counts**. Some repositories are AGPL (Firefly III, Monica, Pixelfed) and Akaunting uses the Business Source License: only counts, key shapes and naming patterns are recorded, no source code is copied, and example keys are generalized.
+Method for every repository: shallow clone, text search (`grep`) with [`scan-repo.sh`](../../scripts/research/scan-repo.sh), no AST yet. Numbers are **usage points in the source, not runtime call counts**. Some repositories are AGPL (Firefly III, Monica, Pixelfed) and Akaunting uses the Business Source License: only counts, key shapes and naming patterns are recorded, no source code is copied, and example keys are generalized.
 
 ## BookStack
 

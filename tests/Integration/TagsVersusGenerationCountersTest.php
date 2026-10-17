@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Cache\RedisStore;
 use Illuminate\Cache\Repository;
 use Illuminate\Redis\RedisManager;
+use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
  * Characterization tests for ADR 0009: how Laravel's Redis cache tags behave,
@@ -39,28 +40,15 @@ function invalidationName(string $kind): string
 }
 
 /**
- * Calls per Redis command while $operation runs. Redis counts server-wide, so
- * this assumes nothing else uses the server meanwhile (true locally and in CI).
+ * Calls per Redis command the "cache" connection sends while $operation runs.
+ * Counted on the client, so other clients of the server (the CI health
+ * check's PING) do not change the result (see RedisCommandCounter).
  *
  * @return array<string, int>
  */
 function invalidationCommandCalls(RedisManager $redis, Closure $operation): array
 {
-    $client = $redis->connection('cache')->client();
-    $client->rawCommand('CONFIG', 'RESETSTAT');
-    $operation();
-
-    $calls = [];
-    foreach ((array) $client->info('commandstats') as $name => $stats) {
-        preg_match('/calls=(\d+)/', (string) $stats, $match);
-        $calls[str_replace('cmdstat_', '', (string) $name)] = (int) ($match[1] ?? 0);
-    }
-
-    // Leave out the commands this helper sends itself (Redis 7 names them "config|resetstat", "info").
-    $calls = array_filter($calls, fn (string $command) => ! preg_match('/^(config|info)\b/', $command), ARRAY_FILTER_USE_KEY);
-    ksort($calls);
-
-    return $calls;
+    return RedisCommandCounter::count($redis->connection('cache'), $operation);
 }
 
 beforeEach(function () {
@@ -131,9 +119,9 @@ describe('a generation counter in the key', function () {
         $withTtl = invalidationCommandCalls($this->redis, fn () => $this->cache->add(invalidationName('gen'), 1000, 3600));
         $withoutTtl = invalidationCommandCalls($this->redis, fn () => $this->cache->add(invalidationName('gen'), 1000));
 
-        // With a TTL: one Lua script (Redis also counts the EXISTS and SETEX it runs).
+        // With a TTL: one Lua script that checks and writes in one step.
         // Without: a separate GET and SET, so two creators can both write.
-        expect($withTtl)->toBe(['eval' => 1, 'exists' => 1, 'setex' => 1])
+        expect($withTtl)->toBe(['eval' => 1])
             ->and($withoutTtl)->toBe(['get' => 1, 'set' => 1]);
     });
 

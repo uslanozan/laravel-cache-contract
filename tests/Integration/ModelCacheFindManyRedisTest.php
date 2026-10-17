@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\ModelCache;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
  * findMany() against real Redis (phpredis): 100 models take one MGET, one
@@ -38,9 +39,9 @@ beforeEach(function () {
 });
 
 /**
- * Database queries and Redis commands $operation runs. Redis counts
- * server-wide, so this assumes nothing else uses the server meanwhile (true
- * locally and in CI).
+ * Database queries and Redis commands $operation runs. Redis commands are
+ * counted on the store's own connection, so other clients of the server (the
+ * CI health check's PING) do not change the result (see RedisCommandCounter).
  *
  * @return array{queries: int, redis: array<string, int>}
  */
@@ -48,23 +49,15 @@ function findManyRedisCost(Closure $operation): array
 {
     $store = Cache::store('find_many')->getStore();
     assert($store instanceof RedisStore);
-    $client = $store->connection()->client();
 
-    $client->rawCommand('CONFIG', 'RESETSTAT');
     DB::flushQueryLog();
     DB::enableQueryLog();
 
-    $operation();
-
-    DB::disableQueryLog();
-    $redis = [];
-    foreach ((array) $client->info('commandstats') as $name => $stats) {
-        $command = str_replace('cmdstat_', '', (string) $name);
-        if (preg_match('/^(config|info)\b/', $command) !== 1 && preg_match('/calls=(\d+)/', (string) $stats, $match) === 1) {
-            $redis[$command] = (int) $match[1];
-        }
+    try {
+        $redis = RedisCommandCounter::count($store->connection(), $operation);
+    } finally {
+        DB::disableQueryLog();
     }
-    ksort($redis);
 
     return ['queries' => count(DB::getQueryLog()), 'redis' => $redis];
 }

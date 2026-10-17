@@ -101,6 +101,7 @@ it('checks every ID before any I/O and stops at an invalid one', function () {
 
     expect(findManyQueries(fn () => expect(fn () => ModelCache::for(Member::class)->findMany([1, 'abc', 3]))
         ->toThrow(InvalidParameters::class)))->toBe(0)
+        ->and(fn () => ModelCache::for(Member::class)->findMany([1, ' 2']))->toThrow(InvalidParameters::class)
         ->and($store->calls)->toBe([]);
 });
 

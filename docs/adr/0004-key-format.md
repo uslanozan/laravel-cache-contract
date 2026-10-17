@@ -84,3 +84,26 @@ context, so a custom format can never drop it and turn invalidation off. The
 caller reads the counters and passes the generations in; the key factory
 stays pure and never talks to Redis. See
 [ADR 0009](0009-invalidation-with-generation-counters.md).
+
+## Update 2026-10-16: strict parameters, lenient model IDs
+
+Two kinds of call-time values reach the key factory, and they are checked
+differently on purpose:
+
+- **Definition parameters stay strict.** An `int` parameter does not accept
+  `"42"`. The type is written by the developer in the definition, so a string
+  there usually means an unvalidated request value. The error message says so
+  and suggests validating before casting, because a plain `(int)` turns
+  invalid input such as `"abc"` into `0`: a valid-looking key for the wrong
+  data.
+- **Model cache IDs follow Eloquent.** `ModelCache::for(User::class)->find("5")`
+  is the same as `find(5)`. Only a canonical integer string is converted;
+  `"05"`, `"5abc"` and `"abc"` are rejected. Here the type comes from the
+  model (`getKeyType()`), not from the developer. IDs very often arrive as
+  strings from routes, query strings or Redis. And the model cache is meant
+  to replace `Model::find()`, which accepts them.
+
+Both rules keep the principle of this ADR: one value, one key. Strict
+parameters reject a second spelling, and model IDs map it to the first.
+Making model IDs strict as well was rejected: it would push every caller to
+write `(int) $id`, which accepts more bad input than the conversion does.

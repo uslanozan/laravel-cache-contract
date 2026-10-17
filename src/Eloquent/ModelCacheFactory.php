@@ -84,6 +84,7 @@ final readonly class ModelCacheFactory
             $this->errors,
             $this->config->safeScopesFor($class),
             $this->store,
+            $this->config->chunkSize,
         );
     }
 }

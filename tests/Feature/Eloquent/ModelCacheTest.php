@@ -91,7 +91,7 @@ describe('find', function () {
 
     it('converts only canonical integer strings (ADR 0004)', function (string $id) {
         expect(fn () => ModelCache::for(Member::class)->find($id))->toThrow(InvalidParameters::class);
-    })->with(['05', ' 5', '5 ', '+5', '-0', '5abc', '5.0', '9223372036854775808']);
+    })->with(['05', ' 5', '5 ', "5\n", '+5', '-0', '5abc', '5.0', '9223372036854775808']);
 
     it('supports string primary keys', function () {
         $cache = ModelCache::for(Token::class);

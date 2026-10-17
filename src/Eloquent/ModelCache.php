@@ -44,8 +44,11 @@ use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
  */
 final readonly class ModelCache
 {
-    /** "0", or an optional minus and digits without a leading zero; FILTER_VALIDATE_INT checks the range. */
-    private const CANONICAL_INT = '/^(?:0|-?[1-9][0-9]*)$/';
+    /**
+     * "0", or an optional minus and digits without a leading zero; FILTER_VALIDATE_INT
+     * checks the range. \z, not $: $ also matches before a trailing newline ("5\n").
+     */
+    private const CANONICAL_INT = '/^(?:0|-?[1-9][0-9]*)\z/';
 
     /** Context names the model cache sets itself. */
     private const RESERVED_CONTEXT = ['connection', 'database', 'trashed'];
@@ -289,7 +292,7 @@ final readonly class ModelCache
     /**
      * Accepts "5" for an integer key, as Eloquent does, so the key is the same
      * whether the ID comes from a route or from code. Only a canonical integer
-     * string is converted (ADR 0004): "05", " 5", "+5", "-0" and "5abc" stay
+     * string is converted (ADR 0004): "05", " 5", "5\n", "+5", "-0" and "5abc" stay
      * strings and the key factory rejects them.
      */
     private function normalizeId(int|string $id): int|string

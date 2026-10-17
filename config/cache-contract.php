@@ -83,6 +83,9 @@ return [
     | unrelated one (e.g. only the locale) caches rows without the tenant.
     |
     | ttl:        seconds a model entry lives; required, never forever
+    | chunk_size: findMany() reads at most this many keys per MGET and loads
+    |             at most this many IDs per query, so one call never blocks
+    |             Redis or exceeds the database's parameter limit
     | overrides:  per model class:
     |             ttl         its own TTL
     |             version     bump it when the table's columns change (ADR 0008)
@@ -103,6 +106,7 @@ return [
 
     'models' => [
         'ttl' => 3600,
+        'chunk_size' => 1000,
         'overrides' => [],
     ],
 

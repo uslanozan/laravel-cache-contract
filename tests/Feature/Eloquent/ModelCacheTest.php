@@ -85,8 +85,13 @@ describe('find', function () {
         $cache = ModelCache::for(Member::class);
 
         expect($cache->key('1'))->toBe($cache->key(1))
+            ->and($cache->key('-5'))->toBe($cache->key(-5))
             ->and(fn () => $cache->find('one'))->toThrow(InvalidParameters::class);
     });
+
+    it('converts only canonical integer strings (ADR 0004)', function (string $id) {
+        expect(fn () => ModelCache::for(Member::class)->find($id))->toThrow(InvalidParameters::class);
+    })->with(['05', ' 5', '5 ', "5\n", '+5', '-0', '5abc', '5.0', '9223372036854775808']);
 
     it('supports string primary keys', function () {
         $cache = ModelCache::for(Token::class);

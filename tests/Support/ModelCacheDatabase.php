@@ -81,4 +81,29 @@ final class ModelCacheDatabase
         Project::create(['id' => 5, 'tenant_id' => 7, 'name' => 'Apollo']);
         Token::create(['id' => 'abc-123', 'name' => 'API']);
     }
+
+    /**
+     * Adds members after member 1, named "Member 2", "Member 3", …
+     *
+     * @return list<int> their IDs
+     */
+    public static function addMembers(int $count): array
+    {
+        $ids = [];
+        for ($i = 0; $i < $count; $i++) {
+            $id = Member::query()->max('id') + 1;
+            Member::create([
+                'organization_id' => 1,
+                'name' => "Member {$id}",
+                'password' => 'HASHED-SECRET',
+                'settings' => [],
+                'is_admin' => false,
+                'status' => MemberStatus::Active,
+                'last_login_at' => '2026-10-13 21:00:00',
+            ]);
+            $ids[] = $id;
+        }
+
+        return $ids;
+    }
 }

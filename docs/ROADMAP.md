@@ -187,11 +187,12 @@ order and scope.
 
 Goal: data stays correct when it changes.
 
-- Strategy ADR: **Laravel tags vs. generation counters (namespace versions)**,
-  decided with a small benchmark/spike
+- Group invalidation with **generation counters, not Laravel cache tags**
+  ([ADR 0009](adr/0009-invalidation-with-generation-counters.md))
 - Tags are declared centrally in the config; `model:*` tags are reserved for
-  the package; no per-record tags (`user:5`). Scheduled
-  `cache:prune-stale-tags` documented for Redis
+  the package; no per-record tags (`user:5`). Each tag, and each definition
+  with `invalidated_by`, has a generation counter; package entries need no
+  `cache:prune-stale-tags`
 - Manual API: invalidate a definition, a definition + context, an entity
 - Model event integration through `HasCache`; invalidation **after commit**;
   `invalidated_by` for related models

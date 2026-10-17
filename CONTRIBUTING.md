@@ -41,7 +41,6 @@ docker compose exec redis redis-cli ping   # PONG
 | Try another PHP version | `PHP_VERSION=8.5 docker compose up -d --build` |
 | Stop everything | `docker compose down` |
 
-> The Composer scripts arrive with the package skeleton (roadmap phase 0).
 > CI runs exactly these scripts, so a green run locally means a green run in CI.
 
 ## Workflow

@@ -52,6 +52,41 @@ final class ConfigDefinitionRegistry implements DefinitionRegistry
     }
 
     /**
+     * Secret parameters are hashed with APP_KEY (ADR 0004). Without it every
+     * key of such a definition would throw on first use in production, so it
+     * is a definition error here, where cache-contract:list and CI see it too.
+     *
+     * @param  array<string, Definition>  $definitions
+     *
+     * @throws InvalidDefinitions
+     */
+    private function assertAppKeyForSecrets(array $definitions): void
+    {
+        $appKey = $this->config->get('app.key');
+
+        if (is_string($appKey) && $appKey !== '') {
+            return;
+        }
+
+        $errors = [];
+
+        foreach ($definitions as $definition) {
+            foreach ($definition->params as $name => $type) {
+                if ($type === ParameterType::Secret) {
+                    $errors[] = new ValidationError($definition->id, sprintf(
+                        'secret parameter "%s" needs APP_KEY to hash its value; set it (php artisan key:generate)',
+                        $name,
+                    ));
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw InvalidDefinitions::fromErrors($errors);
+        }
+    }
+
+    /**
      * @return array<string, Definition>
      *
      * @throws InvalidDefinitions
@@ -59,11 +94,14 @@ final class ConfigDefinitionRegistry implements DefinitionRegistry
     private function definitions(): array
     {
         if ($this->definitions === null) {
-            $this->definitions = [];
+            $definitions = [];
 
             foreach ($this->loader->load($this->config->get('cache-contract.definitions', [])) as $definition) {
-                $this->definitions[$definition->id] = $definition;
+                $definitions[$definition->id] = $definition;
             }
+
+            $this->assertAppKeyForSecrets($definitions);
+            $this->definitions = $definitions;
         }
 
         return $this->definitions;

@@ -58,6 +58,14 @@ cc:auth:session_owner:v1:api_token=#9c1e…
 
 - The hash is keyed with your `APP_KEY`, so it cannot be reversed by hashing
   guessed tokens. A definition with a secret parameter needs `APP_KEY` to be
-  set.
+  set: without it the definitions fail to load with an `InvalidDefinitions`
+  error that names the parameter.
 - The same value always gives the same key. If you rotate `APP_KEY`, these
-  entries miss once and are cached again.
+  entries all miss once and are cached again, so expect a burst of loads
+  right after the rotation.
+- Only parameters are protected. Context values (`withContext()`) are always
+  written into the key as they are, so never pass a secret as context.
+- `cache-contract:inspect` does not accept a secret with `--param`, because
+  the value would stay in your shell history and CI logs. It asks for the
+  value instead, without showing what you type, and prints only the hash.
+  With `--no-interaction` it prints the key pattern only.

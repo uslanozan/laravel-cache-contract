@@ -132,6 +132,14 @@ describe('secret parameters', function () {
             ->and($encode('token-a'))->not->toContain(substr(hash('sha256', 'token-a'), 0, 32));
     });
 
+    it('decodes a base64 application key, like Laravel\'s encrypter', function () use ($encode) {
+        $raw = random_bytes(32);
+
+        // The decoded bytes are the key: the "base64:" form and the raw bytes give the same hash.
+        expect($encode('token-a', 'base64:'.base64_encode($raw)))->toBe($encode('token-a', $raw))
+            ->and($encode('token-a', 'base64:'.base64_encode($raw)))->not->toBe($encode('token-a', base64_encode($raw)));
+    });
+
     it('needs the application key', function (?string $appKey) use ($encode) {
         expect(fn () => $encode('token-a', $appKey))->toThrow(InvalidConfiguration::class, 'set APP_KEY');
     })->with(['missing' => [null], 'empty' => ['']]);
@@ -145,7 +153,7 @@ describe('secret parameters', function () {
         expect(fn () => (new ParameterEncoder('base64:test-app-key'))->encode(
             DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]),
             ['api_token' => 12345],
-        ))->toThrow(InvalidParameters::class, '"api_token" must be secret, int given');
+        ))->toThrow(InvalidParameters::class, '"api_token" must be a secret string, int given');
     });
 });
 

@@ -54,10 +54,19 @@ final class ParameterEncoder
      */
     public function __construct(?string $appKey = null)
     {
+        if ($appKey === null || $appKey === '') {
+            $this->secretKey = null;
+
+            return;
+        }
+
+        // The same key material as Laravel's Encrypter: "base64:…" is decoded.
+        if (str_starts_with($appKey, 'base64:')) {
+            $appKey = base64_decode(substr($appKey, 7), true) ?: $appKey;
+        }
+
         // A key of its own, so the hashes never equal anything else keyed with APP_KEY.
-        $this->secretKey = $appKey === null || $appKey === ''
-            ? null
-            : hash_hmac('sha256', 'cache-contract:secret-parameters', $appKey, true);
+        $this->secretKey = hash_hmac('sha256', 'cache-contract:secret-parameters', $appKey, true);
     }
 
     /**
@@ -112,7 +121,7 @@ final class ParameterEncoder
                 throw InvalidParameters::forDefinition($definition->id, sprintf(
                     '"%s" must be %s, %s given%s',
                     $name,
-                    $type->value,
+                    $type === ParameterType::Secret ? 'a secret string' : $type->value,
                     get_debug_type($params[$name]),
                     $this->hint($type, $params[$name]),
                 ));

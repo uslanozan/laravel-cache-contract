@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\ParameterType;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidKeyFormat;
 use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Tests\Support\DefinitionBuilder;
@@ -33,6 +34,20 @@ it('hashes secret parameters with the application key', function () {
 
     expect($key)->toMatch('/^cc:auth:session_owner:v1:api_token=#[0-9a-f]{32}$/')
         ->and($key)->not->toContain('plain-token-value');
+});
+
+it('reads the application key from the config', function () {
+    $definition = DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]);
+    $keyWith = function (?string $appKey) use ($definition): string {
+        config()->set('app.key', $appKey);
+        app()->forgetInstance(KeyFactory::class);
+
+        return app(KeyFactory::class)->make($definition, ['api_token' => 'plain-token-value']);
+    };
+
+    expect($keyWith('base64:'.base64_encode(str_repeat('a', 32))))
+        ->not->toBe($keyWith('base64:'.base64_encode(str_repeat('b', 32))))
+        ->and(fn () => $keyWith(null))->toThrow(InvalidConfiguration::class, 'set APP_KEY');
 });
 
 it('appends the generation segment last (ADR 0009)', function () {

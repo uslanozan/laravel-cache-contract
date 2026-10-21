@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Contracts;
 
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 
 /**
@@ -28,6 +29,7 @@ interface KeyFactory
      *
      * @throws InvalidParameters when a parameter is missing, unexpected or of the wrong type,
      *                           or the generations are not ints for exactly the definition's counters
+     * @throws InvalidConfiguration when a secret parameter is used without APP_KEY
      */
     public function make(Definition $definition, array $params, array $context = [], array $generations = []): string;
 }

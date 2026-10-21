@@ -11,6 +11,7 @@ use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
 
@@ -70,6 +71,7 @@ final readonly class CacheContractManager
      *
      * @throws UnknownDefinition
      * @throws InvalidParameters
+     * @throws InvalidConfiguration when a secret parameter is used without APP_KEY
      */
     public function key(string $id, array $params = []): string
     {

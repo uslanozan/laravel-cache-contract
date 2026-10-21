@@ -169,7 +169,7 @@ final class InspectCommand extends Command
     private function toType(Definition $definition, string $name, ParameterType $type, string $value): mixed
     {
         $converted = match ($type) {
-            ParameterType::String => $value,
+            ParameterType::String, ParameterType::Secret => $value,
             ParameterType::Int => preg_match('/^-?\d+$/', $value) === 1 ? (int) $value : null,
             ParameterType::Float => is_numeric($value) ? (float) $value : null,
             ParameterType::Bool => match (strtolower($value)) {

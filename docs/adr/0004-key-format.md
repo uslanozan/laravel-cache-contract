@@ -107,3 +107,24 @@ Both rules keep the principle of this ADR: one value, one key. Strict
 parameters reject a second spelling, and model IDs map it to the first.
 Making model IDs strict as well was rejected: it would push every caller to
 write `(int) $id`, which accepts more bad input than the conversion does.
+
+## Update 2026-10-21: secret parameters
+
+A new parameter type, `secret`, adds to the types listed in ADR 0002, for
+values that must not appear in a key, such as an API token. Keys are visible
+in `redis-cli KEYS` and `MONITOR`, in error logs and in
+`cache-contract:inspect`. A secret parameter is written as `#` and the first
+32 hex characters of an HMAC-SHA256 of the value
+(`api_token=#9c1e…`).
+
+- **Keyed, not a plain hash.** The HMAC key is derived from `APP_KEY` (a key
+  of its own, so these hashes never equal anything else keyed with
+  `APP_KEY`). A plain hash of a short token could be reversed by hashing
+  candidates; without the application key it cannot.
+- The same value gives the same key within one application. Different
+  applications, or a rotated `APP_KEY`, give different keys: after
+  `key:generate` those entries miss once and are reloaded.
+- A definition with a secret parameter needs `APP_KEY`; without it, building
+  the key throws `InvalidConfiguration`. Definitions without secrets do not
+  need it.
+- Only strings are accepted, and `inspect` shows the hash, never the value.

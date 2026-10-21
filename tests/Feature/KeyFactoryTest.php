@@ -25,6 +25,16 @@ it('builds keys with the default format', function () {
         ->toBe('cc:external:exchange_rates:v1:region=eu:@tenant_id=7');
 });
 
+it('hashes secret parameters with the application key', function () {
+    config()->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+    $definition = DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]);
+
+    $key = app(KeyFactory::class)->make($definition, ['api_token' => 'plain-token-value']);
+
+    expect($key)->toMatch('/^cc:auth:session_owner:v1:api_token=#[0-9a-f]{32}$/')
+        ->and($key)->not->toContain('plain-token-value');
+});
+
 it('separates tenants, versions and sections', function () {
     $keys = app(KeyFactory::class);
     $list = DefinitionBuilder::make('user.summary', params: ['tenant_id' => ParameterType::Int]);

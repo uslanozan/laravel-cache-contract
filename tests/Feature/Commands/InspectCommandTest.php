@@ -74,6 +74,22 @@ it('rejects a value that does not fit the declared type', function (string $para
     'unknown parameter' => ['page=2', 'missing user_id'],
 ]);
 
+it('never prints the value of a secret parameter', function () {
+    config()->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+    config()->set('cache-contract.definitions.auth.session_owner', [
+        'purpose' => 'session_owner', 'type' => 'array', 'params' => ['api_token' => 'secret'],
+        'ttl' => 300, 'description' => 'Owner of an API session.',
+    ]);
+
+    $exit = Artisan::call('cache-contract:inspect', ['id' => 'auth.session_owner', '--param' => ['api_token=plain-token-value']]);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('cc:auth:session_owner:v1:api_token={secret}')
+        ->and($output)->toMatch('/cc:auth:session_owner:v1:api_token=#[0-9a-f]{32}/')
+        ->and($output)->not->toContain('plain-token-value');
+});
+
 it('suggests similar ids for an unknown id', function () {
     $this->artisan('cache-contract:inspect', ['id' => 'user.profle'])
         ->expectsOutputToContain('Unknown cache definition "user.profle".')

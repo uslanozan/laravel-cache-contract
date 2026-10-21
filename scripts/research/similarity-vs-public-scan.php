@@ -18,6 +18,7 @@ declare(strict_types=1);
  */
 
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Definitions\ResultType;
 use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 use Uslanozan\CacheContract\Similarity\Finding;
@@ -26,8 +27,10 @@ use Uslanozan\CacheContract\Similarity\Severity;
 
 require __DIR__.'/../../vendor/autoload.php';
 
-// [project, key A, key B, label, section A, name A, section B, name B, note]
+// [project, key A, key B, label, section A, name A, section B, name B, note, params A, params B]
 // A note marks a name that is not in the key, e.g. one invented for the contract.
+// Params are given only where the pair is about them (Akaunting's {alias}); elsewhere
+// both sides would get the same parameters, which changes no name result.
 $pairs = [
     ['BookStack', 'custom-head-web:{hash}', 'custom-head-export:{hash}', 'distinct', 'page', 'custom-head-web', 'page', 'custom-head-export'],
     ['BookStack', 'api-docs::{v}', 'api_docs:{v}', 'duplicate', 'docs', 'api-docs', 'docs', 'api_docs'],
@@ -47,16 +50,17 @@ $pairs = [
     ['Pixelfed', 'pf:acct:settings:hidden-following:{id}', 'pf:acct-trans:hideFollowing:{id}', 'distinct', 'acct_settings', 'hidden-following', 'acct_trans', 'hideFollowing'],
     ['Pixelfed', 'api:v1:instance-data-response-v1', 'api_v1_instance_data_response_v1', 'duplicate', 'api', 'v1:instance-data-response-v1', 'api', 'v1_instance_data_response_v1'],
     // In the contract, {alias} becomes a parameter; the second definition needs its own name.
-    ['Akaunting', 'apps.testimonials.{k}', 'apps.{alias}.testimonials.{k}', 'distinct', 'apps', 'testimonials', 'apps', 'app_testimonials', 'invented name'],
+    ['Akaunting', 'apps.testimonials.{k}', 'apps.{alias}.testimonials.{k}', 'distinct', 'apps', 'testimonials', 'apps', 'app_testimonials', 'invented name', ['k' => ParameterType::String], ['alias' => ParameterType::String, 'k' => ParameterType::String]],
     ['Akaunting', 'apps.pre_sale.{k}', 'apps.paid.{k}', 'distinct', 'apps', 'pre_sale', 'apps', 'paid'],
     ['Akaunting', 'apps.pre_sale.{k}', 'apps.free.{k}', 'distinct', 'apps', 'pre_sale', 'apps', 'free'],
     ['Akaunting', 'apps.paid.{k}', 'apps.free.{k}', 'distinct', 'apps', 'paid', 'apps', 'free'],
     ['Akaunting', 'plans.limits', 'plans-limits', 'duplicate', 'billing', 'plans.limits', 'billing', 'plans-limits'],
 ];
 
-function definition(string $section, string $name): Definition
+/** @param array<string, ParameterType> $params */
+function definition(string $section, string $name, array $params = []): Definition
 {
-    return new Definition($section, $name, $name, ResultType::Array, 300, "{$section}.{$name}");
+    return new Definition($section, $name, $name, ResultType::Array, 300, "{$section}.{$name}", params: $params);
 }
 
 /**
@@ -86,8 +90,8 @@ $totals = ['ok' => 0, 'mild' => 0, 'miss' => 0, 'bad' => 0];
 foreach ($pairs as $pair) {
     [$project, $keyA, $keyB, $label, $sectionA, $nameA, $sectionB, $nameB] = $pair;
     $note = $pair[8] ?? null;
-    $a = definition($sectionA, $nameA);
-    $b = definition($sectionB, $nameB);
+    $a = definition($sectionA, $nameA, $pair[9] ?? []);
+    $b = definition($sectionB, $nameB, $pair[10] ?? []);
     $finding = $engine->findSimilar($a, [$b])[0] ?? null;
     $score = $names->compare($nameA, $nameB);
     $verdict = verdict($label, $finding);

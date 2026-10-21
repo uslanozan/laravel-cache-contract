@@ -38,6 +38,12 @@ final class NameSimilarity
         private readonly Antonyms $antonyms = new Antonyms,
     ) {}
 
+    /** The tokenizer this comparison uses, so other checks split words the same way. */
+    public function tokenizer(): NameTokenizer
+    {
+        return $this->tokenizer;
+    }
+
     public function compare(string $a, string $b): NameScore
     {
         $left = $this->tokenizer->tokenize($a);

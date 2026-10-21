@@ -85,6 +85,15 @@ caller reads the counters and passes the generations in; the key factory
 stays pure and never talks to Redis. See
 [ADR 0009](0009-invalidation-with-generation-counters.md).
 
+Encoding (LRVL-58): the segment comes last, after the context, inside the
+`{params}` part. One counter is written as `~g` and its value
+(`~g8123`); its name is left out, because the counters an entry depends on
+are fixed by its definition. Several counters are written as `~g#` and a
+16-character hash of the name/value pairs sorted by name, so the order the
+caller passes them in never matters. Without generations the key is exactly
+as before. No parameter or context value can imitate the segment, because
+`:` in values is URL-encoded.
+
 ## Update 2026-10-16: strict parameters, lenient model IDs
 
 Two kinds of call-time values reach the key factory, and they are checked

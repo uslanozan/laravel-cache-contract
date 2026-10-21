@@ -86,6 +86,14 @@ describe('FakeKeyFactory', function () {
             ->not->toBe($this->factory->make($this->definition, $params, ['locale' => 'en']));
     });
 
+    it('gives a different key for different generations', function () {
+        $params = ['tenant_id' => 7, 'role' => 'admin'];
+
+        expect($this->factory->make($this->definition, $params, [], ['model:users' => 1]))
+            ->not->toBe($this->factory->make($this->definition, $params, [], ['model:users' => 2]))
+            ->not->toBe($this->factory->make($this->definition, $params));
+    });
+
     it('rejects missing and unexpected parameters', function () {
         expect(fn () => $this->factory->make($this->definition, ['tenant_id' => 7]))
             ->toThrow(InvalidParameters::class, 'missing role')

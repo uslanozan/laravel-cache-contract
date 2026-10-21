@@ -18,7 +18,7 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  */
 final class FakeKeyFactory implements KeyFactory
 {
-    public function make(Definition $definition, array $params, array $context = []): string
+    public function make(Definition $definition, array $params, array $context = [], array $generations = []): string
     {
         $declared = array_keys($definition->params);
         $given = array_keys($params);
@@ -33,13 +33,15 @@ final class FakeKeyFactory implements KeyFactory
 
         ksort($params);
         ksort($context);
+        ksort($generations);
 
         return sprintf(
-            'fake:%s:v%d:%s%s',
+            'fake:%s:v%d:%s%s%s',
             $definition->id,
             $definition->version,
             json_encode($params, JSON_THROW_ON_ERROR),
             $context === [] ? '' : ':'.json_encode($context, JSON_THROW_ON_ERROR),
+            $generations === [] ? '' : ':~g'.json_encode($generations, JSON_THROW_ON_ERROR),
         );
     }
 }

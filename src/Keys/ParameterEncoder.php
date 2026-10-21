@@ -10,10 +10,12 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 
 /**
  * Checks call-time parameters against a definition and turns them, plus the
- * context, into the {params} segment of the key (ADR 0004):
+ * context and the generations, into the {params} segment of the key (ADR 0004):
  *
  *     ['tenant_id' => 7, 'role' => 'admin'] + context ['locale' => 'tr']
  *     → "role=admin:tenant_id=7:@locale=tr"
+ *     + generations ['model:users' => 8123]
+ *     → "role=admin:tenant_id=7:@locale=tr:~g8123"
  *
  * - Names are sorted, so argument order never changes the key.
  * - Types are strict: an int parameter does not accept "7". The same value
@@ -21,7 +23,11 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  * - Strings are URL-encoded, so a value containing ":" or "=" can never
  *   make two different parameter sets look the same.
  * - Arrays are canonicalized and hashed: "ids=#3f2a…".
- * - No parameters and no context gives "-".
+ * - Generations (ADR 0009) come last: one counter as "~g8123", several as
+ *   "~g#3f2a…", a hash of the sorted name/value pairs. A single counter needs
+ *   no name: which counters an entry depends on is fixed by its definition.
+ *   No generations leaves the key as it was.
+ * - No parameters, no context and no generations gives "-".
  */
 final class ParameterEncoder
 {
@@ -31,15 +37,18 @@ final class ParameterEncoder
 
     private const CONTEXT_MARK = '@';
 
+    private const GENERATION_MARK = '~g';
+
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
 
     /**
      * @param  array<string, mixed>  $params
      * @param  array<string, scalar>  $context
+     * @param  array<string, int>  $generations
      *
      * @throws InvalidParameters
      */
-    public function encode(Definition $definition, array $params, array $context = []): string
+    public function encode(Definition $definition, array $params, array $context = [], array $generations = []): string
     {
         $this->assertParameters($definition, $params);
 
@@ -54,6 +63,10 @@ final class ParameterEncoder
         foreach ($context as $name => $value) {
             $this->assertContext($definition, $name, $value);
             $segments[] = self::CONTEXT_MARK.$name.'='.$this->encodeScalar($value);
+        }
+
+        if ($generations !== []) {
+            $segments[] = self::GENERATION_MARK.$this->encodeGenerations($definition, $generations);
         }
 
         return $segments === [] ? self::EMPTY : implode(self::SEPARATOR, $segments);
@@ -86,6 +99,33 @@ final class ParameterEncoder
                 ));
             }
         }
+    }
+
+    /**
+     * "8123" for one counter, "#" and a hash of the sorted pairs for several,
+     * so the order the caller passes them in never changes the key.
+     *
+     * @param  non-empty-array<array-key, mixed>  $generations
+     */
+    private function encodeGenerations(Definition $definition, array $generations): string
+    {
+        foreach ($generations as $name => $value) {
+            if (! is_string($name) || $name === '' || ! is_int($value)) {
+                throw InvalidParameters::forDefinition($definition->id, sprintf(
+                    'a generation must be an int under a non-empty counter name, %s => %s given',
+                    var_export($name, true),
+                    get_debug_type($value),
+                ));
+            }
+        }
+
+        if (count($generations) === 1) {
+            return (string) reset($generations);
+        }
+
+        ksort($generations);
+
+        return '#'.$this->hash($generations);
     }
 
     private function assertContext(Definition $definition, string $name, mixed $value): void

@@ -27,11 +27,11 @@ it('builds keys with the default format', function () {
 
 it('appends the generation segment last (ADR 0009)', function () {
     $keys = app(KeyFactory::class);
-    $profile = DefinitionBuilder::make('user.profile', params: ['user_id' => ParameterType::Int], version: 2);
+    $profile = DefinitionBuilder::make('user.profile', params: ['user_id' => ParameterType::Int], version: 2, tags: ['users']);
 
-    expect($keys->make($profile, ['user_id' => 42], [], ['model:users' => 8123]))
+    expect($keys->make($profile, ['user_id' => 42], [], ['users' => 8123]))
         ->toBe('cc:user:profile:v2:user_id=42:~g8123')
-        ->and($keys->make($profile, ['user_id' => 42], ['tenant_id' => 7], ['model:users' => 8123]))
+        ->and($keys->make($profile, ['user_id' => 42], ['tenant_id' => 7], ['users' => 8123]))
         ->toBe('cc:user:profile:v2:user_id=42:@tenant_id=7:~g8123')
         ->and($keys->make($profile, ['user_id' => 42]))
         ->toBe('cc:user:profile:v2:user_id=42');
@@ -41,7 +41,7 @@ it('keeps the generation segment with a custom key format', function () {
     // Not a key_format placeholder: no format can drop it (ADR 0004, update 2026-10-15).
     config()->set('cache-contract.key_format', '{section}:{name}:{params}');
 
-    expect(app(KeyFactory::class)->make(DefinitionBuilder::make('user.profile'), [], [], ['model:users' => 8123]))
+    expect(app(KeyFactory::class)->make(DefinitionBuilder::make('user.profile', tags: ['users']), [], [], ['users' => 8123]))
         ->toBe('user:profile:~g8123');
 });
 

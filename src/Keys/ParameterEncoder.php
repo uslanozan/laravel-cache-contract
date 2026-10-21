@@ -14,7 +14,7 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  *
  *     ['tenant_id' => 7, 'role' => 'admin'] + context ['locale' => 'tr']
  *     → "role=admin:tenant_id=7:@locale=tr"
- *     + generations ['model:users' => 8123]
+ *     + generations ['users' => 8123]   (the definition's counters)
  *     → "role=admin:tenant_id=7:@locale=tr:~g8123"
  *
  * - Names are sorted, so argument order never changes the key.
@@ -23,10 +23,10 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  * - Strings are URL-encoded, so a value containing ":" or "=" can never
  *   make two different parameter sets look the same.
  * - Arrays are canonicalized and hashed: "ids=#3f2a…".
- * - Generations (ADR 0009) come last: one counter as "~g8123", several as
- *   "~g#3f2a…", a hash of the sorted name/value pairs. A single counter needs
- *   no name: which counters an entry depends on is fixed by its definition.
- *   No generations leaves the key as it was.
+ * - Generations (ADR 0009) come last: the values ordered by counter name,
+ *   joined by "." ("~g8123", "~g8123.9907"). The names must be exactly the
+ *   definition's counters (Definition::generationCounters()), so they need not
+ *   be written. No generations leaves the key as it was.
  * - No parameters, no context and no generations gives "-".
  */
 final class ParameterEncoder
@@ -102,30 +102,49 @@ final class ParameterEncoder
     }
 
     /**
-     * "8123" for one counter, "#" and a hash of the sorted pairs for several,
-     * so the order the caller passes them in never changes the key.
+     * The values ordered by counter name and joined by ".": "8123" for one
+     * counter, "8123.9907" for two. No hash, so a new value can never give an
+     * old key. The names are checked against the definition, because a wrong
+     * or missing counter would give a valid-looking key that its counter's
+     * bump never invalidates.
      *
      * @param  non-empty-array<array-key, mixed>  $generations
      */
     private function encodeGenerations(Definition $definition, array $generations): string
     {
+        $values = [];
+
         foreach ($generations as $name => $value) {
-            if (! is_string($name) || $name === '' || ! is_int($value)) {
+            // A digit-only name such as "2024" arrives as an int array key.
+            $name = (string) $name;
+
+            if (! is_int($value)) {
                 throw InvalidParameters::forDefinition($definition->id, sprintf(
-                    'a generation must be an int under a non-empty counter name, %s => %s given',
-                    var_export($name, true),
+                    'generation "%s" must be int, %s given',
+                    $name,
                     get_debug_type($value),
                 ));
             }
+
+            $values[$name] = $value;
         }
 
-        if (count($generations) === 1) {
-            return (string) reset($generations);
+        $expected = $definition->generationCounters();
+        // Back to strings: PHP turns a digit-only key such as "2024" into an int.
+        $given = array_map(strval(...), array_keys($values));
+        sort($given, SORT_STRING);
+
+        if ($given !== $expected) {
+            throw InvalidParameters::forDefinition($definition->id, sprintf(
+                'generations must be exactly the counters of the definition: expected [%s], got [%s]',
+                implode(', ', $expected),
+                implode(', ', $given),
+            ));
         }
 
-        ksort($generations);
+        ksort($values, SORT_STRING);
 
-        return '#'.$this->hash($generations);
+        return implode('.', $values);
     }
 
     private function assertContext(Definition $definition, string $name, mixed $value): void

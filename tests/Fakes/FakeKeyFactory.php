@@ -33,7 +33,6 @@ final class FakeKeyFactory implements KeyFactory
 
         ksort($params);
         ksort($context);
-        ksort($generations);
 
         return sprintf(
             'fake:%s:v%d:%s%s%s',
@@ -41,7 +40,36 @@ final class FakeKeyFactory implements KeyFactory
             $definition->version,
             json_encode($params, JSON_THROW_ON_ERROR),
             $context === [] ? '' : ':'.json_encode($context, JSON_THROW_ON_ERROR),
-            $generations === [] ? '' : ':~g'.json_encode($generations, JSON_THROW_ON_ERROR),
+            $generations === [] ? '' : ':~g'.$this->generations($definition, $generations),
         );
+    }
+
+    /**
+     * The same rules as the real factory (ADR 0009): int values for exactly
+     * the definition's counters, written in name order.
+     *
+     * @param  array<array-key, mixed>  $generations
+     */
+    private function generations(Definition $definition, array $generations): string
+    {
+        $values = [];
+        foreach ($generations as $name => $value) {
+            if (! is_int($value)) {
+                throw InvalidParameters::forDefinition($definition->id, sprintf('generation "%s" must be int', $name));
+            }
+            $values[(string) $name] = $value;
+        }
+
+        // Back to strings: PHP turns a digit-only key such as "2024" into an int.
+        $given = array_map(strval(...), array_keys($values));
+        sort($given, SORT_STRING);
+
+        if ($given !== $definition->generationCounters()) {
+            throw InvalidParameters::forDefinition($definition->id, 'generations must be exactly the counters of the definition');
+        }
+
+        ksort($values, SORT_STRING);
+
+        return implode('.', $values);
     }
 }

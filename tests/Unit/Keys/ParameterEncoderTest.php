@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 use Uslanozan\CacheContract\Tests\Support\DefinitionBuilder;
 
 /**
@@ -109,36 +110,65 @@ it('rejects invalid context', function () {
 });
 
 describe('generations (ADR 0009)', function () {
-    it('appends one counter as its value, after the context', function () {
-        expect(encodeParams(['tenant_id' => ParameterType::Int], ['tenant_id' => 7], ['locale' => 'tr'], ['model:users' => 8123]))
-            ->toBe('tenant_id=7:@locale=tr:~g8123');
+    // user.list depends on the "users" tag and, through invalidated_by, on "def:user.list".
+    $encode = fn (array $generations, array $tags = ['users'], bool $invalidated = true, array $context = []) => (new ParameterEncoder)->encode(
+        DefinitionBuilder::make('user.list', tags: $tags, invalidatedBy: $invalidated ? [Company::class] : []),
+        [],
+        $context,
+        $generations,
+    );
+
+    it('knows which counters a definition depends on', function () {
+        expect(DefinitionBuilder::make('user.list', tags: ['users', 'admin'], invalidatedBy: [Company::class])->generationCounters())
+            ->toBe(['admin', 'def:user.list', 'users'])
+            ->and(DefinitionBuilder::make('user.list')->generationCounters())->toBe([]);
     });
 
-    it('needs no name for a single counter', function () {
-        expect(encodeParams([], [], [], ['model:users' => 8123]))
-            ->toBe(encodeParams([], [], [], ['def:user.list' => 8123]));
+    it('appends one counter as its value, after the context', function () use ($encode) {
+        expect($encode(['users' => 8123], invalidated: false, context: ['locale' => 'tr']))->toBe('@locale=tr:~g8123');
     });
 
-    it('hashes several counters, whatever order they come in', function () {
-        $a = encodeParams([], [], [], ['model:users' => 8123, 'def:company.summary' => 9907]);
-        $b = encodeParams([], [], [], ['def:company.summary' => 9907, 'model:users' => 8123]);
-
-        expect($a)->toMatch('/^~g#[0-9a-f]{16}$/')
-            ->and($a)->toBe($b);
+    it('writes several values in counter-name order, whatever order they come in', function () use ($encode) {
+        expect($encode(['users' => 8123, 'def:user.list' => 9907]))->toBe('~g9907.8123')
+            ->and($encode(['def:user.list' => 9907, 'users' => 8123]))->toBe('~g9907.8123');
     });
 
-    it('gives a new key when any counter changes', function () {
-        $before = ['model:users' => 8123, 'def:company.summary' => 9907];
+    it('gives a new key when any counter changes', function () use ($encode) {
+        $before = ['users' => 8123, 'def:user.list' => 9907];
 
-        expect(encodeParams([], [], [], ['model:users' => 5501]))->not->toBe(encodeParams([], [], [], ['model:users' => 8123]))
-            ->and(encodeParams([], [], [], [...$before, 'model:users' => 5501]))->not->toBe(encodeParams([], [], [], $before))
-            ->and(encodeParams([], [], [], [...$before, 'def:company.summary' => 1]))->not->toBe(encodeParams([], [], [], $before));
+        expect($encode([...$before, 'users' => 5501]))->not->toBe($encode($before))
+            ->and($encode([...$before, 'def:user.list' => 1]))->not->toBe($encode($before));
     });
 
-    it('leaves the segment unchanged without generations', function () {
-        expect(encodeParams(['tenant_id' => ParameterType::Int], ['tenant_id' => 7], [], []))->toBe('tenant_id=7')
-            ->and(encodeParams([], [], [], []))->toBe('-')
-            ->and(encodeParams([], [], [], ['model:users' => 8123]))->toBe('~g8123');
+    it('leaves the segment unchanged without generations', function () use ($encode) {
+        expect($encode([]))->toBe('-')
+            ->and(encodeParams(['tenant_id' => ParameterType::Int], ['tenant_id' => 7]))->toBe('tenant_id=7');
+    });
+
+    it('rejects a wrong, missing or extra counter', function (array $generations, string $message) use ($encode) {
+        expect(fn () => $encode($generations))->toThrow(InvalidParameters::class, $message);
+    })->with([
+        'wrong counter' => [['posts' => 1, 'def:user.list' => 2], 'expected [def:user.list, users], got [def:user.list, posts]'],
+        'missing counter' => [['users' => 1], 'expected [def:user.list, users], got [users]'],
+        'extra counter' => [['users' => 1, 'def:user.list' => 2, 'admin' => 3], 'got [admin, def:user.list, users]'],
+    ]);
+
+    it('rejects generations for a definition without counters', function () use ($encode) {
+        expect(fn () => $encode(['users' => 1], tags: [], invalidated: false))
+            ->toThrow(InvalidParameters::class, 'expected [], got [users]');
+    });
+
+    it('rejects a value that is not an int', function (mixed $value, string $given) use ($encode) {
+        expect(fn () => $encode(['users' => $value], invalidated: false))
+            ->toThrow(InvalidParameters::class, "generation \"users\" must be int, {$given} given");
+    })->with([
+        'numeric string' => ['8123', 'string'],
+        'float' => [1.5, 'float'],
+    ]);
+
+    it('accepts a digit-only counter name', function () use ($encode) {
+        // "2024" arrives as an int array key; it is still the tag "2024".
+        expect($encode(['2024' => 7], tags: ['2024'], invalidated: false))->toBe('~g7');
     });
 
     it('cannot be imitated by a parameter or context value', function () {
@@ -146,16 +176,6 @@ describe('generations (ADR 0009)', function () {
         $declared = ['name' => ParameterType::String];
 
         expect(encodeParams($declared, ['name' => 'x:~g5']))->toBe('name=x%3A~g5')
-            ->and(encodeParams($declared, ['name' => 'x:~g5']))->not->toBe(encodeParams($declared, ['name' => 'x'], [], ['model:users' => 5]))
             ->and(encodeParams([], [], ['tenant' => 'a:~g5']))->toBe('@tenant=a%3A~g5');
     });
-
-    it('rejects a generation that is not an int under a non-empty name', function (array $generations, string $message) {
-        expect(fn () => encodeParams([], [], [], $generations))->toThrow(InvalidParameters::class, $message);
-    })->with([
-        'numeric string value' => [['model:users' => '8123'], "'model:users' => string given"],
-        'float value' => [['model:users' => 1.5], "'model:users' => float given"],
-        'empty name' => [['' => 8123], "'' => int given"],
-        'list instead of names' => [[8123], '0 => int given'],
-    ]);
 });

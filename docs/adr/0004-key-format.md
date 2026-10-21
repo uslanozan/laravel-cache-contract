@@ -86,13 +86,18 @@ stays pure and never talks to Redis. See
 [ADR 0009](0009-invalidation-with-generation-counters.md).
 
 Encoding (LRVL-58): the segment comes last, after the context, inside the
-`{params}` part. One counter is written as `~g` and its value
-(`~g8123`); its name is left out, because the counters an entry depends on
-are fixed by its definition. Several counters are written as `~g#` and a
-16-character hash of the name/value pairs sorted by name, so the order the
-caller passes them in never matters. Without generations the key is exactly
-as before. No parameter or context value can imitate the segment, because
-`:` in values is URL-encoded.
+`{params}` part: `~g` and the counter values ordered by counter name, joined
+by `.` (`~g8123`, `~g9907.8123`). One shape for any number of counters, and
+no hash, so a new value can never give an old key.
+
+The names are not written, because they are fixed by the definition: one
+counter per tag, plus `def:{id}` when the definition has `invalidated_by`
+(ADR 0009, `Definition::generationCounters()`). The key factory checks that
+the given generations are exactly these counters and throws otherwise. A
+wrong or missing counter would otherwise give a valid-looking key that its
+counter's bump never invalidates. Without generations the key is exactly as
+before. No parameter or context value can imitate the segment, because `:`
+in values is URL-encoded.
 
 ## Update 2026-10-16: strict parameters, lenient model IDs
 

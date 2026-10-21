@@ -22,11 +22,12 @@ interface KeyFactory
      * @param  array<string, scalar>  $context  values that change the result but are not
      *                                          parameters of the definition (tenant, locale…)
      * @param  array<string, int>  $generations  the current value of every generation counter the
-     *                                           entry depends on, by counter name (ADR 0009);
-     *                                           read by the caller, the factory never talks to Redis
+     *                                           entry depends on, by counter name: exactly
+     *                                           Definition::generationCounters() (ADR 0009); read
+     *                                           by the caller, the factory never talks to Redis
      *
      * @throws InvalidParameters when a parameter is missing, unexpected or of the wrong type,
-     *                           or a generation is not an int under a non-empty name
+     *                           or the generations are not ints for exactly the definition's counters
      */
     public function make(Definition $definition, array $params, array $context = [], array $generations = []): string;
 }

@@ -22,8 +22,8 @@ final class DefaultKeyFactory implements KeyFactory
         private readonly ParameterEncoder $encoder,
     ) {}
 
-    public function make(Definition $definition, array $params, array $context = []): string
+    public function make(Definition $definition, array $params, array $context = [], array $generations = []): string
     {
-        return $this->format->render($definition, $this->encoder->encode($definition, $params, $context));
+        return $this->format->render($definition, $this->encoder->encode($definition, $params, $context, $generations));
     }
 }

@@ -85,6 +85,20 @@ caller reads the counters and passes the generations in; the key factory
 stays pure and never talks to Redis. See
 [ADR 0009](0009-invalidation-with-generation-counters.md).
 
+Encoding (LRVL-58): the segment comes last, after the context, inside the
+`{params}` part: `~g` and the counter values ordered by counter name, joined
+by `.` (`~g8123`, `~g9907.8123`). One shape for any number of counters, and
+no hash, so a new value can never give an old key.
+
+The names are not written, because they are fixed by the definition: one
+counter per tag, plus `def:{id}` when the definition has `invalidated_by`
+(ADR 0009, `Definition::generationCounters()`). The key factory checks that
+the given generations are exactly these counters and throws otherwise. A
+wrong or missing counter would otherwise give a valid-looking key that its
+counter's bump never invalidates. Without generations the key is exactly as
+before. No parameter or context value can imitate the segment, because `:`
+in values is URL-encoded.
+
 ## Update 2026-10-16: strict parameters, lenient model IDs
 
 Two kinds of call-time values reach the key factory, and they are checked
@@ -119,12 +133,24 @@ in `redis-cli KEYS` and `MONITOR`, in error logs and in
 
 - **Keyed, not a plain hash.** The HMAC key is derived from `APP_KEY` (a key
   of its own, so these hashes never equal anything else keyed with
-  `APP_KEY`). A plain hash of a short token could be reversed by hashing
-  candidates; without the application key it cannot.
+  `APP_KEY`). A `base64:` key is decoded first, as Laravel's encrypter does,
+  so the key material is the same 32 bytes. A plain hash of a short token
+  could be reversed by hashing candidates; without the application key it
+  cannot.
 - The same value gives the same key within one application. Different
   applications, or a rotated `APP_KEY`, give different keys: after
-  `key:generate` those entries miss once and are reloaded.
-- A definition with a secret parameter needs `APP_KEY`; without it, building
-  the key throws `InvalidConfiguration`. Definitions without secrets do not
-  need it.
-- Only strings are accepted, and `inspect` shows the hash, never the value.
+  `key:generate` those entries miss once and are reloaded. All of them miss
+  at the same moment, so a rotation is a burst of loads, the same as a
+  deploy that bumps a definition's version; protecting the loader from that
+  burst is the stampede work (LRVL-41), not something this type solves.
+  `APP_PREVIOUS_KEYS` is not used: old entries simply expire.
+- A definition with a secret parameter needs `APP_KEY`. Without it the
+  definitions fail to load (`InvalidDefinitions`), so `cache-contract:list`
+  and CI see it before any cache call does. A key built outside the registry
+  still throws `InvalidConfiguration`. Definitions without secrets do not
+  need `APP_KEY`.
+- Only strings are accepted. `cache-contract:inspect` never takes a secret
+  from `--param` (shell history, `ps`, CI logs): it asks for it without
+  echoing and shows only the hash.
+- Context values are not protected: they are always written readably, so a
+  secret must be a parameter, never context.

@@ -62,3 +62,29 @@ it('works with the default empty config', function () {
 
     expect(app(DefinitionRegistry::class)->all())->toBe([]);
 });
+
+describe('secret parameters without APP_KEY', function () {
+    beforeEach(function () {
+        config()->set('cache-contract.definitions.auth.session_owner', registryDefinition('session_owner', ['params' => ['api_token' => 'secret']]));
+    });
+
+    it('are a definition error on the first use, not on the first cache call', function (?string $appKey) {
+        config()->set('app.key', $appKey);
+
+        expect(fn () => app(DefinitionRegistry::class)->all())
+            ->toThrow(InvalidDefinitions::class, 'auth.session_owner: secret parameter "api_token" needs APP_KEY');
+    })->with(['missing' => [null], 'empty' => ['']]);
+
+    it('load fine once APP_KEY is set', function () {
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+
+        expect(app(DefinitionRegistry::class)->has('auth.session_owner'))->toBeTrue();
+    });
+
+    it('do not need APP_KEY when no definition has one', function () {
+        config()->set('app.key', null);
+        config()->set('cache-contract.definitions.auth', []);
+
+        expect(app(DefinitionRegistry::class)->has('user.profile'))->toBeTrue();
+    });
+});

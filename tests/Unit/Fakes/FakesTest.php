@@ -86,6 +86,18 @@ describe('FakeKeyFactory', function () {
             ->not->toBe($this->factory->make($this->definition, $params, ['locale' => 'en']));
     });
 
+    it('follows the real rules for generations', function () {
+        $definition = DefinitionBuilder::make('user.active_list', tags: ['users']);
+
+        expect($this->factory->make($definition, [], [], ['users' => 1]))
+            ->not->toBe($this->factory->make($definition, [], [], ['users' => 2]))
+            ->not->toBe($this->factory->make($definition, []))
+            ->and(fn () => $this->factory->make($definition, [], [], ['posts' => 1]))
+            ->toThrow(InvalidParameters::class, 'exactly the counters of the definition')
+            ->and(fn () => $this->factory->make($definition, [], [], ['users' => '1']))
+            ->toThrow(InvalidParameters::class, 'must be int');
+    });
+
     it('rejects missing and unexpected parameters', function () {
         expect(fn () => $this->factory->make($this->definition, ['tenant_id' => 7]))
             ->toThrow(InvalidParameters::class, 'missing role')

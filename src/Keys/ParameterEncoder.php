@@ -11,10 +11,12 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 
 /**
  * Checks call-time parameters against a definition and turns them, plus the
- * context, into the {params} segment of the key (ADR 0004):
+ * context and the generations, into the {params} segment of the key (ADR 0004):
  *
  *     ['tenant_id' => 7, 'role' => 'admin'] + context ['locale' => 'tr']
  *     → "role=admin:tenant_id=7:@locale=tr"
+ *     + generations ['users' => 8123]   (the definition's counters)
+ *     → "role=admin:tenant_id=7:@locale=tr:~g8123"
  *
  * - Names are sorted, so argument order never changes the key.
  * - Types are strict: an int parameter does not accept "7". The same value
@@ -25,7 +27,11 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  * - Secrets are replaced by an HMAC-SHA256 keyed with a key derived from
  *   APP_KEY: "api_token=#9c1e…" (32 hex). Without the application key the
  *   hash of a short token could be guessed by hashing candidates.
- * - No parameters and no context gives "-".
+ * - Generations (ADR 0009) come last: the values ordered by counter name,
+ *   joined by "." ("~g8123", "~g8123.9907"). The names must be exactly the
+ *   definition's counters (Definition::generationCounters()), so they need not
+ *   be written. No generations leaves the key as it was.
+ * - No parameters, no context and no generations gives "-".
  */
 final class ParameterEncoder
 {
@@ -34,6 +40,8 @@ final class ParameterEncoder
     private const EMPTY = '-';
 
     private const CONTEXT_MARK = '@';
+
+    private const GENERATION_MARK = '~g';
 
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
 
@@ -46,19 +54,29 @@ final class ParameterEncoder
      */
     public function __construct(?string $appKey = null)
     {
+        if ($appKey === null || $appKey === '') {
+            $this->secretKey = null;
+
+            return;
+        }
+
+        // The same key material as Laravel's Encrypter: "base64:…" is decoded.
+        if (str_starts_with($appKey, 'base64:')) {
+            $appKey = base64_decode(substr($appKey, 7), true) ?: $appKey;
+        }
+
         // A key of its own, so the hashes never equal anything else keyed with APP_KEY.
-        $this->secretKey = $appKey === null || $appKey === ''
-            ? null
-            : hash_hmac('sha256', 'cache-contract:secret-parameters', $appKey, true);
+        $this->secretKey = hash_hmac('sha256', 'cache-contract:secret-parameters', $appKey, true);
     }
 
     /**
      * @param  array<string, mixed>  $params
      * @param  array<string, scalar>  $context
+     * @param  array<string, int>  $generations
      *
      * @throws InvalidParameters
      */
-    public function encode(Definition $definition, array $params, array $context = []): string
+    public function encode(Definition $definition, array $params, array $context = [], array $generations = []): string
     {
         $this->assertParameters($definition, $params);
 
@@ -73,6 +91,10 @@ final class ParameterEncoder
         foreach ($context as $name => $value) {
             $this->assertContext($definition, $name, $value);
             $segments[] = self::CONTEXT_MARK.$name.'='.$this->encodeScalar($value);
+        }
+
+        if ($generations !== []) {
+            $segments[] = self::GENERATION_MARK.$this->encodeGenerations($definition, $generations);
         }
 
         return $segments === [] ? self::EMPTY : implode(self::SEPARATOR, $segments);
@@ -99,12 +121,58 @@ final class ParameterEncoder
                 throw InvalidParameters::forDefinition($definition->id, sprintf(
                     '"%s" must be %s, %s given%s',
                     $name,
-                    $type->value,
+                    $type === ParameterType::Secret ? 'a secret string' : $type->value,
                     get_debug_type($params[$name]),
                     $this->hint($type, $params[$name]),
                 ));
             }
         }
+    }
+
+    /**
+     * The values ordered by counter name and joined by ".": "8123" for one
+     * counter, "8123.9907" for two. No hash, so a new value can never give an
+     * old key. The names are checked against the definition, because a wrong
+     * or missing counter would give a valid-looking key that its counter's
+     * bump never invalidates.
+     *
+     * @param  non-empty-array<array-key, mixed>  $generations
+     */
+    private function encodeGenerations(Definition $definition, array $generations): string
+    {
+        $values = [];
+
+        foreach ($generations as $name => $value) {
+            // A digit-only name such as "2024" arrives as an int array key.
+            $name = (string) $name;
+
+            if (! is_int($value)) {
+                throw InvalidParameters::forDefinition($definition->id, sprintf(
+                    'generation "%s" must be int, %s given',
+                    $name,
+                    get_debug_type($value),
+                ));
+            }
+
+            $values[$name] = $value;
+        }
+
+        $expected = $definition->generationCounters();
+        // Back to strings: PHP turns a digit-only key such as "2024" into an int.
+        $given = array_map(strval(...), array_keys($values));
+        sort($given, SORT_STRING);
+
+        if ($given !== $expected) {
+            throw InvalidParameters::forDefinition($definition->id, sprintf(
+                'generations must be exactly the counters of the definition: expected [%s], got [%s]',
+                implode(', ', $expected),
+                implode(', ', $given),
+            ));
+        }
+
+        ksort($values, SORT_STRING);
+
+        return implode('.', $values);
     }
 
     private function assertContext(Definition $definition, string $name, mixed $value): void

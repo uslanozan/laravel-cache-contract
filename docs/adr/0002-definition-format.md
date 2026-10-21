@@ -112,6 +112,14 @@ return [
 array key appears twice, so the runtime loader cannot see it. `cache-contract:lint`
 parses the file and reports duplicate keys. Lint runs in CI, so this is enforced.
 
+## Update 2026-10-21: the `secret` parameter type
+
+`params` accepts one more type, `secret`, next to `int`, `string`, `bool`,
+`float` and `array`. It takes a string and writes a keyed hash of it into the
+key instead of the value. A definition with a secret parameter needs
+`APP_KEY`; without it the definitions fail to load. The key format is in
+ADR 0004 (update of the same date).
+
 ## Consequences
 
 - The catalogue is readable top to bottom in one file; search is one `grep`.

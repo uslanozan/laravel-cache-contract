@@ -21,6 +21,10 @@ use Uslanozan\CacheContract\Similarity\NameSimilarity;
  *     php artisan cache-contract:inspect user.profile
  *     php artisan cache-contract:inspect user.profile --param=user_id=42 --context=locale=tr
  *
+ * Secret parameters are never taken from --param (shell history, ps, CI
+ * logs): the command asks for them without echoing, and only the hash is
+ * printed.
+ *
  * Terminal input is always text, so --param values are converted to the
  * declared parameter type here. The key factory itself stays strict (an int
  * parameter never accepts "42" from application code).
@@ -55,11 +59,35 @@ final class InspectCommand extends Command
 
             $params = $this->pairs('param');
             $context = $this->pairs('context');
+            $secrets = array_keys(array_filter($definition->params, fn (ParameterType $type): bool => $type === ParameterType::Secret));
 
-            if ($params === [] && $definition->params !== []) {
+            // A value on the command line ends up in shell history, ps and CI logs.
+            if ($given = array_values(array_intersect(array_keys($params), $secrets))) {
+                $this->components->error(sprintf(
+                    'Secret parameter "%s" is not accepted with --param, so it never lands in shell history or logs; you are asked for it instead.',
+                    implode('", "', $given),
+                ));
+
+                return self::FAILURE;
+            }
+
+            if ($params === [] && count($definition->params) > count($secrets)) {
                 $this->components->info('Pass --param=name=value for every parameter to see a concrete key.');
 
                 return self::SUCCESS;
+            }
+
+            if ($secrets !== []) {
+                if (! $this->input->isInteractive()) {
+                    $this->components->info(sprintf('Secret parameters (%s) are asked for interactively; run without --no-interaction to see a concrete key.', implode(', ', $secrets)));
+
+                    return self::SUCCESS;
+                }
+
+                foreach ($secrets as $name) {
+                    $value = $this->secret("{$name} (secret, not shown)");
+                    $params[$name] = is_string($value) ? $value : '';
+                }
             }
 
             $key = $keys->make($definition, $this->convert($definition, $params), $context);

@@ -19,6 +19,8 @@ use Uslanozan\CacheContract\Definitions\Definition;
  * | same name apart from style/plural, same section  | NameVariant                  | Error    |
  * | … in another section, subjects not different     | NameVariant                  | Warning  |
  * | … in another section, different subjects         | NameVariant                  | Info     |
+ * | a section word moved into the name (same rules)  | NameVariant                  | as above |
+ * | … with different parameters                      | NameVariant                  | Info     |
  * | opposite words                                   | OppositeMeaning              | Info     |
  * | typo or reordered words (any score)              | LexicalSimilarity            | Warning  |
  * | shared words, score ≥ SHARED_WORDS_THRESHOLD     | LexicalSimilarity            | Warning  |
@@ -33,6 +35,7 @@ final class DefaultSimilarityEngine implements SimilarityEngine
 
     public function __construct(
         private readonly NameSimilarity $names = new NameSimilarity,
+        private readonly NameTokenizer $tokenizer = new NameTokenizer,
     ) {}
 
     public function findSimilar(Definition $candidate, array $existing): array
@@ -96,15 +99,14 @@ final class DefaultSimilarityEngine implements SimilarityEngine
         }
 
         if ($name->has(NameSignal::Identical) || $name->has(NameSignal::StyleVariant) || $name->has(NameSignal::PluralVariant)) {
-            if ($candidate->section === $existing->section) {
-                return [FindingType::NameVariant, Severity::Error, ['in the same section']];
-            }
+            return $this->nameVariant($candidate, $existing, []);
+        }
 
-            $sections = sprintf('in sections "%s" and "%s"', $candidate->section, $existing->section);
-
-            return $this->subjectsDiffer($candidate, $existing)
-                ? [FindingType::NameVariant, Severity::Info, [$sections.' with different subjects']]
-                : [FindingType::NameVariant, Severity::Warning, [$sections]];
+        if (($moved = $this->sectionWordMoved($candidate, $existing)) !== null) {
+            // Different inputs usually mean a different scope (Akaunting: apps.testimonials vs one per app).
+            return $this->sameParameters($candidate, $existing)
+                ? $this->nameVariant($candidate, $existing, [$moved])
+                : [FindingType::NameVariant, Severity::Info, [$moved, 'different parameters']];
         }
 
         if ($name->hasOppositeMeaning()) {
@@ -124,6 +126,65 @@ final class DefaultSimilarityEngine implements SimilarityEngine
         }
 
         return null;
+    }
+
+    /**
+     * NameVariant with the severity of the policy table: an error in one
+     * section, a warning across sections, info when the subjects differ.
+     *
+     * @param  list<string>  $leading
+     * @return array{FindingType, Severity, list<string>}
+     */
+    private function nameVariant(Definition $candidate, Definition $existing, array $leading): array
+    {
+        if ($candidate->section === $existing->section) {
+            return [FindingType::NameVariant, Severity::Error, [...$leading, 'in the same section']];
+        }
+
+        $sections = sprintf('in sections "%s" and "%s"', $candidate->section, $existing->section);
+
+        return $this->subjectsDiffer($candidate, $existing)
+            ? [FindingType::NameVariant, Severity::Info, [...$leading, $sections.' with different subjects']]
+            : [FindingType::NameVariant, Severity::Warning, [...$leading, $sections]];
+    }
+
+    /**
+     * A word that sits in one definition's section and in the other's name:
+     * user.profile vs account.user_profile, plans.limits vs plans.plans_limits.
+     * The names alone share too little to be flagged.
+     *
+     * Matches when one name has exactly the words of the other ID, section
+     * first, in order. Only containing them is not enough (user.profile vs
+     * user.profile_photo are different data), and order matters as for names
+     * (D-6: tenant.tenant_members vs tenant.member_tenants are different data).
+     */
+    private function sectionWordMoved(Definition $candidate, Definition $existing): ?string
+    {
+        foreach ([[$candidate, $existing], [$existing, $candidate]] as [$a, $b]) {
+            if ($this->words($b->name) === [...$this->words($a->section), ...$this->words($a->name)]) {
+                return sprintf('a section word moved into the name: "%s" has the words of "%s"', $b->id, $a->id);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string> singular words, in order
+     */
+    private function words(string $text): array
+    {
+        return $this->tokenizer->tokenize($text)->tokens;
+    }
+
+    private function sameParameters(Definition $a, Definition $b): bool
+    {
+        $left = $a->params;
+        $right = $b->params;
+        ksort($left);
+        ksort($right);
+
+        return $left === $right;
     }
 
     /**

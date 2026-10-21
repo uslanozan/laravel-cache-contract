@@ -145,10 +145,16 @@ by severity, then score, then id.
 | same name apart from style / plural, **same section** | `user.active_user` ↔ `user.active_users` | `NameVariant` | Error |
 | … in **another section** | `member.active_users` ↔ `user.active_user` | `NameVariant` | Warning |
 | … in another section **with different subjects** | `company.summary` ↔ `user.summary` | `NameVariant` | Info |
+| a section word moved into the name: one name has exactly the words of the other **whole ID**, section first, in order; same parameters (severity as the three rows above) | `user.profile` ↔ `account.user_profile`, `plans.limits` ↔ `plans.plans_limits` | `NameVariant` | Error / Warning / Info |
+| … with **different parameters** | `apps.testimonials` ↔ `apps.app_testimonials` (+ `alias`) | `NameVariant` | Info |
 | opposite words | `inactive_users` ↔ `active_users` | `OppositeMeaning` | Info |
 | typo or reordered words, **any score** | `actve_users`, `member_tenants` | `LexicalSimilarity` | Warning |
 | shared words, score ≥ `SHARED_WORDS_THRESHOLD` (0.70) | `exchange_rates_eu` ↔ `exchange_rates` (0.74) | `LexicalSimilarity` | Warning |
 | same subject + result type + parameter set | `active_members` ↔ `active_users` (both User, collection, `tenant_id`) | `StructuralDuplicateCandidate` | Info |
+
+A moved section word scores 1.0, like a name variant: the IDs match exactly. When its
+result is only Info (different parameters or subjects), it is used only if the typo,
+reorder and shared-words rows find nothing, so it never hides a Warning (#30 review).
 
 ### Structural comparison
 
@@ -202,6 +208,7 @@ These pairs are tested in `tests/Unit/Similarity/NameSimilarityTest.php`.
 | D-13 | 2026-10-12 | Typos and reordered words warn regardless of score; shared words warn from 0.70 | Typos and reordering are specific signals; shared words alone are a weak hint. 0.70 is a starting value, tuned over time (LRVL-11) |
 | D-14 | 2026-10-12 | Structural comparison = same subject + type + parameter set, exact; never without a subject; severity Info | Catches synonyms the name measures cannot see, but many different lists share a structure. Partial overlap and parameter-name similarity later (LRVL-48) |
 | D-15 | 2026-10-12 | No key-collision finding; the key separator is fixed to `:` instead | Prevents the collision instead of detecting it; the engine needs no key factory |
+| D-16 | 2026-10-21 | A name with exactly the words of another whole ID, section first and in order, is a `NameVariant` with the same severities; Info when the parameters differ | Names alone missed a word that moved between section and name (`user.profile` ↔ `account.user_profile`, LRVL-55 / LRVL-64). Rejected: "contains" (`user.profile` ↔ `user.profile_photo` are different data) and an order-free word set, which brought back the token sort of D-6 (`tenant.tenant_members` ↔ `tenant.member_tenants`). Different parameters usually mean a different scope. An Info result waits for the lexical rows, so a new rule never makes a pair less visible |
 
 ## 8. Open work
 

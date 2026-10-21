@@ -36,7 +36,8 @@
         "required_status_checks": [
           { "context": "CI result" },
           { "context": "PR title" },
-          { "context": "Branch flow" }
+          { "context": "Branch flow" },
+          { "context": "Dependencies" }
         ]
       }
     }

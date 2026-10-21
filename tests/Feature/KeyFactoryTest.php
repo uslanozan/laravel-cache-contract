@@ -35,6 +35,26 @@ it('hashes secret parameters with the application key', function () {
         ->and($key)->not->toContain('plain-token-value');
 });
 
+it('appends the generation segment last (ADR 0009)', function () {
+    $keys = app(KeyFactory::class);
+    $profile = DefinitionBuilder::make('user.profile', params: ['user_id' => ParameterType::Int], version: 2, tags: ['users']);
+
+    expect($keys->make($profile, ['user_id' => 42], [], ['users' => 8123]))
+        ->toBe('cc:user:profile:v2:user_id=42:~g8123')
+        ->and($keys->make($profile, ['user_id' => 42], ['tenant_id' => 7], ['users' => 8123]))
+        ->toBe('cc:user:profile:v2:user_id=42:@tenant_id=7:~g8123')
+        ->and($keys->make($profile, ['user_id' => 42]))
+        ->toBe('cc:user:profile:v2:user_id=42');
+});
+
+it('keeps the generation segment with a custom key format', function () {
+    // Not a key_format placeholder: no format can drop it (ADR 0004, update 2026-10-15).
+    config()->set('cache-contract.key_format', '{section}:{name}:{params}');
+
+    expect(app(KeyFactory::class)->make(DefinitionBuilder::make('user.profile', tags: ['users']), [], [], ['users' => 8123]))
+        ->toBe('user:profile:~g8123');
+});
+
 it('separates tenants, versions and sections', function () {
     $keys = app(KeyFactory::class);
     $list = DefinitionBuilder::make('user.summary', params: ['tenant_id' => ParameterType::Int]);

@@ -6,16 +6,18 @@ use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 use Uslanozan\CacheContract\Tests\Support\DefinitionBuilder;
 
 /**
  * @param  array<string, ParameterType>  $declared
  * @param  array<string, mixed>  $params
  * @param  array<string, scalar>  $context
+ * @param  array<string, int>  $generations
  */
-function encodeParams(array $declared, array $params, array $context = []): string
+function encodeParams(array $declared, array $params, array $context = [], array $generations = []): string
 {
-    return (new ParameterEncoder)->encode(DefinitionBuilder::make('user.list', params: $declared), $params, $context);
+    return (new ParameterEncoder)->encode(DefinitionBuilder::make('user.list', params: $declared), $params, $context, $generations);
 }
 
 it('writes scalar parameters readably, sorted by name', function () {
@@ -144,5 +146,76 @@ describe('secret parameters', function () {
             DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]),
             ['api_token' => 12345],
         ))->toThrow(InvalidParameters::class, '"api_token" must be secret, int given');
+    });
+});
+
+describe('generations (ADR 0009)', function () {
+    // user.list depends on the "users" tag and, through invalidated_by, on "def:user.list".
+    $encode = fn (array $generations, array $tags = ['users'], bool $invalidated = true, array $context = []) => (new ParameterEncoder)->encode(
+        DefinitionBuilder::make('user.list', tags: $tags, invalidatedBy: $invalidated ? [Company::class] : []),
+        [],
+        $context,
+        $generations,
+    );
+
+    it('knows which counters a definition depends on', function () {
+        expect(DefinitionBuilder::make('user.list', tags: ['users', 'admin'], invalidatedBy: [Company::class])->generationCounters())
+            ->toBe(['admin', 'def:user.list', 'users'])
+            ->and(DefinitionBuilder::make('user.list')->generationCounters())->toBe([]);
+    });
+
+    it('appends one counter as its value, after the context', function () use ($encode) {
+        expect($encode(['users' => 8123], invalidated: false, context: ['locale' => 'tr']))->toBe('@locale=tr:~g8123');
+    });
+
+    it('writes several values in counter-name order, whatever order they come in', function () use ($encode) {
+        expect($encode(['users' => 8123, 'def:user.list' => 9907]))->toBe('~g9907.8123')
+            ->and($encode(['def:user.list' => 9907, 'users' => 8123]))->toBe('~g9907.8123');
+    });
+
+    it('gives a new key when any counter changes', function () use ($encode) {
+        $before = ['users' => 8123, 'def:user.list' => 9907];
+
+        expect($encode([...$before, 'users' => 5501]))->not->toBe($encode($before))
+            ->and($encode([...$before, 'def:user.list' => 1]))->not->toBe($encode($before));
+    });
+
+    it('leaves the segment unchanged without generations', function () use ($encode) {
+        expect($encode([]))->toBe('-')
+            ->and(encodeParams(['tenant_id' => ParameterType::Int], ['tenant_id' => 7]))->toBe('tenant_id=7');
+    });
+
+    it('rejects a wrong, missing or extra counter', function (array $generations, string $message) use ($encode) {
+        expect(fn () => $encode($generations))->toThrow(InvalidParameters::class, $message);
+    })->with([
+        'wrong counter' => [['posts' => 1, 'def:user.list' => 2], 'expected [def:user.list, users], got [def:user.list, posts]'],
+        'missing counter' => [['users' => 1], 'expected [def:user.list, users], got [users]'],
+        'extra counter' => [['users' => 1, 'def:user.list' => 2, 'admin' => 3], 'got [admin, def:user.list, users]'],
+    ]);
+
+    it('rejects generations for a definition without counters', function () use ($encode) {
+        expect(fn () => $encode(['users' => 1], tags: [], invalidated: false))
+            ->toThrow(InvalidParameters::class, 'expected [], got [users]');
+    });
+
+    it('rejects a value that is not an int', function (mixed $value, string $given) use ($encode) {
+        expect(fn () => $encode(['users' => $value], invalidated: false))
+            ->toThrow(InvalidParameters::class, "generation \"users\" must be int, {$given} given");
+    })->with([
+        'numeric string' => ['8123', 'string'],
+        'float' => [1.5, 'float'],
+    ]);
+
+    it('accepts a digit-only counter name', function () use ($encode) {
+        // "2024" arrives as an int array key; it is still the tag "2024".
+        expect($encode(['2024' => 7], tags: ['2024'], invalidated: false))->toBe('~g7');
+    });
+
+    it('cannot be imitated by a parameter or context value', function () {
+        // ":" in values is URL-encoded, so no value can open a "~g" segment of its own.
+        $declared = ['name' => ParameterType::String];
+
+        expect(encodeParams($declared, ['name' => 'x:~g5']))->toBe('name=x%3A~g5')
+            ->and(encodeParams([], [], ['tenant' => 'a:~g5']))->toBe('@tenant=a%3A~g5');
     });
 });

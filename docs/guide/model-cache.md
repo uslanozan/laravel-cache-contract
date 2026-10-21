@@ -73,6 +73,10 @@ ModelCache::for(Project::class)
   tenant. The package cannot tell which value a scope uses, so any context
   turns the check off; passing only an unrelated value (for example the
   locale) would cache rows without the tenant.
+- **Never pass a secret as context.** Context values are written into the
+  key as they are, so a token or password passed there can be read in
+  Redis (`KEYS`, `MONITOR`), in logs and in `cache-contract:inspect`. Pass a
+  plain identifier such as the tenant ID instead.
 - `withContext()` returns a new instance; the shared one is never changed,
   so nothing leaks between requests on Octane or queue workers.
 
@@ -157,6 +161,9 @@ the config cannot use it.
 An entry holds the full row, hidden columns (such as `password`) included,
 so a model read from the cache behaves exactly like one read from the
 database. Protect the Redis that holds the cache like the database itself.
+
+Keys are not secret either: the ID and every context value appear in them in
+plain text. Keep tokens, passwords and personal data out of the context.
 
 ## Errors
 

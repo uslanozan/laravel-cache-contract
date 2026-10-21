@@ -38,4 +38,24 @@ final readonly class Definition
     ) {
         $this->id = $section.'.'.$name;
     }
+
+    /**
+     * Names of the generation counters this definition's entries depend on
+     * (ADR 0009): one per tag, plus "def:{id}" when it has invalidated_by.
+     *
+     * @return list<string> sorted
+     */
+    public function generationCounters(): array
+    {
+        $names = $this->tags;
+
+        if ($this->invalidatedBy !== []) {
+            $names[] = 'def:'.$this->id;
+        }
+
+        $names = array_values(array_unique($names));
+        sort($names, SORT_STRING);
+
+        return $names;
+    }
 }

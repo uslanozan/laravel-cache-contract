@@ -37,6 +37,9 @@ it in seconds, or with units so the meaning is visible:
   or weeks, e.g. `'30 days'`.
 - A numeric string such as `'300'` is rejected, because its unit is not
   visible. Write `300` or `'300 seconds'`.
+- A TTL is at most 365 days (`31536000` seconds). The limit catches typos
+  such as an extra `* 1000`; most entries live minutes to hours, and data
+  that changes is cleared on change anyway, not by its TTL.
 
 `php artisan cache-contract:inspect <id>` shows the TTL in seconds and in
 words, e.g. `3600 s (1 hour)`.

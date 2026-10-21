@@ -114,10 +114,10 @@ In `config/cache-contract.php` (publish it with
 
 ```php
 'models' => [
-    'ttl' => 3600,          // seconds an entry lives; required, never forever
+    'ttl' => '1 hour',      // how long an entry lives; required, never forever
     'chunk_size' => 1000,   // keys per Redis read and IDs per query in findMany()
     'overrides' => [
-        User::class => ['ttl' => 600, 'version' => 2],
+        User::class => ['ttl' => '10 minutes', 'version' => 2],
         Post::class => ['safe_scopes' => [PublishedScope::class]],
     ],
 ],
@@ -125,9 +125,9 @@ In `config/cache-contract.php` (publish it with
 
 | Setting | Meaning |
 | :--- | :--- |
-| `ttl` | Default lifetime of a model entry, in seconds. |
+| `ttl` | Default lifetime of a model entry: seconds (`3600`) or a duration (`'1 hour'`, `'1h 30m'`), at most 365 days. The same forms as a definition's `ttl` ([Definitions](definitions.md#ttl)). |
 | `chunk_size` | `findMany()` reads at most this many keys and loads at most this many IDs at once, so one call never blocks Redis or exceeds the database's parameter limit. |
-| `overrides.<Model>.ttl` | Lifetime for this model. |
+| `overrides.<Model>.ttl` | Lifetime for this model, in the same forms. |
 | `overrides.<Model>.version` | **Bump it when the model's table changes** (a column added, removed or renamed): old entries are no longer read and expire through their TTL. Changing only the model class (casts, accessors, `$hidden`) needs no bump. |
 | `overrides.<Model>.safe_scopes` | Global scopes that need no context (see above). |
 

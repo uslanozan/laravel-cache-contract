@@ -141,6 +141,7 @@ describe('configuration', function () {
     })->with([
         'zero TTL' => [['ttl' => 0], 'models.ttl'],
         'TTL in months' => [['ttl' => '1 month'], 'months and years have no fixed length'],
+        'TTL too long' => [['ttl' => '99999999999999999999 weeks'], 'must be at most 365 days'],
         'missing TTL' => [['overrides' => []], 'models.ttl'],
         'not a model' => [['ttl' => 60, 'overrides' => [stdClass::class => []]], 'models.overrides.stdClass'],
         'unknown setting' => [['ttl' => 60, 'overrides' => [Member::class => ['tll' => 60]]], 'unknown setting "tll"'],

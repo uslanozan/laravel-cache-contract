@@ -13,6 +13,10 @@ namespace Uslanozan\CacheContract\Definitions;
  * Units: seconds, minutes, hours, days and weeks, long or short. Months and
  * years are rejected because their length in seconds is not fixed, and a
  * bare numeric string ('300') is rejected because its unit is not visible.
+ *
+ * A TTL is at most 365 days. It catches typos such as an extra factor of
+ * 1000, a total that no longer fits in an int, and values Redis rejects
+ * (SETEX with PHP_INT_MAX fails on every write).
  */
 final class Ttl
 {
@@ -25,6 +29,11 @@ final class Ttl
     ];
 
     private const NOT_FIXED = ['mo', 'month', 'months', 'y', 'yr', 'yrs', 'year', 'years'];
+
+    /** 365 days: longer than any sensible cache entry, far below what Redis or an int can hold. */
+    public const MAX_SECONDS = 31_536_000;
+
+    private const TOO_LONG = 'must be at most 365 days (31536000 seconds)';
 
     /** Largest units first, for forHumans(). */
     private const NAMES = [604800 => 'week', 86400 => 'day', 3600 => 'hour', 60 => 'minute', 1 => 'second'];
@@ -75,7 +84,11 @@ final class Ttl
     private static function parse(mixed $value): array
     {
         if (is_int($value)) {
-            return $value > 0 ? [$value, null] : [null, 'must be positive (entries without expiry are not allowed)'];
+            return match (true) {
+                $value <= 0 => [null, 'must be positive (entries without expiry are not allowed)'],
+                $value > self::MAX_SECONDS => [null, self::TOO_LONG],
+                default => [$value, null],
+            };
         }
 
         if (! is_string($value)) {
@@ -103,6 +116,12 @@ final class Ttl
 
             if (! isset(self::SECONDS[$unit])) {
                 return [null, sprintf('"%s": unknown unit "%s"; use seconds, minutes, hours, days or weeks', $value, $unit)];
+            }
+
+            // Checked before adding, so the total never grows into a float.
+            // (int) of a huge digit string saturates at PHP_INT_MAX.
+            if ((int) $amount > intdiv(self::MAX_SECONDS - $seconds, self::SECONDS[$unit])) {
+                return [null, sprintf('"%s": %s', $value, self::TOO_LONG)];
             }
 
             $seconds += (int) $amount * self::SECONDS[$unit];

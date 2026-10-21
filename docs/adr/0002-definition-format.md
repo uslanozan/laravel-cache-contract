@@ -143,6 +143,13 @@ passed as seconds) and many bare numbers.
 - **Months and years are rejected:** their length in seconds is not fixed.
 - **A bare numeric string (`'300'`) is rejected:** its unit is not visible.
   An integer is still read as seconds.
+- **At most 365 days**, for integers and durations alike. Without a limit,
+  a huge duration grew past an int and failed at boot with a `TypeError`,
+  and `PHP_INT_MAX` passed validation but made every Redis write fail
+  (`SETEX`: invalid expire time). The limit also catches typos such as an
+  extra `* 1000`. Entries that change are cleared on change (ADR 0009), so
+  a long TTL is rarely needed; one year leaves room for data that never
+  changes.
 - **No change elsewhere:** zero, negative and missing TTLs are still
   rejected. The loader turns every TTL into seconds, so `Definition::$ttl`
   stays an integer. `models.ttl` and the model overrides accept the same

@@ -69,6 +69,7 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'zero ttl' => [['ttl' => 0], '"ttl" must be positive (entries without expiry are not allowed)'],
     'numeric string ttl' => [['ttl' => '300'], '"ttl" "300" needs a unit, e.g. "300 seconds", or write it as the number 300'],
     'ttl in months' => [['ttl' => '1 month'], '"ttl" "1 month": months and years have no fixed length; use days or weeks, e.g. "30 days"'],
+    'ttl too long' => [['ttl' => '99999999999999999999 weeks'], '"ttl" "99999999999999999999 weeks": must be at most 365 days (31536000 seconds)'],
     'ttl with an unknown unit' => [['ttl' => '2 fortnights'], '"ttl" "2 fortnights": unknown unit "fortnights"; use seconds, minutes, hours, days or weeks'],
     'blank description' => [['description' => '   '], '"description" must be a non-empty string'],
     'subject is not a class' => [['subject' => 'App\Models\Nope'], '"subject" must be an existing Eloquent model class'],

@@ -17,6 +17,9 @@ it('reads seconds and durations with units', function (int|string $ttl, int $sec
     'weeks' => ['2 weeks', 1209600],
     'seconds' => ['45 seconds', 45],
     'case and spaces' => [' 2 Hours ', 7200],
+    'the longest as a number' => [Ttl::MAX_SECONDS, 31536000],
+    'the longest as a duration' => ['365 days', 31536000],
+    'the longest in parts' => ['52 weeks 1 day', 31536000],
 ]);
 
 it('rejects what is not a fixed, positive duration', function (mixed $ttl, string $problem) {
@@ -32,6 +35,12 @@ it('rejects what is not a fixed, positive duration', function (mixed $ttl, strin
     'no number' => ['hourly', 'is not a duration'],
     'float' => [1.5, 'a positive number of seconds or a duration'],
     'null' => [null, 'a positive number of seconds or a duration'],
+    'one second too long' => [Ttl::MAX_SECONDS + 1, 'must be at most 365 days'],
+    'too long for Redis' => [PHP_INT_MAX, 'must be at most 365 days'],
+    'one day too long' => ['366 days', '"366 days": must be at most 365 days'],
+    'too long in parts' => ['365 days 1s', 'must be at most 365 days'],
+    'past an int' => ['15250284452472 weeks', 'must be at most 365 days'],
+    'past any number' => ['99999999999999999999 weeks', 'must be at most 365 days'],
 ]);
 
 it('writes a duration for people', function (int $seconds, string $text) {

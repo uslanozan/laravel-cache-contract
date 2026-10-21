@@ -143,13 +143,15 @@ return [
     | paths:   files or directories to scan; every .php file under them
     | exclude: files or directories to skip, also inside "paths". storage/
     |          holds compiled Blade views, which would count every call in a
-    |          template a second time
+    |          template a second time. tests/ sets up and fakes the cache
+    |          (Cache::shouldReceive, Cache::put in a setUp), which is not
+    |          the application's usage; remove it to scan the tests too
     |
     */
 
     'scanner' => [
         'paths' => ['.'],
-        'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache'],
+        'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache', 'tests'],
     ],
 
 ];

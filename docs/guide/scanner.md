@@ -32,13 +32,18 @@ Each call is reported with its file, line, class and method, and:
 // config/cache-contract.php
 'scanner' => [
     'paths' => ['.'],
-    'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache'],
+    'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache', 'tests'],
 ],
 ```
 
 Paths are relative to the project root. `exclude` skips those files and
 directories even inside `paths`. Keep `storage` excluded: it holds compiled
 Blade views, which would count every call in a template a second time.
+
+`tests` is excluded because test code sets up and fakes the cache
+(`Cache::shouldReceive('get')`, `Cache::put('user:1', $user)` in a setUp).
+Those calls are not your application's cache usage and would inflate the
+inventory. Remove `tests` from the list to scan them too.
 
 A file that does not parse is listed as an error and the scan goes on.
 
@@ -49,5 +54,8 @@ A file that does not parse is listed as an error and the scan goes on.
 - A key built into a variable first (`$key = 'user:'.$id; Cache::get($key)`)
   is `unresolved`.
 - Blade views (`*.blade.php`) are not scanned.
+- `exclude` matches paths from the project root: `vendor` skips only the root
+  `vendor/`. A nested one, such as `packages/acme/vendor`, is still scanned
+  unless it is listed.
 - Facade aliases other than `Cache` and `Redis` from `config/app.php` are not
   recognised.

@@ -82,7 +82,8 @@ return [
     | tell which value a scope uses, so any context turns the check off; an
     | unrelated one (e.g. only the locale) caches rows without the tenant.
     |
-    | ttl:        seconds a model entry lives; required, never forever
+    | ttl:        how long a model entry lives, in seconds or with units
+    |             ("1 hour", "30 minutes"); required, never forever
     | chunk_size: findMany() reads at most this many keys per MGET and loads
     |             at most this many IDs per query, so one call never blocks
     |             Redis or exceeds the database's parameter limit
@@ -124,7 +125,7 @@ return [
     |         'purpose'     => 'active_list',           // required
     |         'type'        => 'collection',            // required
     |         'params'      => ['tenant_id' => 'int'],  // optional
-    |         'ttl'         => 300,                     // required, seconds
+    |         'ttl'         => '5 minutes',             // required: seconds or a duration
     |         'description' => 'Active users of a tenant.', // required
     |     ],
     | ],

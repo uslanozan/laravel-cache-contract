@@ -130,3 +130,27 @@ ADR 0004 (update of the same date).
   runtime exception for unknown IDs. A generated IDE helper is possible later.
 - If the single file becomes unmanageable in practice, splitting is a new ADR;
   IDs (`section.name`) would not need to change.
+
+## Update 2026-10-21: TTLs with units
+
+`ttl` also accepts a duration with units, so the unit is visible where the
+value is written: `'ttl' => '15 minutes'`, `'1 day'`, `'1h 30m'`. The public
+scan found TTLs whose unit was guessed wrong (a value written as minutes but
+passed as seconds) and many bare numbers.
+
+- **Units:** seconds, minutes, hours, days and weeks, long or short
+  (`s`, `m`, `h`, `d`, `w`). Several parts add up.
+- **Months and years are rejected:** their length in seconds is not fixed.
+- **A bare numeric string (`'300'`) is rejected:** its unit is not visible.
+  An integer is still read as seconds.
+- **At most 365 days**, for integers and durations alike. Without a limit,
+  a huge duration grew past an int and failed at boot with a `TypeError`,
+  and `PHP_INT_MAX` passed validation but made every Redis write fail
+  (`SETEX`: invalid expire time). The limit also catches typos such as an
+  extra `* 1000`. Entries that change are cleared on change (ADR 0009), so
+  a long TTL is rarely needed; one year leaves room for data that never
+  changes.
+- **No change elsewhere:** zero, negative and missing TTLs are still
+  rejected. The loader turns every TTL into seconds, so `Definition::$ttl`
+  stays an integer. `models.ttl` and the model overrides accept the same
+  forms.

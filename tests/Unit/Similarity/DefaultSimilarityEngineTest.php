@@ -92,6 +92,16 @@ it('applies the severity policy', function (Definition $candidate, Definition $e
         DefinitionBuilder::make('apps.testimonials'),
         FindingType::NameVariant, Severity::Info,
     ],
+    'long names with different parameters keep their shared-words warning' => [
+        DefinitionBuilder::make('apps.app_active_user_list', params: ['alias' => ParameterType::String, 'k' => ParameterType::String]),
+        DefinitionBuilder::make('apps.active_user_list', params: ['k' => ParameterType::String]),
+        FindingType::LexicalSimilarity, Severity::Warning,
+    ],
+    'long names with different subjects keep their shared-words warning' => [
+        DefinitionBuilder::make('account.user_active_session_list', subject: Company::class),
+        DefinitionBuilder::make('user.active_session_list', subject: User::class),
+        FindingType::LexicalSimilarity, Severity::Warning,
+    ],
     'typo' => [
         DefinitionBuilder::make('user.actve_users'),
         DefinitionBuilder::make('user.active_users'),
@@ -172,10 +182,11 @@ it('explains a finding with leading and name reasons', function () {
     ]);
 });
 
-it('says which word moved between section and name', function () {
+it('says which word moved between section and name, with a score that matches the verdict', function () {
     $finding = findingFor(DefinitionBuilder::make('account.user_profile'), DefinitionBuilder::make('user.profile'));
 
-    expect($finding?->reasons[0])->toBe('a section word moved into the name: "account.user_profile" has the words of "user.profile"')
+    expect($finding?->score)->toBe(1.0)
+        ->and($finding?->reasons[0])->toBe('a section word moved into the name: "account.user_profile" has the words of "user.profile"')
         ->and($finding?->reasons[1])->toBe('in sections "account" and "user"');
 });
 

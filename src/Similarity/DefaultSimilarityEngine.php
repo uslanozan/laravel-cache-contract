@@ -20,7 +20,8 @@ use Uslanozan\CacheContract\Definitions\Definition;
  * | … in another section, subjects not different     | NameVariant                  | Warning  |
  * | … in another section, different subjects         | NameVariant                  | Info     |
  * | a section word moved into the name (same rules)  | NameVariant                  | as above |
- * | … with different parameters                      | NameVariant                  | Info     |
+ * | … as Info (different parameters or subjects):    | NameVariant                  | Info     |
+ * |   only when no row below finds more              |                              |          |
  * | opposite words                                   | OppositeMeaning              | Info     |
  * | typo or reordered words (any score)              | LexicalSimilarity            | Warning  |
  * | shared words, score ≥ SHARED_WORDS_THRESHOLD     | LexicalSimilarity            | Warning  |
@@ -35,19 +36,21 @@ final class DefaultSimilarityEngine implements SimilarityEngine
 
     public function __construct(
         private readonly NameSimilarity $names = new NameSimilarity,
-        private readonly NameTokenizer $tokenizer = new NameTokenizer,
     ) {}
 
     public function findSimilar(Definition $candidate, array $existing): array
     {
         $findings = [];
+        // Words of each section and name, tokenized once per call: the candidate's
+        // are needed for every comparison. Kept per call, not on the shared instance.
+        $words = [];
 
         foreach ($existing as $definition) {
             if ($definition == $candidate) {
                 continue; // the candidate itself
             }
 
-            $finding = $this->compare($candidate, $definition);
+            $finding = $this->compare($candidate, $definition, $words);
 
             if ($finding !== null) {
                 $findings[] = $finding;
@@ -60,7 +63,10 @@ final class DefaultSimilarityEngine implements SimilarityEngine
         return $findings;
     }
 
-    private function compare(Definition $candidate, Definition $existing): ?Finding
+    /**
+     * @param  array<string, list<string>>  $words  tokenized text, shared within one findSimilar() call
+     */
+    private function compare(Definition $candidate, Definition $existing, array &$words): ?Finding
     {
         if ($candidate->id === $existing->id) {
             return new Finding(FindingType::IdentifierCollision, Severity::Error, $existing, 1.0, [
@@ -76,53 +82,71 @@ final class DefaultSimilarityEngine implements SimilarityEngine
             $reasons[] = 'same subject, result type and parameters';
         }
 
-        $classification = $this->classify($candidate, $existing, $name, $structural);
+        $classification = $this->classify($candidate, $existing, $name, $structural, $words);
 
         if ($classification === null) {
             return null;
         }
 
-        [$type, $severity, $leading] = $classification;
+        [$type, $severity, $leading, $score] = $classification;
 
-        return new Finding($type, $severity, $existing, $name->score, [...$leading, ...$reasons]);
+        return new Finding($type, $severity, $existing, $score ?? $name->score, [...$leading, ...$reasons]);
     }
 
     /**
-     * @return array{FindingType, Severity, list<string>}|null type, severity and leading reasons
+     * @param  array<string, list<string>>  $words
+     * @return array{FindingType, Severity, list<string>, float|null}|null type, severity, leading
+     *                                                                     reasons and a score that
+     *                                                                     replaces the name score
      */
-    private function classify(Definition $candidate, Definition $existing, NameScore $name, bool $structural): ?array
+    private function classify(Definition $candidate, Definition $existing, NameScore $name, bool $structural, array &$words): ?array
     {
         if ($candidate->subject !== null && $candidate->subject === $existing->subject && $candidate->purpose === $existing->purpose) {
             return [FindingType::PurposeCollision, Severity::Error, [
                 sprintf('same subject (%s) and purpose "%s"', $existing->subject, $existing->purpose),
-            ]];
+            ], null];
         }
 
         if ($name->has(NameSignal::Identical) || $name->has(NameSignal::StyleVariant) || $name->has(NameSignal::PluralVariant)) {
-            return $this->nameVariant($candidate, $existing, []);
+            return [...$this->nameVariant($candidate, $existing, []), null];
         }
 
-        if (($moved = $this->sectionWordMoved($candidate, $existing)) !== null) {
+        // A moved section word matches the IDs exactly, so its findings score 1.0,
+        // like the name variants above. An Info result waits: it must never hide a
+        // Warning that the lexical checks below would give the same pair.
+        $deferred = null;
+
+        if (($moved = $this->sectionWordMoved($candidate, $existing, $words)) !== null) {
             // Different inputs usually mean a different scope (Akaunting: apps.testimonials vs one per app).
-            return $this->sameParameters($candidate, $existing)
+            $variant = $this->sameParameters($candidate, $existing)
                 ? $this->nameVariant($candidate, $existing, [$moved])
                 : [FindingType::NameVariant, Severity::Info, [$moved, 'different parameters']];
+
+            if ($variant[1] !== Severity::Info) {
+                return [...$variant, 1.0];
+            }
+
+            $deferred = [...$variant, 1.0];
         }
 
         if ($name->hasOppositeMeaning()) {
-            return [FindingType::OppositeMeaning, Severity::Info, []];
+            return [FindingType::OppositeMeaning, Severity::Info, [], null];
         }
 
         if ($name->has(NameSignal::Typo) || $name->has(NameSignal::Reordered)) {
-            return [FindingType::LexicalSimilarity, Severity::Warning, []];
+            return [FindingType::LexicalSimilarity, Severity::Warning, [], null];
         }
 
         if ($name->has(NameSignal::SharedWords) && $name->score >= self::SHARED_WORDS_THRESHOLD) {
-            return [FindingType::LexicalSimilarity, Severity::Warning, []];
+            return [FindingType::LexicalSimilarity, Severity::Warning, [], null];
+        }
+
+        if ($deferred !== null) {
+            return $deferred;
         }
 
         if ($structural) {
-            return [FindingType::StructuralDuplicateCandidate, Severity::Info, []];
+            return [FindingType::StructuralDuplicateCandidate, Severity::Info, [], null];
         }
 
         return null;
@@ -158,10 +182,13 @@ final class DefaultSimilarityEngine implements SimilarityEngine
      * user.profile_photo are different data), and order matters as for names
      * (D-6: tenant.tenant_members vs tenant.member_tenants are different data).
      */
-    private function sectionWordMoved(Definition $candidate, Definition $existing): ?string
+    /**
+     * @param  array<string, list<string>>  $words
+     */
+    private function sectionWordMoved(Definition $candidate, Definition $existing, array &$words): ?string
     {
         foreach ([[$candidate, $existing], [$existing, $candidate]] as [$a, $b]) {
-            if ($this->words($b->name) === [...$this->words($a->section), ...$this->words($a->name)]) {
+            if ($this->words($b->name, $words) === [...$this->words($a->section, $words), ...$this->words($a->name, $words)]) {
                 return sprintf('a section word moved into the name: "%s" has the words of "%s"', $b->id, $a->id);
             }
         }
@@ -170,13 +197,17 @@ final class DefaultSimilarityEngine implements SimilarityEngine
     }
 
     /**
-     * @return list<string> singular words, in order
+     * Singular words in order, with the same tokenizer as the name score.
+     *
+     * @param  array<string, list<string>>  $memo
+     * @return list<string>
      */
-    private function words(string $text): array
+    private function words(string $text, array &$memo): array
     {
-        return $this->tokenizer->tokenize($text)->tokens;
+        return $memo[$text] ??= $this->names->tokenizer()->tokenize($text)->tokens;
     }
 
+    /** Same parameter names and types, in any order. */
     private function sameParameters(Definition $a, Definition $b): bool
     {
         $left = $a->params;
@@ -198,12 +229,7 @@ final class DefaultSimilarityEngine implements SimilarityEngine
             return false;
         }
 
-        $left = $a->params;
-        $right = $b->params;
-        ksort($left);
-        ksort($right);
-
-        return $left === $right;
+        return $this->sameParameters($a, $b);
     }
 
     private function subjectsDiffer(Definition $a, Definition $b): bool

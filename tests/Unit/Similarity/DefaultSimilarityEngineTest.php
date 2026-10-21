@@ -62,6 +62,46 @@ it('applies the severity policy', function (Definition $candidate, Definition $e
         DefinitionBuilder::make('user.summary', subject: User::class),
         FindingType::NameVariant, Severity::Info,
     ],
+    'section word moved into the name, other section' => [
+        DefinitionBuilder::make('account.user_profile'),
+        DefinitionBuilder::make('user.profile'),
+        FindingType::NameVariant, Severity::Warning,
+    ],
+    'section word moved into the name, either direction' => [
+        DefinitionBuilder::make('user.profile'),
+        DefinitionBuilder::make('account.user_profile'),
+        FindingType::NameVariant, Severity::Warning,
+    ],
+    'section word moved into the name, same section' => [
+        DefinitionBuilder::make('plans.plans_limits'),
+        DefinitionBuilder::make('plans.limits'),
+        FindingType::NameVariant, Severity::Error,
+    ],
+    'section word moved into the name, style and plural apart' => [
+        DefinitionBuilder::make('billing.plan-limit'),
+        DefinitionBuilder::make('plans.limits'),
+        FindingType::NameVariant, Severity::Warning,
+    ],
+    'section word moved into the name, different subjects' => [
+        DefinitionBuilder::make('account.user_summary', subject: Company::class),
+        DefinitionBuilder::make('user.summary', subject: User::class),
+        FindingType::NameVariant, Severity::Info,
+    ],
+    'section word moved into the name, different parameters' => [
+        DefinitionBuilder::make('apps.app_testimonials', params: ['alias' => ParameterType::String]),
+        DefinitionBuilder::make('apps.testimonials'),
+        FindingType::NameVariant, Severity::Info,
+    ],
+    'long names with different parameters keep their shared-words warning' => [
+        DefinitionBuilder::make('apps.app_active_user_list', params: ['alias' => ParameterType::String, 'k' => ParameterType::String]),
+        DefinitionBuilder::make('apps.active_user_list', params: ['k' => ParameterType::String]),
+        FindingType::LexicalSimilarity, Severity::Warning,
+    ],
+    'long names with different subjects keep their shared-words warning' => [
+        DefinitionBuilder::make('account.user_active_session_list', subject: Company::class),
+        DefinitionBuilder::make('user.active_session_list', subject: User::class),
+        FindingType::LexicalSimilarity, Severity::Warning,
+    ],
     'typo' => [
         DefinitionBuilder::make('user.actve_users'),
         DefinitionBuilder::make('user.active_users'),
@@ -99,6 +139,18 @@ it('reports nothing for clearly different definitions', function (Definition $ca
         DefinitionBuilder::make('user.profile', type: ResultType::Array, subject: User::class, params: ['user_id' => ParameterType::Int]),
         DefinitionBuilder::make('user.active_list', subject: User::class, params: ['tenant_id' => ParameterType::Int]),
     ],
+    'one name only contains the other ID' => [
+        DefinitionBuilder::make('user.profile_photo'),
+        DefinitionBuilder::make('user.profile'),
+    ],
+    'section word in the name, but in another order' => [
+        DefinitionBuilder::make('account.profile_user'),
+        DefinitionBuilder::make('user.profile'),
+    ],
+    'section and name share a word, but not all of it' => [
+        DefinitionBuilder::make('account.user_settings'),
+        DefinitionBuilder::make('user.profile'),
+    ],
     'same structure but no subject' => [
         DefinitionBuilder::make('external.weather', type: ResultType::Array, params: ['region' => ParameterType::String]),
         DefinitionBuilder::make('external.exchange_rates', type: ResultType::Array, params: ['region' => ParameterType::String]),
@@ -128,6 +180,14 @@ it('explains a finding with leading and name reasons', function () {
         'differs only by singular/plural',
         'same subject, result type and parameters',
     ]);
+});
+
+it('says which word moved between section and name, with a score that matches the verdict', function () {
+    $finding = findingFor(DefinitionBuilder::make('account.user_profile'), DefinitionBuilder::make('user.profile'));
+
+    expect($finding?->score)->toBe(1.0)
+        ->and($finding?->reasons[0])->toBe('a section word moved into the name: "account.user_profile" has the words of "user.profile"')
+        ->and($finding?->reasons[1])->toBe('in sections "account" and "user"');
 });
 
 it('never reports the candidate against itself, but reports another definition with its id', function () {

@@ -76,7 +76,7 @@ not cover: words that move between the section and the name (finding 6).
 | Pixelfed | `profile:following_count:{id}` / `profile:follower_count:{id}` | `profile.following_count` / `profile.follower_count` | distinct | 0.57 | shared_words | none | ok |
 | Pixelfed | `pf:acct:settings:hidden-following:{id}` / `pf:acct-trans:hideFollowing:{id}` | `acct_settings.hidden-following` / `acct_trans.hideFollowing` | distinct | 0.60 | shared_words | none | ok |
 | Pixelfed | `api:v1:instance-data-response-v1` / `api_v1_instance_data_response_v1` | `api.v1:instance-data-response-v1` / `api.v1_instance_data_response_v1` | duplicate | 1.00 | style_variant | name_variant (error) | ok |
-| Akaunting | `apps.testimonials.{k}` / `apps.{alias}.testimonials.{k}` | `apps.testimonials` / `apps.app_testimonials` (invented name) | distinct | 0.62 | shared_words | none | ok |
+| Akaunting | `apps.testimonials.{k}` / `apps.{alias}.testimonials.{k}` | `apps.testimonials` / `apps.app_testimonials` (invented name) | distinct | 0.62 | shared_words | name_variant (info) | ok |
 | Akaunting | `apps.pre_sale.{k}` / `apps.paid.{k}` | `apps.pre_sale` / `apps.paid` | distinct | 0.12 | - | none | ok |
 | Akaunting | `apps.pre_sale.{k}` / `apps.free.{k}` | `apps.pre_sale` / `apps.free` | distinct | 0.19 | - | none | ok |
 | Akaunting | `apps.paid.{k}` / `apps.free.{k}` | `apps.paid` / `apps.free` | distinct | 0.00 | - | none | ok |
@@ -128,6 +128,11 @@ not cover: words that move between the section and the name (finding 6).
    The last row is a realistic duplicate: the same data under a new section,
    with the old section folded into the name. This is an engine gap, tracked
    in LRVL-64.
+
+   **Update (LRVL-64):** the engine now also compares one name with the other
+   whole ID (section first, in order). All four rows above are found, and the
+   Akaunting pair, whose definitions differ by the `alias` parameter, gets an
+   `info` hint instead of nothing; its verdict stays ok.
 
 ## What this means for the next issues
 

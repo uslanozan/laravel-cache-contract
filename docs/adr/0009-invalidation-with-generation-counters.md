@@ -92,8 +92,12 @@ become readable again. The tests pin this as well.
   placeholder, because a custom format that left it out would make every
   invalidation silently do nothing. The key factory always appends it, the
   way it appends context (`@tenant_id=7`), for example
-  `cc:user:profile:v2:user_id=42:~g8123`. The marker and the encoding for
-  several counters (a short hash) are fixed with the implementation.
+  `cc:user:profile:v2:user_id=42:~g8123`. The segment is `~g` and the
+  counter values ordered by counter name, joined by `.` (`~g8123`,
+  `~g9907.8123`): one shape for any number of counters and no hash, so a new
+  value can never give an old key. The names are not written; the key
+  factory checks that the given generations are exactly the definition's
+  counters (ADR 0004, "generation segment"; LRVL-58).
 - **The `KeyFactory` stays pure** and never talks to Redis: the caller reads
   the counters and passes the generations in, like context, so
   `cache-contract:inspect` can still build a key without a Redis connection.

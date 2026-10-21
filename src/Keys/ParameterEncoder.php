@@ -6,6 +6,7 @@ namespace Uslanozan\CacheContract\Keys;
 
 use Uslanozan\CacheContract\Definitions\Definition;
 use Uslanozan\CacheContract\Definitions\ParameterType;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 
 /**
@@ -23,6 +24,9 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
  * - Strings are URL-encoded, so a value containing ":" or "=" can never
  *   make two different parameter sets look the same.
  * - Arrays are canonicalized and hashed: "ids=#3f2a…".
+ * - Secrets are replaced by an HMAC-SHA256 keyed with a key derived from
+ *   APP_KEY: "api_token=#9c1e…" (32 hex). Without the application key the
+ *   hash of a short token could be guessed by hashing candidates.
  * - Generations (ADR 0009) come last: the values ordered by counter name,
  *   joined by "." ("~g8123", "~g8123.9907"). The names must be exactly the
  *   definition's counters (Definition::generationCounters()), so they need not
@@ -40,6 +44,30 @@ final class ParameterEncoder
     private const GENERATION_MARK = '~g';
 
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
+
+    /** HMAC key for secret parameters, derived from APP_KEY; null when there is none. */
+    private readonly ?string $secretKey;
+
+    /**
+     * @param  string|null  $appKey  the application key (config "app.key"); only needed
+     *                               when a definition has a secret parameter
+     */
+    public function __construct(?string $appKey = null)
+    {
+        if ($appKey === null || $appKey === '') {
+            $this->secretKey = null;
+
+            return;
+        }
+
+        // The same key material as Laravel's Encrypter: "base64:…" is decoded.
+        if (str_starts_with($appKey, 'base64:')) {
+            $appKey = base64_decode(substr($appKey, 7), true) ?: $appKey;
+        }
+
+        // A key of its own, so the hashes never equal anything else keyed with APP_KEY.
+        $this->secretKey = hash_hmac('sha256', 'cache-contract:secret-parameters', $appKey, true);
+    }
 
     /**
      * @param  array<string, mixed>  $params
@@ -93,7 +121,7 @@ final class ParameterEncoder
                 throw InvalidParameters::forDefinition($definition->id, sprintf(
                     '"%s" must be %s, %s given%s',
                     $name,
-                    $type->value,
+                    $type === ParameterType::Secret ? 'a secret string' : $type->value,
                     get_debug_type($params[$name]),
                     $this->hint($type, $params[$name]),
                 ));
@@ -184,7 +212,7 @@ final class ParameterEncoder
     {
         return match ($type) {
             ParameterType::Int => is_int($value),
-            ParameterType::String => is_string($value),
+            ParameterType::String, ParameterType::Secret => is_string($value),
             ParameterType::Bool => is_bool($value),
             ParameterType::Float => is_float($value) && is_finite($value),
             ParameterType::Array => is_array($value),
@@ -196,6 +224,11 @@ final class ParameterEncoder
         if ($type === ParameterType::Array) {
             /** @var array<mixed> $value checked in assertParameters() */
             return '#'.$this->hash($value);
+        }
+
+        if ($type === ParameterType::Secret) {
+            /** @var string $value checked in assertParameters() */
+            return '#'.$this->secretHash($value);
         }
 
         /** @var scalar $value checked in assertParameters() */
@@ -210,6 +243,21 @@ final class ParameterEncoder
             is_float($value) => json_encode($value, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR),
             default => rawurlencode($value),
         };
+    }
+
+    /**
+     * The same secret always gives the same hash within one application; the
+     * value cannot be read back or guessed without APP_KEY.
+     *
+     * @throws InvalidConfiguration when there is no application key
+     */
+    private function secretHash(string $value): string
+    {
+        if ($this->secretKey === null) {
+            throw InvalidConfiguration::missingAppKey();
+        }
+
+        return substr(hash_hmac('sha256', $value, $this->secretKey), 0, 32);
     }
 
     /**

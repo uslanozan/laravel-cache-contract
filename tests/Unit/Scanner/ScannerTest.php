@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Filesystem\Filesystem;
 use PhpParser\Error;
+use Uslanozan\CacheContract\Scanner\CacheUsage;
 use Uslanozan\CacheContract\Scanner\Scanner;
-use Uslanozan\CacheContract\Scanner\Usage;
 
 // The fixtures rebuild the call styles found in docs/research/cache-usage-in-the-wild.md.
 
@@ -14,7 +15,7 @@ use Uslanozan\CacheContract\Scanner\Usage;
 function scannedUsages(string $fixture): array
 {
     return array_map(
-        fn (Usage $usage) => implode(' ', [
+        fn (CacheUsage $usage) => implode(' ', [
             $usage->style->value, $usage->method, $usage->operation->value, $usage->keyKind->value, $usage->key ?? '-',
         ]),
         (new Scanner)->scanFile(__DIR__."/../../Fixtures/Scanner/{$fixture}.php"),
@@ -30,7 +31,52 @@ it('finds facade calls, also through store() and tags() and the global alias', f
         'facade add write exact warmup:lock',
         'facade flush forget none -',
         'facade increment write exact visits',
+        "facade get read template sprintf('preference%d%s', \$id, \$key)",
+        "facade forever write opaque hash('sha256', \$key)",
     ]);
+});
+
+it('finds the facades imported under the global alias or another name', function () {
+    expect(scannedUsages('AliasUsage'))->toBe([
+        'facade get read exact global-alias',
+        'facade put write exact renamed',
+        'redis del forget exact renamed-redis',
+    ]);
+});
+
+it('records the class and function each call is in', function () {
+    $usages = (new Scanner)->scanFile(__DIR__.'/../../Fixtures/Scanner/ContextUsage.php');
+    $fixtures = 'Uslanozan\CacheContract\Tests\Fixtures\Scanner';
+
+    expect(array_map(fn (CacheUsage $usage) => [$usage->class, $usage->function, $usage->key], $usages))->toBe([
+        [null, null, 'top-level'],
+        [null, "{$fixtures}\\warm", 'warm'],
+        ["{$fixtures}\\ContextUsage", 'handle', 'method'],
+        ["{$fixtures}\\ContextUsage", 'handle', 'arrow'],
+        [null, '__invoke', 'anonymous'],
+    ]);
+});
+
+it('scans directories, skips excluded paths and Blade views, and goes on after a file that does not parse', function () {
+    $root = sys_get_temp_dir().'/cache-contract-scan-'.uniqid();
+    mkdir("{$root}/app", 0777, true);
+    mkdir("{$root}/vendor/acme", 0777, true);
+    $root = realpath($root);
+    file_put_contents("{$root}/app/Good.php", "<?php\nCache::get('good');\n");
+    file_put_contents("{$root}/app/Broken.php", '<?php Cache::get(');
+    file_put_contents("{$root}/app/notes.txt", "Cache::get('text');");
+    file_put_contents("{$root}/app/feed.blade.php", "@php echo '<?xml version=\"1.0\"?>'; @endphp");
+    file_put_contents("{$root}/vendor/acme/Library.php", "<?php\nCache::get('vendor');\n");
+
+    try {
+        $result = (new Scanner)->scanPaths([$root, "{$root}/missing"], ["{$root}/vendor"]);
+    } finally {
+        (new Filesystem)->deleteDirectory($root);
+    }
+
+    expect(array_map(fn (CacheUsage $usage) => [$usage->file, $usage->key], $result->usages))
+        ->toBe([["{$root}/app/Good.php", 'good']])
+        ->and(array_keys($result->errors))->toBe(["{$root}/missing", "{$root}/app/Broken.php"]);
 });
 
 it('finds the cache() helper as a read, a write and a receiver', function () {

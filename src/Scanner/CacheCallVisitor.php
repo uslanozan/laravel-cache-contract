@@ -25,6 +25,8 @@ use PhpParser\Node\NullableType;
 use PhpParser\Node\Scalar\InterpolatedString;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Function_;
 use PhpParser\NodeFinder;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\PrettyPrinter\Standard;
@@ -54,8 +56,17 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     /** Calls that hand back another cache object instead of doing an operation. */
     private const RECEIVER_METHODS = ['store', 'driver', 'tags', 'connection'];
 
-    /** @var list<Usage> */
+    /** A key that is only a hash of its parts has nothing left to read. */
+    private const HASH_FUNCTIONS = ['md5', 'sha1', 'crc32', 'hash', 'hash_hmac'];
+
+    /** @var list<CacheUsage> */
     public array $usages = [];
+
+    /** @var list<string|null> names of the classes being walked, null for an anonymous one */
+    private array $classes = [];
+
+    /** @var list<string|null> names of the functions being walked; a closure repeats the one around it */
+    private array $functions = [];
 
     /** @var list<list<string>> cache-typed property names, one entry per class being walked */
     private array $properties = [];
@@ -73,8 +84,14 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     public function enterNode(Node $node): null
     {
         if ($node instanceof ClassLike) {
+            $this->classes[] = $node->namespacedName?->toString();
             $this->properties[] = $this->cacheProperties($node);
         } elseif ($node instanceof FunctionLike) {
+            $this->functions[] = match (true) {
+                $node instanceof ClassMethod => $node->name->toString(),
+                $node instanceof Function_ => $node->namespacedName?->toString() ?? $node->name->toString(),
+                default => end($this->functions) ?: null,
+            };
             $this->variables[] = $this->cacheVariables($node);
         } elseif ($node instanceof StaticCall || $node instanceof MethodCall || $node instanceof NullsafeMethodCall || $node instanceof FuncCall) {
             $this->record($node);
@@ -86,8 +103,10 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     public function leaveNode(Node $node): null
     {
         if ($node instanceof ClassLike) {
+            array_pop($this->classes);
             array_pop($this->properties);
         } elseif ($node instanceof FunctionLike) {
+            array_pop($this->functions);
             array_pop($this->variables);
         }
 
@@ -125,7 +144,17 @@ final class CacheCallVisitor extends NodeVisitorAbstract
 
         [$keyKind, $key] = $this->key($call->getArgs()[0]->value ?? null);
 
-        $this->usages[] = new Usage($this->file, $call->getStartLine(), $style, $method, $operation, $keyKind, $key);
+        $this->usages[] = new CacheUsage(
+            $this->file,
+            $call->getStartLine(),
+            end($this->classes) ?: null,
+            end($this->functions) ?: null,
+            $style,
+            $method,
+            $operation,
+            $keyKind,
+            $key,
+        );
     }
 
     /**
@@ -223,6 +252,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
         return match (true) {
             $expr === null => [KeyKind::None, null],
             $expr instanceof String_ => [KeyKind::Exact, $expr->value],
+            $expr instanceof FuncCall && $this->isFunction($expr, self::HASH_FUNCTIONS) => [KeyKind::Opaque, $this->printer->prettyPrintExpr($expr)],
             $this->hasLiteralPart($expr) => [KeyKind::Template, $this->printer->prettyPrintExpr($expr)],
             default => [KeyKind::Unresolved, $this->printer->prettyPrintExpr($expr)],
         };
@@ -232,7 +262,9 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     {
         return $expr instanceof String_
             || $expr instanceof InterpolatedString
-            || ($expr instanceof Concat && ($this->hasLiteralPart($expr->left) || $this->hasLiteralPart($expr->right)));
+            || ($expr instanceof Concat && ($this->hasLiteralPart($expr->left) || $this->hasLiteralPart($expr->right)))
+            || ($expr instanceof FuncCall && $this->isFunction($expr, ['sprintf']) && ! $expr->isFirstClassCallable()
+                && ($expr->getArgs()[0]->value ?? null) instanceof String_);
     }
 
     /**

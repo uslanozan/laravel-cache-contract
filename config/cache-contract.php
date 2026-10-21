@@ -133,4 +133,23 @@ return [
 
     'definitions' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scanner
+    |--------------------------------------------------------------------------
+    |
+    | Where the scanner looks for cache calls, relative to the project root.
+    |
+    | paths:   files or directories to scan; every .php file under them
+    | exclude: files or directories to skip, also inside "paths". storage/
+    |          holds compiled Blade views, which would count every call in a
+    |          template a second time
+    |
+    */
+
+    'scanner' => [
+        'paths' => ['.'],
+        'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache'],
+    ],
+
 ];

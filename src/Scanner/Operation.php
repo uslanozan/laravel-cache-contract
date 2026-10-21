@@ -13,6 +13,8 @@ enum Operation: string
 {
     case Read = 'read';
     case Write = 'write';
+
+    /** A read, plus a write on a miss. */
     case Remember = 'remember';
     case Forget = 'forget';
 

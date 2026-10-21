@@ -14,8 +14,11 @@ enum KeyKind: string
     /** A string literal: 'settings'. */
     case Exact = 'exact';
 
-    /** A literal with variable parts: "user:{$id}" or 'feed:'.$id. */
+    /** A literal with variable parts: "user:{$id}", 'feed:'.$id or sprintf('pref%d', $id). */
     case Template = 'template';
+
+    /** Only a hash of its parts: md5($x), hash('sha256', ...). Needs a redesign before it can move into the contract. */
+    case Opaque = 'opaque';
 
     /** No literal part at all: $key, self::KEY, a method call. */
     case Unresolved = 'unresolved';

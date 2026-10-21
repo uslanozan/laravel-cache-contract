@@ -18,5 +18,7 @@ final class FacadeUsage
         Cache::store('redis')->add('warmup:lock', true, 60);
         Cache::tags(['posts'])->flush();
         \Cache::increment('visits');
+        Cache::get(sprintf('preference%d%s', $id, $key));
+        Cache::forever(hash('sha256', $key), []);
     }
 }

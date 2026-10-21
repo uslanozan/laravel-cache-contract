@@ -67,3 +67,39 @@ Checked with a probe; each one is a candidate for phase 5:
   per file and go on.
 - It has only run on the fixtures, not on the six repositories, so the numbers
   above are call styles, not usage counts.
+
+## Update: LRVL-19
+
+All three limits above are closed. `Scanner::scanPaths()` walks directories
+(paths and excludes from the `scanner` config, `vendor/` excluded by default),
+lists files that do not parse and goes on, and skips Blade views. Every
+`CacheUsage` now has the class and method it is in. Two key kinds changed:
+`sprintf()` with a literal format is a **template**, and a key that is only a
+hash (`md5()`, `sha1()`, `crc32()`, `hash()`, `hash_hmac()`) is **opaque**,
+the Firefly III `CacheProperties` case.
+
+Wrapper call sites are not in it: their scope is decided in ADR 0011
+(LRVL-21) first.
+
+### BookStack
+
+Run on the revision from the public scan (`241a701`), `tests/` excluded:
+
+| | Public scan (by hand) | Scanner |
+| :--- | ---: | ---: |
+| Usages | 18 in 9 files | 17 in 8 files |
+| Facade | 9 | 8 |
+| Helper | 6 | 6 |
+| Injected repository | 3 | 3 |
+| False positives | 6 `tags()` (Eloquent), 1 `$store->` | 0 |
+
+The one difference is `Cache::store(null)` in `OidcService`, passed to
+`OidcProviderSettings` as an argument. It does nothing by itself; its use there
+(`remember`) is already one of the three repository usages, so the manual count
+had it twice.
+
+Operations: 8 write, 6 read, 3 remember. Keys: 2 exact, 2 template,
+**13 unresolved**. BookStack builds most keys into a variable first
+(`$cacheKey = 'api-docs::'.$version;`), which the public scan resolved by
+reading the code. Following a local variable assigned once from a literal is
+the next gain for key resolution.

@@ -66,8 +66,11 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'missing description' => [['description' => null], '"description" is required'],
     'purpose not snake_case' => [['purpose' => 'activeList'], '"purpose" must be a snake_case string'],
     'unknown type' => [['type' => 'colection'], '"type" must be one of: model, collection, array, string, int, float, bool'],
-    'zero ttl' => [['ttl' => 0], '"ttl" must be a positive number of seconds (entries without expiry are not allowed)'],
-    'string ttl' => [['ttl' => '300'], '"ttl" must be a positive number of seconds (entries without expiry are not allowed)'],
+    'zero ttl' => [['ttl' => 0], '"ttl" must be positive (entries without expiry are not allowed)'],
+    'numeric string ttl' => [['ttl' => '300'], '"ttl" "300" needs a unit, e.g. "300 seconds", or write it as the number 300'],
+    'ttl in months' => [['ttl' => '1 month'], '"ttl" "1 month": months and years have no fixed length; use days or weeks, e.g. "30 days"'],
+    'ttl too long' => [['ttl' => '99999999999999999999 weeks'], '"ttl" "99999999999999999999 weeks": must be at most 365 days (31536000 seconds)'],
+    'ttl with an unknown unit' => [['ttl' => '2 fortnights'], '"ttl" "2 fortnights": unknown unit "fortnights"; use seconds, minutes, hours, days or weeks'],
     'blank description' => [['description' => '   '], '"description" must be a non-empty string'],
     'subject is not a class' => [['subject' => 'App\Models\Nope'], '"subject" must be an existing Eloquent model class'],
     'subject is not a model' => [['subject' => stdClass::class], '"subject" must be an existing Eloquent model class'],
@@ -80,6 +83,10 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'typo in a field name' => [['ttll' => 300], 'unknown field "ttll" (did you mean "ttl"?)'],
     'unrelated unknown field' => [['owner' => 'ozan'], 'unknown field "owner"'],
 ]);
+
+it('accepts a TTL with units', function () {
+    expect(errorsFor(['user' => ['active_list' => validDefinition(['ttl' => '15 minutes'])]]))->toBe([]);
+});
 
 it('rejects section and definition names that are not snake_case', function () {
     expect(errorsFor(['User' => ['activeList' => validDefinition()]]))->toBe([

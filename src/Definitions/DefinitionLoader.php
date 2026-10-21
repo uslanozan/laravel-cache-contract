@@ -60,7 +60,7 @@ final class DefinitionLoader
             name: $name,
             purpose: (string) $raw['purpose'],
             type: ResultType::from((string) $raw['type']),
-            ttl: (int) $raw['ttl'],
+            ttl: Ttl::seconds($raw['ttl']),
             description: (string) $raw['description'],
             subject: $subject,
             params: array_map(ParameterType::from(...), $params),

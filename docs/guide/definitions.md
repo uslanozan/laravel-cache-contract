@@ -1,7 +1,7 @@
 # Definitions
 
-> This page is growing with the package. For now it covers parameters; the
-> full guide to writing definitions comes with the v0.1.0 docs.
+> This page is growing with the package. For now it covers TTLs and
+> parameters; the full guide to writing definitions comes with the v0.1.0 docs.
 
 Every cache entry type is defined once in `config/cache-contract.php`. Its
 parameters are the values that pick one entry out of many, such as a user ID.
@@ -17,6 +17,32 @@ parameters are the values that pick one entry out of many, such as a user ID.
     ],
 ],
 ```
+
+## TTL
+
+Every definition has a TTL; entries that never expire are not allowed. Write
+it in seconds, or with units so the meaning is visible:
+
+```php
+'ttl' => 3600,          // seconds
+'ttl' => '1 hour',
+'ttl' => '15 minutes',
+'ttl' => '1h 30m',      // parts add up
+'ttl' => '2 weeks',
+```
+
+- Units: seconds, minutes, hours, days and weeks, long or short (`s`, `m`,
+  `h`, `d`, `w`).
+- Months and years are rejected, because their length is not fixed. Use days
+  or weeks, e.g. `'30 days'`.
+- A numeric string such as `'300'` is rejected, because its unit is not
+  visible. Write `300` or `'300 seconds'`.
+- A TTL is at most 365 days (`31536000` seconds). The limit catches typos
+  such as an extra `* 1000`; most entries live minutes to hours, and data
+  that changes is cleared on change anyway, not by its TTL.
+
+`php artisan cache-contract:inspect <id>` shows the TTL in seconds and in
+words, e.g. `3600 s (1 hour)`.
 
 ## Parameters
 

@@ -9,6 +9,7 @@ use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
 use Uslanozan\CacheContract\Definitions\ParameterType;
+use Uslanozan\CacheContract\Definitions\Ttl;
 use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\KeyFormat;
@@ -116,7 +117,7 @@ final class InspectCommand extends Command
             'Subject' => $definition->subject ?? '-',
             'Purpose' => $definition->purpose,
             'Type' => $definition->type->value,
-            'TTL' => $definition->ttl.' s',
+            'TTL' => sprintf('%d s (%s)', $definition->ttl, Ttl::forHumans($definition->ttl)),
             'Version' => (string) $definition->version,
             'Params' => ListCommand::describeParams($definition) ?: '-',
             'Tags' => $definition->tags === [] ? '-' : implode(', ', $definition->tags),

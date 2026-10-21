@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
+use Uslanozan\CacheContract\Definitions\Ttl;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
 /**
@@ -45,7 +46,7 @@ final readonly class ModelCacheConfig
      */
     public static function fromConfig(array $config): self
     {
-        $ttl = self::positiveInt($config['ttl'] ?? null, 'models.ttl');
+        $ttl = self::ttl($config['ttl'] ?? null, 'models.ttl');
         $chunkSize = self::positiveInt($config['chunk_size'] ?? self::DEFAULT_CHUNK_SIZE, 'models.chunk_size');
 
         $raw = $config['overrides'] ?? [];
@@ -75,7 +76,7 @@ final readonly class ModelCacheConfig
 
             $override = [];
             if (array_key_exists('ttl', $settings)) {
-                $override['ttl'] = self::positiveInt($settings['ttl'], "{$path}.ttl");
+                $override['ttl'] = self::ttl($settings['ttl'], "{$path}.ttl");
             }
             if (array_key_exists('version', $settings)) {
                 $override['version'] = self::positiveInt($settings['version'], "{$path}.version");
@@ -123,6 +124,20 @@ final readonly class ModelCacheConfig
     public function safeScopesFor(string $class): array
     {
         return $this->overrides[$class]['safe_scopes'] ?? [];
+    }
+
+    /**
+     * Seconds, or a duration with units such as "1 hour" (Ttl).
+     *
+     * @return positive-int
+     */
+    private static function ttl(mixed $value, string $key): int
+    {
+        if (($problem = Ttl::problem($value)) !== null) {
+            throw InvalidConfiguration::forKey($key, $problem);
+        }
+
+        return Ttl::seconds($value);
     }
 
     /**

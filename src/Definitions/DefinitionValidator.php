@@ -136,8 +136,8 @@ final class DefinitionValidator
             $errors[] = new ValidationError($id, sprintf('"type" must be one of: %s', $this->enumValues(ResultType::cases())));
         }
 
-        if (array_key_exists('ttl', $definition) && ! $this->isPositiveInt($definition['ttl'])) {
-            $errors[] = new ValidationError($id, '"ttl" must be a positive number of seconds (entries without expiry are not allowed)');
+        if (array_key_exists('ttl', $definition) && ($problem = Ttl::problem($definition['ttl'])) !== null) {
+            $errors[] = new ValidationError($id, '"ttl" '.$problem);
         }
 
         if (array_key_exists('description', $definition) && ! (is_string($definition['description']) && trim($definition['description']) !== '')) {

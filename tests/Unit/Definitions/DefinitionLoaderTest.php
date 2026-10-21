@@ -29,11 +29,12 @@ it('builds definitions with enums and defaults', function () {
             ],
         ],
         'external' => [
-            'exchange_rates' => ['purpose' => 'exchange_rates', 'type' => 'array', 'ttl' => 600, 'description' => 'Rates.'],
+            'exchange_rates' => ['purpose' => 'exchange_rates', 'type' => 'array', 'ttl' => '10 minutes', 'description' => 'Rates.'],
         ],
     ]);
 
-    expect($definitions)->toHaveCount(2);
+    expect($definitions)->toHaveCount(2)
+        ->and($definitions[1]->ttl)->toBe(600);
 
     [$profile, $rates] = $definitions;
 

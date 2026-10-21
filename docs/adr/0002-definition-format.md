@@ -122,3 +122,20 @@ parses the file and reports duplicate keys. Lint runs in CI, so this is enforced
   runtime exception for unknown IDs. A generated IDE helper is possible later.
 - If the single file becomes unmanageable in practice, splitting is a new ADR;
   IDs (`section.name`) would not need to change.
+
+## Update 2026-10-21: TTLs with units
+
+`ttl` also accepts a duration with units, so the unit is visible where the
+value is written: `'ttl' => '15 minutes'`, `'1 day'`, `'1h 30m'`. The public
+scan found TTLs whose unit was guessed wrong (a value written as minutes but
+passed as seconds) and many bare numbers.
+
+- **Units:** seconds, minutes, hours, days and weeks, long or short
+  (`s`, `m`, `h`, `d`, `w`). Several parts add up.
+- **Months and years are rejected:** their length in seconds is not fixed.
+- **A bare numeric string (`'300'`) is rejected:** its unit is not visible.
+  An integer is still read as seconds.
+- **No change elsewhere:** zero, negative and missing TTLs are still
+  rejected. The loader turns every TTL into seconds, so `Definition::$ttl`
+  stays an integer. `models.ttl` and the model overrides accept the same
+  forms.

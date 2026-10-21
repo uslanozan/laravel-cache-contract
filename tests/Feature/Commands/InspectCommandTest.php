@@ -37,7 +37,7 @@ it('shows the definition and the key pattern', function () {
 
     // "Profile page data" without the final period: Laravel 11's
     // twoColumnDetail() strips trailing punctuation from values.
-    foreach (['Profile page data', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
+    foreach (['3600 s (1 hour)', 'Profile page data', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
         expect($output)->toContain($expected);
     }
 });

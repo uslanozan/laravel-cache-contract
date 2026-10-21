@@ -19,6 +19,12 @@
 
 Closes <!-- Linear issue ID, e.g. LRVL-12, or GitHub issue #12 -->
 
+<!--
+  Built on another PR? Add a line "Depends on #12" (or "Depends on #12, #13")
+  outside this comment. The "Dependencies" check stays red until they are merged.
+-->
+
+
 ## Type of change
 
 - [ ] `feat`: new capability *(minor)*

@@ -73,6 +73,12 @@ While the PR is open:
   (the only option GitHub offers on `develop`). "Update branch" may add merge
   commits to your branch; squashing folds them into one commit.
 
+**PRs built on another PR:** add a line `Depends on #31` to the description
+(`Depends on #31, #30` for several). The `Dependencies` check stays red with
+"waiting for #31" until #31 is merged, so the PRs cannot land in the wrong
+order. After #31 is merged, update your branch; that push re-runs the check
+and it turns green. Editing the description also re-runs it.
+
 ## Rules enforced on GitHub
 
 See [`.github/rulesets/`](../.github/rulesets/README.md). In short: no direct

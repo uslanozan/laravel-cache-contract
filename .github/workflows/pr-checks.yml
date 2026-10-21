@@ -1,5 +1,5 @@
 # =============================================================================
-# PR checks: title format and branch flow
+# PR checks: title format, branch flow and PR dependencies
 # =============================================================================
 # Feature PRs are squash-merged, so the PR title becomes the commit message on
 # `develop`. Validating the title is what keeps the history semantic.
@@ -67,3 +67,30 @@ jobs:
             echo "::error::Only develop, release/* or hotfix/* can be merged into main. Target develop instead."
             exit 1
           fi
+
+  dependencies:
+    # A PR built on another PR says so with a "Depends on #N" line in its
+    # description. This check stays red until every #N is merged. No extra
+    # trigger is needed to turn it green: once #N is squash-merged the branch
+    # must be updated (rulesets require it), and that push re-runs the check.
+    name: Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check "Depends on" PRs are merged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          deps=$(printf '%s\n' "$BODY" | grep -iE '^[[:space:]]*depends on' | grep -oE '#[0-9]+' | tr -d '#' | sort -un || true)
+          waiting=""
+          for n in $deps; do
+            if [ "$(gh api "repos/$REPO/pulls/$n" --jq .merged)" != "true" ]; then
+              waiting="$waiting #$n"
+            fi
+          done
+          if [ -n "$waiting" ]; then
+            echo "::error::waiting for$waiting"
+            exit 1
+          fi
+          echo "No unmerged dependencies${deps:+ (checked: $(echo $deps))}."

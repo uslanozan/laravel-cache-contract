@@ -12,6 +12,7 @@ and have a history.
 | Last push must be approved by someone else | ✅ | ✅ |
 | All review threads resolved | ✅ | ✅ |
 | Required checks: `CI result`, `PR title`, `Branch flow` | ✅ | ✅ |
+| Required check: `Dependencies` (`Depends on #N` merged first) | ✅ | ❌ |
 | Branch must be up to date with base | ✅ | ✅ |
 | Allowed merge methods | squash only | merge commit only |
 | Force push / deletion | ❌ | ❌ |

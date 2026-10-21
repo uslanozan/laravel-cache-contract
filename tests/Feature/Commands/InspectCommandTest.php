@@ -74,6 +74,51 @@ it('rejects a value that does not fit the declared type', function (string $para
     'unknown parameter' => ['page=2', 'missing user_id'],
 ]);
 
+describe('secret parameters', function () {
+    beforeEach(function () {
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+        config()->set('cache-contract.definitions.auth.session_owner', [
+            'purpose' => 'session_owner', 'type' => 'array', 'params' => ['api_token' => 'secret', 'user_id' => 'int'],
+            'ttl' => 300, 'description' => 'Owner of an API session.',
+        ]);
+    });
+
+    it('asks for the value without echoing it and prints only the hash', function () {
+        $this->artisan('cache-contract:inspect', ['id' => 'auth.session_owner', '--param' => ['user_id=42']])
+            ->expectsQuestion('api_token (secret, not shown)', 'plain-token-value')
+            ->expectsOutputToContain('api_token={secret}:user_id={int}')
+            ->expectsOutputToContain('api_token=#')
+            ->doesntExpectOutputToContain('plain-token-value')
+            ->assertSuccessful();
+    });
+
+    it('refuses a secret value on the command line, where shell history and logs keep it', function () {
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'auth.session_owner', '--param' => ['api_token=plain-token-value', 'user_id=42']]);
+        $output = Artisan::output();
+
+        expect($exit)->toBe(1)
+            ->and($output)->toContain('Secret parameter "api_token" is not accepted with --param')
+            ->and($output)->not->toContain('plain-token-value');
+    });
+
+    it('shows only the pattern without a terminal to ask on', function () {
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'auth.session_owner', '--param' => ['user_id=42'], '--no-interaction' => true]);
+        $output = Artisan::output();
+
+        expect($exit)->toBe(0)
+            ->and($output)->toContain('cc:auth:session_owner:v1:api_token={secret}:user_id={int}')
+            ->and($output)->toContain('Secret parameters (api_token) are asked for interactively')
+            ->and($output)->not->toMatch('/api_token=#[0-9a-f]{32}/');
+    });
+
+    it('asks for the other parameters first', function () {
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'auth.session_owner']);
+
+        expect($exit)->toBe(0)
+            ->and(Artisan::output())->toContain('Pass --param=name=value');
+    });
+});
+
 it('suggests similar ids for an unknown id', function () {
     $this->artisan('cache-contract:inspect', ['id' => 'user.profle'])
         ->expectsOutputToContain('Unknown cache definition "user.profle".')

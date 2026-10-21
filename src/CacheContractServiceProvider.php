@@ -53,10 +53,15 @@ class CacheContractServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->singleton(KeyFactory::class, fn (Application $app): KeyFactory => new DefaultKeyFactory(
-            $app->make(KeyFormat::class),
-            new ParameterEncoder,
-        ));
+        // APP_KEY is only used to hash secret parameters (ADR 0004).
+        $this->app->singleton(KeyFactory::class, function (Application $app): KeyFactory {
+            $appKey = $this->config($app)->get('app.key');
+
+            return new DefaultKeyFactory(
+                $app->make(KeyFormat::class),
+                new ParameterEncoder(is_string($appKey) ? $appKey : null),
+            );
+        });
 
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);

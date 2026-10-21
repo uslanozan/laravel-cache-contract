@@ -73,7 +73,7 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'subject is not a model' => [['subject' => stdClass::class], '"subject" must be an existing Eloquent model class'],
     'params not a map' => [['params' => 'tenant_id'], '"params" must map parameter names to types'],
     'parameter not snake_case' => [['params' => ['tenantId' => 'int']], 'parameter "tenantId" must be snake_case'],
-    'unknown parameter type' => [['params' => ['tenant_id' => 'integer']], 'parameter "tenant_id" must have one of the types: int, string, bool, float, array'],
+    'unknown parameter type' => [['params' => ['tenant_id' => 'integer']], 'parameter "tenant_id" must have one of the types: int, string, bool, float, array, secret'],
     'zero version' => [['version' => 0], '"version" must be a positive integer'],
     'tags not a list' => [['tags' => 'users'], '"tags" must be a list of non-empty strings'],
     'invalidated_by not a model' => [['invalidated_by' => [stdClass::class]], '"invalidated_by" must be a list of existing Eloquent model classes'],

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Uslanozan\CacheContract\Definitions\ParameterType;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
@@ -107,6 +108,53 @@ it('rejects missing and unexpected parameters', function () {
 it('rejects invalid context', function () {
     expect(fn () => encodeParams([], [], ['Locale' => 'tr']))->toThrow(InvalidParameters::class, 'context name "Locale" must be snake_case')
         ->and(fn () => encodeParams([], [], ['tags' => ['a']]))->toThrow(InvalidParameters::class, 'context "tags" must be a string, int, float or bool, array given');
+});
+
+describe('secret parameters', function () {
+    $encode = fn (string $token, ?string $appKey = 'base64:test-app-key') => (new ParameterEncoder($appKey))
+        ->encode(DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]), ['api_token' => $token]);
+
+    it('writes a keyed hash instead of the value', function () use ($encode) {
+        $segment = $encode('9f8a2c-secret-token');
+
+        expect($segment)->toMatch('/^api_token=#[0-9a-f]{32}$/')
+            ->and($segment)->not->toContain('9f8a2c');
+    });
+
+    it('gives the same hash for the same value and a different one otherwise', function () use ($encode) {
+        expect($encode('token-a'))->toBe($encode('token-a'))
+            ->and($encode('token-a'))->not->toBe($encode('token-b'));
+    });
+
+    it('depends on the application key, so the hash cannot be guessed without it', function () use ($encode) {
+        expect($encode('token-a', 'base64:one-app'))->not->toBe($encode('token-a', 'base64:another-app'))
+            // Not a plain hash of the value either.
+            ->and($encode('token-a'))->not->toContain(substr(hash('sha256', 'token-a'), 0, 32));
+    });
+
+    it('decodes a base64 application key, like Laravel\'s encrypter', function () use ($encode) {
+        $raw = random_bytes(32);
+
+        // The decoded bytes are the key: the "base64:" form and the raw bytes give the same hash.
+        expect($encode('token-a', 'base64:'.base64_encode($raw)))->toBe($encode('token-a', $raw))
+            ->and($encode('token-a', 'base64:'.base64_encode($raw)))->not->toBe($encode('token-a', base64_encode($raw)));
+    });
+
+    it('needs the application key', function (?string $appKey) use ($encode) {
+        expect(fn () => $encode('token-a', $appKey))->toThrow(InvalidConfiguration::class, 'set APP_KEY');
+    })->with(['missing' => [null], 'empty' => ['']]);
+
+    it('needs no application key when no parameter is secret', function () {
+        expect((new ParameterEncoder)->encode(DefinitionBuilder::make('user.list', params: ['role' => ParameterType::String]), ['role' => 'admin']))
+            ->toBe('role=admin');
+    });
+
+    it('accepts strings only', function () {
+        expect(fn () => (new ParameterEncoder('base64:test-app-key'))->encode(
+            DefinitionBuilder::make('auth.session_owner', params: ['api_token' => ParameterType::Secret]),
+            ['api_token' => 12345],
+        ))->toThrow(InvalidParameters::class, '"api_token" must be a secret string, int given');
+    });
 });
 
 describe('generations (ADR 0009)', function () {

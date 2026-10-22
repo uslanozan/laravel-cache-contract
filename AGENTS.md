@@ -16,6 +16,24 @@ Read before changing anything substantial:
 - [`docs/adr/`](docs/adr/): accepted architecture decisions
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): setup and everyday commands
 
+## Temporary: integration branch until the PHP patch (since 2026-10-22)
+
+A PHP zero-day is being patched, and Iceberg has not yet announced the patched
+version (LRVL-70). Until it has, development does not go into `develop`:
+
+- **Branch from `chore/lrvl-70-php-patch-integration` and open PRs into it**,
+  not into `develop`. It has the same rules as `develop`: one approval, green
+  checks, squash only.
+- **End PR titles and commit subjects with `[before-patch]`**, e.g.
+  `feat(scanner): add the scan command [before-patch]`. The PR title becomes
+  the squash commit, so the marker stays in the history.
+- When the patched version is known, LRVL-70 raises the PHP version on that
+  branch and the branch is squash-merged into `develop`. This section is then
+  removed.
+
+While this section is here, read `develop` in workflow rules 3 and 5 as the
+integration branch.
+
 ## Workflow rules (mandatory)
 
 1. **Every task has a Linear issue** (team `LRVL`). No issue yet? Create one
@@ -33,7 +51,8 @@ Read before changing anything substantial:
 6. **Merge** after one approval, green checks and resolved threads. The issue
    moves to *Done* by itself. Work that ends without a PR is moved to *Done*
    by hand, and only when its output exists.
-7. **Never push directly** to `main` or `develop`. Never force-push shared branches.
+7. **Never push directly** to `main`, `develop` or the integration branch above.
+   Never force-push shared branches.
 8. Changes under `src/Contracts/` need **two** approvals: they affect everyone.
 
 ## Development environment

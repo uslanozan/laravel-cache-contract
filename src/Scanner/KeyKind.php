@@ -11,16 +11,16 @@ namespace Uslanozan\CacheContract\Scanner;
  */
 enum KeyKind: string
 {
-    /** A string literal: 'settings'. */
+    /** Known in full: 'settings', a constant of the same class, a variable assigned a literal once. */
     case Exact = 'exact';
 
-    /** A literal with variable parts: "user:{$id}", 'feed:'.$id or sprintf('pref%d', $id). */
+    /** A literal with runtime parts, written as "feed:{id}" for 'feed:'.$id, "user:{$id}" or sprintf('feed:%d', $id). */
     case Template = 'template';
 
     /** Only a hash of its parts: md5($x), hash('sha256', ...). Needs a redesign before it can move into the contract. */
     case Opaque = 'opaque';
 
-    /** No literal part at all: $key, self::KEY, a method call. */
+    /** No literal part to read: a parameter, a key-builder call, a variable written more than once. */
     case Unresolved = 'unresolved';
 
     /** The call takes no key: flush(), clear(). */

@@ -304,7 +304,7 @@ fails CI on a direct `Cache::put` in app code.
 | [0008](adr/0008-model-cache-stores-attributes.md) | Eloquent serialization strategy | 2 | accepted |
 | [0009](adr/0009-invalidation-with-generation-counters.md) | Invalidation strategy: tags vs generation counters | 3 | accepted |
 | 0010 | Duplicate detection layers (registry, create-time, CI, scanner) | 4 | backlog |
-| 0011 | Scanner scope and limits | 5 | backlog |
+| [0011](adr/0011-scanner-scope-and-limits.md) | Scanner scope and limits | 5 | proposed |
 
 ## 8. GitHub setup checklist (one-time)
 

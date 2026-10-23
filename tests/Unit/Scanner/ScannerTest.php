@@ -25,14 +25,69 @@ function scannedUsages(string $fixture): array
 it('finds facade calls, also through store() and tags() and the global alias', function () {
     expect(scannedUsages('FacadeUsage'))->toBe([
         'facade get read exact settings',
-        'facade put write template "user:{$id}:profile"',
-        "facade remember remember template 'feed:' . \$id",
+        'facade put write template user:{id}:profile',
+        'facade remember remember template feed:{id}',
         'facade forget forget unresolved $key',
         'facade add write exact warmup:lock',
         'facade flush forget none -',
         'facade increment write exact visits',
-        "facade get read template sprintf('preference%d%s', \$id, \$key)",
+        'facade get read template preference{id}{key}',
         "facade forever write opaque hash('sha256', \$key)",
+    ]);
+});
+
+it('resolves the key shapes of the public scan', function () {
+    expect(array_map(fn (string $usage) => explode(' ', $usage, 4)[3], scannedUsages('KeyUsage')))->toBe([
+        'exact license_status',
+        'exact spotify.access_token',
+        'exact spotify.access_token',
+        'exact warmup:lock',
+        'exact warmup:lock',
+        'template profile:followers:{id}',
+        'template api-docs::{version}',
+        'template status_test_{rand}',
+        'template images::{id}::{path}',
+        'template ff3-config-{name}',
+        'template preference{id}{name}',
+        'template cer-{name}-{key}-{format}',
+        'template rate:{name}:{id}:100%',
+        'template ImportantDateType:{vaultId}:{name}',
+        'template episode-playable.{id}',
+        'template apps.{name}.{key}.{dataKey}',
+        'template {config}.statuses',
+        'template user:{id}',
+        "opaque hash('sha256', \$name)",
+        'unresolved $key',
+        'unresolved self::key("a_{$id}")',
+        "unresolved cache_key('passkey login options', \$id)",
+        'unresolved $this->cacheKey($id)',
+        'unresolved $filter',
+    ]);
+});
+
+it('resolves variables outside any function and stops on values that refer to each other', function () {
+    $code = <<<'PHP'
+        <?php
+        $key = 'routes';
+        Cache::get($key);
+        $a = $b;
+        $b = $a;
+        Cache::get($a);
+        final class Loop
+        {
+            const A = self::B;
+            const B = self::A;
+            public function handle(): void
+            {
+                Cache::get(self::A.':x');
+            }
+        }
+        PHP;
+
+    expect(array_map(fn (CacheUsage $usage) => [$usage->keyKind->value, $usage->key], (new Scanner)->scanCode($code)))->toBe([
+        ['exact', 'routes'],
+        ['unresolved', '$a'],
+        ['template', '{A}:x'],
     ]);
 });
 
@@ -83,7 +138,7 @@ it('finds the cache() helper as a read, a write and a receiver', function () {
     expect(scannedUsages('HelperUsage'))->toBe([
         'helper cache read exact settings',
         'helper cache write exact settings',
-        'helper remember remember template "team:{$id}"',
+        'helper remember remember template team:{id}',
         'helper forget forget exact settings',
     ]);
 });
@@ -107,7 +162,7 @@ it('finds the cache resolved from the container', function () {
 it('finds direct Redis calls as their own style', function () {
     expect(scannedUsages('RedisUsage'))->toBe([
         'redis get read exact online:count',
-        'redis zadd other template "feed:{$id}"',
+        'redis zadd other template feed:{id}',
         'redis del forget exact online:count',
     ]);
 });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Scanner;
 
 use PhpParser\Node;
+use PhpParser\Node\ClosureUse;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayDimFetch;
@@ -127,7 +128,15 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             $this->assignments[] = $this->assignmentsIn(
                 $node->getStmts() ?? [],
                 $node->getParams(),
-                $node instanceof Closure || $node instanceof ArrowFunction ? (end($this->assignments) ?: []) : [],
+                // As in PHP: an arrow function sees the whole scope around it, a closure only its use() list.
+                match (true) {
+                    $node instanceof ArrowFunction => end($this->assignments) ?: [],
+                    $node instanceof Closure => array_intersect_key(
+                        end($this->assignments) ?: [],
+                        array_flip(array_filter(array_map(fn (ClosureUse $use): mixed => $use->var->name, $node->uses), is_string(...))),
+                    ),
+                    default => [],
+                },
             );
         } elseif ($node instanceof StaticCall || $node instanceof MethodCall || $node instanceof NullsafeMethodCall || $node instanceof FuncCall) {
             $this->record($node);
@@ -456,7 +465,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
      *
      * @param  Node[]  $stmts
      * @param  Param[]  $params
-     * @param  array<string, Expr>  $inherited  what a closure sees of the scope around it
+     * @param  array<string, Expr>  $inherited  what a closure sees of the scope around it; a name the scope writes itself, a parameter included, hides it
      * @return array<string, Expr>
      */
     private function assignmentsIn(array $stmts, array $params, array $inherited): array
@@ -488,7 +497,8 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             (new NodeFinder)->findInstanceOf($targets, Variable::class),
         ), is_string(...)));
 
-        return array_filter($values, fn (string $name): bool => $counts[$name] === 1, ARRAY_FILTER_USE_KEY) + $inherited;
+        return array_filter($values, fn (string $name): bool => $counts[$name] === 1, ARRAY_FILTER_USE_KEY)
+            + array_diff_key($inherited, $counts);
     }
 
     /**

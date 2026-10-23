@@ -62,6 +62,11 @@ it('resolves the key shapes of the public scan', function () {
         "unresolved cache_key('passkey login options', \$id)",
         'unresolved $this->cacheKey($id)',
         'unresolved $filter',
+        'exact users:all',
+        'exact users:all',
+        'unresolved $item',
+        'unresolved $item',
+        'unresolved $item',
     ]);
 });
 

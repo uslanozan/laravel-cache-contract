@@ -92,6 +92,7 @@ it('scans only the given paths, still without the excluded ones', function (arra
 })->with([
     'two modules' => [['app/Billing', 'app/Reports'], ['app/Billing/Invoice.php', 'app/Reports/Daily.php']],
     'the whole project' => [['.'], ['app/Billing/Invoice.php', 'app/Reports/Daily.php']],
+    'an absolute path' => [fn () => [$this->root.'/app/Billing'], ['app/Billing/Invoice.php']],
 ]);
 
 it('resolves the paths against the project root, not the working directory', function () {

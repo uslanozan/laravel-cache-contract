@@ -20,7 +20,7 @@ use Uslanozan\CacheContract\Scanner\Scanner;
 final class ScanCommand extends Command
 {
     protected $signature = 'cache-contract:scan
-        {--path=* : Scan only this path, relative to the project root, instead of scanner.paths; repeatable}
+        {--path=* : Scan only this path, relative to the project root or absolute, instead of scanner.paths; repeatable}
         {--json : Print machine-readable JSON instead of a table}';
 
     protected $description = 'List the cache calls in the source code';
@@ -103,8 +103,9 @@ final class ScanCommand extends Command
      */
     private function underRoot(string $root, mixed $paths): array
     {
+        // An absolute path, /app or C:\app, is taken as it is.
         return array_values(array_map(
-            fn (string $path): string => $root.DIRECTORY_SEPARATOR.$path,
+            fn (string $path): string => preg_match('~^([A-Za-z]:)?[/\\\\]~', $path) === 1 ? $path : $root.DIRECTORY_SEPARATOR.$path,
             array_filter((array) $paths, is_string(...)),
         ));
     }

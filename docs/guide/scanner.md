@@ -20,7 +20,7 @@ A usage point is one call in the code. A `Cache::get()` in a loop is still
 one usage point; how often it runs is not something a scan can know.
 
 `--path` scans only the given files or directories, relative to the project
-root, instead of the configured `paths`. `exclude` still applies, so
+root or absolute, instead of the configured `paths`. `exclude` still applies, so
 `--path=.` never scans `vendor/`. Repeat it to scan several.
 
 The command exits with a non-zero code when a path could not be scanned: a
@@ -67,7 +67,9 @@ How keys are read:
   `$key = 'api-docs::'.$version; Cache::get($key)` is `api-docs::{version}`.
   A variable written twice (`$key .= …`, a second assignment, a `foreach`)
   stays `unresolved`, because the scanner cannot tell which value reaches
-  the call.
+  the call. As in PHP, an arrow function sees the variables around it and a
+  closure only those in its `use (…)` list; a parameter of the same name
+  hides the outer variable.
 
 ## JSON
 
@@ -126,6 +128,9 @@ A file that does not parse is listed as an error and the scan goes on.
   a key-builder method stays `unresolved`.
 - A variable changed only through a by-reference argument
   (`preg_match($p, $s, $key)`) or `$key++` still counts as assigned once.
+- Literal braces in a key read as a placeholder: `self::PREFIX.'{tenant}'`
+  is reported as a `template`, and in `{tenant:42}:stats:{id}` the two
+  cannot be told apart. This matters for Redis Cluster hash tags.
 - Blade views (`*.blade.php`) are not scanned.
 - `exclude` matches paths from the project root: `vendor` skips only the root
   `vendor/`. A nested one, such as `packages/acme/vendor`, is still scanned

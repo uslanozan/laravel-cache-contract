@@ -57,5 +57,19 @@ class KeyUsage
         $filter = 'filters:v1';
         $filter .= ':'.$id;
         Cache::get($filter);
+
+        // Closures, as in PHP: an arrow function sees the scope around it, a closure only its use() list.
+        $item = 'users:all';
+        array_map(fn () => Cache::forget($item), []);
+        array_map(function () use ($item) {
+            Cache::forget($item);
+        }, []);
+        array_map(fn ($item) => Cache::forget($item), []);
+        array_map(function ($item) {
+            Cache::forget($item);
+        }, []);
+        array_map(function () {
+            Cache::forget($item);
+        }, []);
     }
 }

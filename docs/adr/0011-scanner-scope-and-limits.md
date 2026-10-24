@@ -149,15 +149,19 @@ contract. Not found:
 | Gap | Example | Covered by |
 | :--- | :--- | :--- |
 | Receivers without a native type | `/** @var Repository */ private $cache;`, `app(Repository::class)`, `$store = Cache::store('x'); $store->get(…)` | the PHPStan rule, which has types |
-| Dynamic calls | `Cache::$method(…)`, `call_user_func([Cache::class, 'get'], …)` | the dev-time listener |
-| Keys beyond a constant of the same class or a variable assigned once | another class's constant, a property, a key-builder method | reported `unresolved`; the dev-time listener sees the real key |
+| Dynamic calls | `Cache::$method(…)`, `call_user_func([Cache::class, 'get'], …)` | the dev-time listener, for reads, `put()`, `putMany()` and `forever()` |
+| Keys beyond a constant of the same class or a variable assigned once | another class's constant, a property, a key-builder method | reported `unresolved`; the dev-time listener sees the real key for reads, `put()`, `putMany()` and `forever()` |
+| Writes that fire no cache event | `add()` with a TTL, `increment()`, `decrement()`, locks, called dynamically or with an unresolved key | none at runtime; the scan and the PHPStan rule still find a static or typed call |
 | Wrapper call sites | Firefly III's `CacheProperties` callers | found only for wrappers declared in config (LRVL-72); an undeclared wrapper is seen through the calls inside it |
 | Code not scanned | Blade views, `vendor/`, excluded paths, facade aliases other than `Cache` and `Redis` | none |
 | How often a call runs | a `Cache::get()` in a loop is one usage point | none; runtime statistics are not in v1 (ADR 0005) |
 
 A codebase counts as migrated when scan and lint are clean, the PHPStan rule
-passes, and the dev-time listener reports no key written outside the contract
-while the test suite or a staging run exercises the code.
+passes, and the dev-time listener reports no key written outside the contract,
+for the operations it can see, while the test suite or a staging run exercises
+the code. Laravel's `KeyWritten` event fires only for `put()`, `putMany()` and
+`forever()` (checked on 11.57 and 13.36), so the writes in the row above stay
+a gap.
 
 ## Consequences
 
@@ -176,4 +180,5 @@ while the test suite or a staging run exercises the code.
   migration, and list the gaps above.
 - Revisit if wrappers turn out to be too many or too hard to declare by hand,
   or if session or queue drivers on the cache store cause key collisions the
-  scan should show.
+  scan should show, or if Laravel starts firing events for `add()`,
+  `increment()`, `decrement()` or locks.

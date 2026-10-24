@@ -162,6 +162,8 @@ describe('Redis errors', function () {
 
     it('throws for the operations set to throw', function (string $operation, string $method) {
         config()->set("cache-contract.redis_errors.{$operation}", 'throw');
+        // Create the generation counter first: creating it is part of a read.
+        ModelCache::for(Member::class)->find(3);
         $this->store->fail($method);
 
         expect(fn () => ModelCache::for(Member::class)->findMany([1, 2]))->toThrow(RedisException::class);

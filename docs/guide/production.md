@@ -17,8 +17,8 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 
 | Operation | With `report` | With `throw` |
 | :--- | :--- | :--- |
-| `read`: `get`, `has`, `remember`, model `find` | Treated as a miss: `remember()` runs the loader, `get()` returns the default. Nothing is written while Redis is down. | The `RedisException` is thrown. |
-| `write`: `put`, `remember`, `refresh` | The value is returned but not cached; `put()` returns `false`. | Thrown. |
+| `read`: `get`, `has`, `remember`, model `find` and `findMany` | Treated as a miss: `remember()` runs the loader, `get()` returns the default, the model cache loads from the database. Nothing is written while Redis is down. | The `RedisException` is thrown. |
+| `write`: `put`, `remember`, `refresh`, model cache writes | The value is returned but not cached; `put()` returns `false`, and the model cache returns the loaded models without caching them. | Thrown. |
 | `invalidate`: `forget` | `false` is returned; the old entry stays until its TTL ends. | Thrown. |
 
 - Only Redis connection errors follow this setting. Any other exception, such
@@ -26,7 +26,8 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
 - With `report`, every failing call reports an error, so a Redis outage
-  produces many reports. Make sure your error tracker can take the volume.
+  produces many reports. Make sure your error tracker can take the volume;
+  limiting them during an outage is planned (LRVL-52).
 - An invalid value (anything other than `report` or `throw`) throws
   `InvalidConfiguration` on the first call.
 

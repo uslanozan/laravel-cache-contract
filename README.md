@@ -11,7 +11,7 @@ reviewable contract, on top of Laravel's own cache and Redis.
 | **Definitions** | Each cache entry type is defined once in PHP, with a description, a TTL and typed parameters. Unknown IDs and wrong parameters fail loudly. | ✅ |
 | **Keys** | Keys are generated from the definition, its parameters and the context (tenant, locale…), never typed by hand. | ✅ |
 | **Runtime API** | `CacheContract::remember()`, `get`, `has`, `put`, `refresh`, `forget`; a cached `null`, `false` or `0` is a hit. | ✅ |
-| **Model cache** | `ModelCache::for(User::class)->find(5)` and `findMany()` without per-model classes, safe for multi-tenant scopes. | ✅ |
+| **Model cache** | `ModelCache::for(User::class)->find(5)` and `findMany()` without per-model classes. Models with global scopes (e.g. a tenant) need the tenant in the context; see [Model cache](docs/guide/model-cache.md#tenants-and-global-scopes). | ✅ |
 | **Discovery** | `cache-contract:list` and `cache-contract:inspect`, with "did you mean" suggestions for a mistyped ID. | ✅ (warnings for similar definitions: planned) |
 | **Scanner** | Finds the cache calls in a codebase that bypass the contract. | 🚧 in progress |
 | **Invalidation** | Clear entries when models change, with generation counters. | 🗓️ planned |
@@ -55,8 +55,8 @@ $profile = CacheContract::remember('user.profile', ['user_id' => 42], fn () => $
 
 ## Installation
 
-The package is not on Packagist yet, so install it from GitHub. Until the
-`v0.1.0` tag exists, require `dev-develop` instead of `^0.1`.
+The package is not on Packagist yet, so install it from GitHub. There is no
+tag yet either, so require `dev-develop`; once `v0.1.0` is tagged, use `^0.1`.
 
 ```json
 // composer.json
@@ -66,7 +66,7 @@ The package is not on Packagist yet, so install it from GitHub. Until the
 ```
 
 ```bash
-composer require uslanozan/laravel-cache-contract:^0.1
+composer require uslanozan/laravel-cache-contract:dev-develop
 php artisan vendor:publish --tag=cache-contract-config
 ```
 

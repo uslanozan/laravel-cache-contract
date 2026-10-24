@@ -100,5 +100,6 @@ This is set per operation with `redis_errors`; see
 | `InvalidParameters` | A parameter is missing, unexpected or of the wrong type, or a context value is invalid. |
 | `InvalidDefinitions` | The config has errors; thrown on the first call, with every problem listed. |
 | `InvalidConfiguration` | A setting such as `redis_errors` has an invalid value. |
+| `InvalidKeyFormat` | `key_format` is invalid, or it uses `{prefix}` while `prefix` is empty (e.g. `CACHE_CONTRACT_PREFIX=`). |
 
 All of them implement `Uslanozan\CacheContract\Exceptions\CacheContractException`.

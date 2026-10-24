@@ -65,5 +65,3 @@ The architecture decisions accepted for this release, in
 - [0007](docs/adr/0007-cached-falsy-values-and-redis-errors.md) Cached falsy values and the Redis error policy
 - [0008](docs/adr/0008-model-cache-stores-attributes.md) The model cache stores attributes, not serialized models
 - [0009](docs/adr/0009-invalidation-with-generation-counters.md) Group invalidation with generation counters, not cache tags
-
-[0.1.0]: https://github.com/uslanozan/laravel-cache-contract/releases/tag/v0.1.0

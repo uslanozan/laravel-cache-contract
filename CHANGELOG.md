@@ -43,7 +43,12 @@ model cache and the first commands.
 - **Commands:** `cache-contract:list` (with `--section`, `--subject` and
   `--json`) and `cache-contract:inspect` (with `--param` and `--context`,
   and suggestions for a mistyped ID).
-- **`scanner` config section** for the upcoming `cache-contract:scan` command.
+- **Scanner:** `cache-contract:scan` lists every cache call in the source
+  (facade, helper, injected repository, container, direct Redis) with its
+  file, line, class, method and operation, and reads its key as `exact`,
+  `template` (`feed:{id}`), `opaque`, `unresolved` or `none`. It has
+  `--path` and `--json`, the `scanner.paths` and `scanner.exclude` settings,
+  and exits non-zero when a path cannot be scanned.
 
 ### Requirements
 
@@ -65,3 +70,4 @@ The architecture decisions accepted for this release, in
 - [0007](docs/adr/0007-cached-falsy-values-and-redis-errors.md) Cached falsy values and the Redis error policy
 - [0008](docs/adr/0008-model-cache-stores-attributes.md) The model cache stores attributes, not serialized models
 - [0009](docs/adr/0009-invalidation-with-generation-counters.md) Group invalidation with generation counters, not cache tags
+- [0011](docs/adr/0011-scanner-scope-and-limits.md) Scanner scope and limits

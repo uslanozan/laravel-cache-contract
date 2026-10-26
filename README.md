@@ -13,7 +13,7 @@ reviewable contract, on top of Laravel's own cache and Redis.
 | **Runtime API** | `CacheContract::remember()`, `get`, `has`, `put`, `refresh`, `forget`; a cached `null`, `false` or `0` is a hit. | ✅ |
 | **Model cache** | `ModelCache::for(User::class)->find(5)` and `findMany()` without per-model classes. Models with global scopes (e.g. a tenant) need the tenant in the context; see [Model cache](docs/guide/model-cache.md#tenants-and-global-scopes). | ✅ |
 | **Discovery** | `cache-contract:list` and `cache-contract:inspect`, with "did you mean" suggestions for a mistyped ID. | ✅ (warnings for similar definitions: planned) |
-| **Scanner** | Finds the cache calls in a codebase that bypass the contract. | 🚧 in progress |
+| **Scanner** | `cache-contract:scan` lists every cache call in a codebase with its file, line and how much of its key can be read. | ✅ |
 | **Invalidation** | Clear entries when models change, with generation counters. | 🗓️ planned |
 | **Enforcement** | Lint and PHPStan rules for CI. | 🗓️ planned |
 

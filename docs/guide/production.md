@@ -26,8 +26,7 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
 - With `report`, every failing call reports an error, so a Redis outage
-  produces many reports. Make sure your error tracker can take the volume;
-  limiting them during an outage is planned (LRVL-52).
+  produces many reports. Make sure your error tracker can take the volume.
 - An invalid value (anything other than `report` or `throw`) throws
   `InvalidConfiguration` on the first call.
 

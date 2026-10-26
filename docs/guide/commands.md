@@ -85,3 +85,34 @@ A mistyped ID gets a suggestion:
 
   Did you mean: user.profile?
 ```
+
+## cache-contract:scan
+
+Lists the cache calls in your source code: where each one is, what it does
+and how much of its key can be read.
+
+```bash
+php artisan cache-contract:scan --path=app
+```
+
+```
++--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
+| File                                       | Line | In                        | Style  | Operation | Key kind | Key          |
++--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
+| app/Http/Controllers/ProfileController.php | 11   | ProfileController::show   | facade | remember  | template | profile:{id} |
+| app/Http/Controllers/ProfileController.php | 16   | ProfileController::update | facade | forget    | template | profile:{id} |
+| app/Http/Controllers/ProfileController.php | 17   | ProfileController::update | facade | forget    | exact    | settings     |
++--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
+
+3 usage points in 1 files. A usage point is a place in the source, not a runtime call count.
+Keys: 1 exact, 2 template, 0 opaque, 0 unresolved, 0 none
+```
+
+| Option | Meaning |
+| :--- | :--- |
+| `--path=app/Billing` | Scan only this file or directory instead of `scanner.paths`; relative to the project root or absolute, repeatable. `scanner.exclude` still applies. |
+| `--json` | Machine-readable JSON instead of the table. |
+
+The command exits with a non-zero code when a path could not be scanned, so
+a typo in `--path` or a file that does not parse is never missed. What the
+scanner finds, how it reads keys and its limits: [Scanner](scanner.md).

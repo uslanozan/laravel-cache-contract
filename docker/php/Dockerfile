@@ -2,8 +2,11 @@
 # extensions the package and its test suite need. Not a production image.
 #
 # Build a different PHP version to reproduce a CI matrix failure:
-#   PHP_VERSION=8.5 docker compose build php
-ARG PHP_VERSION=8.3
+#   PHP_VERSION=8.5.12 docker compose build php
+#
+# Pinned to patch releases, not to a minor tag like 8.3: Docker reuses a
+# cached 8.3 image, which may be older than the zero-day fix (ADR 0003).
+ARG PHP_VERSION=8.3.36
 
 FROM composer:2 AS composer
 

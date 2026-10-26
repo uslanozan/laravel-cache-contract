@@ -8,7 +8,7 @@ Thanks for helping! This guide gets you from a fresh clone to a merged PR.
 - Git
 
 PHP, Composer and Redis run inside containers, so you do not need them on your
-machine. (If you do have PHP 8.3+ locally, you can run the same commands
+machine. (If you do have PHP 8.3.36+, 8.4.27+ or 8.5.12+ locally, you can run the same commands
 without the `docker compose exec php` prefix.)
 
 ## Setup
@@ -38,7 +38,7 @@ docker compose exec redis redis-cli ping   # PONG
 | Check code style | `docker compose exec php composer lint` |
 | Fix code style | `docker compose exec php composer format` |
 | Shell inside the container | `docker compose exec php bash` |
-| Try another PHP version | `PHP_VERSION=8.5 docker compose up -d --build` |
+| Try another PHP version | `PHP_VERSION=8.5.12 docker compose up -d --build` |
 | Stop everything | `docker compose down` |
 
 > CI runs exactly these scripts, so a green run locally means a green run in CI.

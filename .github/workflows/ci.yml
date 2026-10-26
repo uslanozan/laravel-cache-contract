@@ -79,6 +79,10 @@ jobs:
       #   ended 2026-03-12; it stays because company projects still run it.
       # - Laravel 12.0.1: Testbench 10 requires it.
       # - Laravel 13.0.0.
+      # PHP: setup-php installs the latest patch release of each version.
+      # composer.json requires the zero-day fixes (8.3.36, 8.4.27, 8.5.12), so
+      # "Install dependencies" fails on an older runner PHP (ADR 0003, update
+      # 2026-10-27).
       matrix:
         php: ["8.3", "8.4", "8.5"]
         laravel: ["11", "12", "13"]

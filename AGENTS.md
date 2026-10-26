@@ -68,12 +68,13 @@ docker compose exec php composer lint       # Pint (check)
 docker compose exec php composer format     # Pint (fix)
 ```
 
-CI runs the same scripts against real Redis on PHP 8.3–8.5 × Laravel 11/12/13.
+CI runs the same scripts against real Redis on PHP 8.3–8.5 × Laravel 11/12/13
+(the latest patch release of each PHP version).
 
 ## Code rules
 
-- Supported range: PHP `^8.3`, Laravel `^11.44.2 || ^12.0.1 || ^13.0`;
-  on PHP 8.5, Laravel 12.40+ (ADR 0003).
+- Supported range: PHP `~8.3.36 || ~8.4.27 || ^8.5.12` (the zero-day fixes),
+  Laravel `^11.44.2 || ^12.0.1 || ^13.0`; on PHP 8.5, Laravel 12.40+ (ADR 0003).
   Do not use `Cache::memo` or the failover store in the core; they do not exist
   in Laravel 11.
 - Reuse Laravel's cache repository, locks and events. Do not open separate

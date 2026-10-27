@@ -1,22 +1,71 @@
 # Definitions
 
-> This page is growing with the package. For now it covers TTLs and
-> parameters; the full guide to writing definitions comes with the v0.1.0 docs.
-
-Every cache entry type is defined once in `config/cache-contract.php`. Its
-parameters are the values that pick one entry out of many, such as a user ID.
+Every cache entry type is defined once in `config/cache-contract.php`, under
+`definitions`. Code refers to it by its ID; the key and the TTL come from the
+definition, so they are never typed by hand.
 
 ```php
-'user' => [
-    'profile' => [
-        'purpose'     => 'profile',
-        'type'        => 'array',
-        'params'      => ['user_id' => 'int'],
-        'ttl'         => 3600,
-        'description' => 'Profile page data.',
+'definitions' => [
+    'user' => [                        // section
+        'profile' => [                 // name → ID "user.profile"
+            'subject'     => App\Models\User::class,
+            'purpose'     => 'profile',
+            'type'        => 'array',
+            'params'      => ['user_id' => 'int'],
+            'ttl'         => '1 hour',
+            'description' => 'Profile page data.',
+        ],
     ],
 ],
 ```
+
+## Sections and IDs
+
+Definitions are grouped into sections. The ID is `section.name`, e.g.
+`user.profile`, and both parts are snake_case. Group by the data's owner
+(`user`, `billing`, `report`) so related entries sit together.
+
+The section `model` is reserved for the [model cache](model-cache.md).
+
+## Fields
+
+| Field | Required | Meaning |
+| :--- | :--- | :--- |
+| `purpose` | yes | What the entry is for, in snake_case: `profile`, `active_list`. |
+| `type` | yes | What is cached: `model`, `collection`, `array`, `string`, `int`, `float` or `bool`. |
+| `ttl` | yes | How long an entry lives: seconds or a duration; see [TTL](#ttl). |
+| `description` | yes | One sentence for the people who read the config and the `list` output. |
+| `subject` | no | The Eloquent model the data is about, e.g. `App\Models\User::class`. |
+| `params` | no | The values that pick one entry out of many; see [Parameters](#parameters). |
+| `version` | no | A positive integer, default `1`; see [Versions](#versions). |
+| `tags` | no | A list of tag names. Validated today; group invalidation comes in a later release. |
+| `invalidated_by` | no | A list of model classes whose changes should clear this entry. Validated today; the invalidation itself comes in a later release. |
+
+Two definitions with the same `subject` and `purpose` are rejected: that is
+the same data cached under two names.
+
+## Versions
+
+The version is part of the key (`cc:user:profile:v2:…`). Bump it when the
+structure of the cached value changes, for example when a field is added to
+the cached array. The old entries are then no longer read, and they expire
+through their TTL; nothing has to be flushed.
+
+## Validation
+
+The definitions are validated on the first cache call (and by the commands).
+Every problem is reported at once, with the definition it belongs to:
+
+```
+Uslanozan\CacheContract\Exceptions\InvalidDefinitions
+3 problems in config/cache-contract.php:
+  - user.profile: "ttl" is required
+  - user.active_list: unknown field "ttll" (did you mean "ttl"?)
+  - user.active_list: "ttl" is required
+```
+
+Run `php artisan cache-contract:list` after editing the config: it loads and
+validates every definition, so a mistake shows up before a request hits it.
 
 ## TTL
 

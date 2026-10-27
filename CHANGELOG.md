@@ -52,7 +52,8 @@ model cache and the first commands.
 
 ### Requirements
 
-- PHP `^8.3`
+- PHP `~8.3.36 || ~8.4.27 || ^8.5.12`: the releases that fix the PHP
+  zero-day ([ADR 0003](docs/adr/0003-supported-versions.md))
 - Laravel `^11.44.2 || ^12.0.1 || ^13.0`; on PHP 8.5, Laravel 12.40+
 - Redis with phpredis
 

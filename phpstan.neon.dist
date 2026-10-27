@@ -8,4 +8,7 @@ parameters:
   # its env() calls because it does not see it as an application config file.
   paths:
     - src
+    # Traits are only analysed through a class that uses them; the fixture
+    # models use HasCache, so the trait is checked in context.
+    - tests/Fixtures/Models
   tmpDir: build/phpstan

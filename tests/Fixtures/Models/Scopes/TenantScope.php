@@ -8,7 +8,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
 
-/** Limits rows to the current tenant, read from the container ("fixture.tenant"). */
+/**
+ * Limits rows to the current tenant, read from the container ("fixture.tenant").
+ *
+ * @implements Scope<Model>
+ */
 final class TenantScope implements Scope
 {
     public function apply(Builder $builder, Model $model): void

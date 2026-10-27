@@ -15,7 +15,37 @@ read it from the cache until its TTL ends.
 
 > **Not yet included:** changes to a model do not clear its cache entry yet.
 > An entry stays until its TTL ends, so choose a TTL you can live with.
-> Automatic invalidation (and the `HasCache` trait) comes in a later release.
+> Automatic invalidation (`forgetCache()`, `flushCache()` and clearing on
+> save) comes in a later release.
+
+## The HasCache trait
+
+Add the trait to a model for shortcuts on the model itself. They call the
+same `ModelCache`, so they share its entries and its rules:
+
+```php
+use Uslanozan\CacheContract\Eloquent\Concerns\HasCache;
+
+class User extends Model
+{
+    use HasCache;
+}
+
+User::cached(5);              // ModelCache::for(User::class)->find(5)
+User::cachedMany([3, 1, 2]);  // ModelCache::for(User::class)->findMany([3, 1, 2])
+User::modelCache();           // ModelCache::for(User::class)
+```
+
+Use `modelCache()` when a model needs a context or soft-deleted rows:
+
+```php
+Project::modelCache()->withContext(['tenant_id' => $tenant->id])->find(5);
+Post::modelCache()->withTrashed()->find(3);
+```
+
+`cached()` and `cachedMany()` take no context, so on a model whose global
+scopes need one (see [Tenants and global scopes](#tenants-and-global-scopes))
+they throw `ModelNotCachable`, exactly like `find()` without a context.
 
 ## find()
 

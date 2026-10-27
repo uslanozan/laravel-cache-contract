@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
+use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
 use Uslanozan\CacheContract\Facades\ModelCache;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Article;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Ledger;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\LegacyThing;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Note;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\ReservedContextNote;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 
 /** Number of database queries $operation runs. */
@@ -160,7 +164,7 @@ describe('a model that needs a context but gives none', function () {
             ->toThrow(ModelNotCachable::class, 'ProvidesCacheContext');
     });
 
-    it('still saves, invalidates all its entries and reports it', function () {
+    it('still saves and reports it, without writing to the cache', function () {
         Exceptions::fake();
         $counter = 'model:testing::memory::notes';
         $before = app(GenerationCounters::class)->currentOrFail([$counter])[$counter];
@@ -169,9 +173,71 @@ describe('a model that needs a context but gives none', function () {
         $note->body = 'Changed';
         $note->save();
 
+        // Such a model never has entries, so there is nothing to invalidate.
         expect(Note::query()->findOrFail(1)->body)->toBe('Changed')
-            ->and(app(GenerationCounters::class)->currentOrFail([$counter])[$counter])->not->toBe($before);
+            ->and(app(GenerationCounters::class)->currentOrFail([$counter])[$counter])->toBe($before);
 
         Exceptions::assertReported(ModelNotCachable::class);
+    });
+});
+
+describe('a save never fails because of the cache', function () {
+    it('saves a model the model cache cannot handle and reports why', function () {
+        Exceptions::fake();
+
+        LegacyThing::create(['name' => 'x']);
+
+        expect(LegacyThing::query()->count())->toBe(1);
+        Exceptions::assertReported(fn (ModelNotCachable $e) => str_contains($e->getMessage(), 'snake_case'));
+    });
+
+    it('commits, and runs the transaction\'s other callbacks, when clearing throws after the commit', function () {
+        Exceptions::fake();
+        $ran = false;
+
+        DB::transaction(function () use (&$ran) {
+            $note = ReservedContextNote::query()->findOrFail(1);
+            $note->body = 'Changed';
+            $note->save();
+
+            DB::afterCommit(function () use (&$ran) {
+                $ran = true;
+            });
+        });
+
+        expect(Note::query()->findOrFail(1)->body)->toBe('Changed')
+            ->and($ran)->toBeTrue();
+        Exceptions::assertReported(InvalidParameters::class);
+    });
+});
+
+describe('connections', function () {
+    it('clears right away when the model\'s connection has no transaction, even if another one rolls back', function () {
+        expect(Ledger::cached(1)?->name)->toBe('Old');
+
+        try {
+            DB::connection(ModelCacheDatabase::CONNECTION)->transaction(function () {
+                $ledger = Ledger::query()->findOrFail(1);
+                $ledger->name = 'New';
+                $ledger->save(); // stored at once: no transaction on its own connection
+
+                throw new RuntimeException('roll back the other connection');
+            });
+        } catch (RuntimeException) {
+        }
+
+        expect(Ledger::cached(1)?->name)->toBe('New');
+    });
+
+    it('waits for a transaction on the model\'s own connection', function () {
+        expect(Ledger::cached(1)?->name)->toBe('Old');
+
+        DB::connection(ModelCacheDatabase::SECOND_CONNECTION)->beginTransaction();
+        $ledger = Ledger::query()->findOrFail(1);
+        $ledger->name = 'New';
+        $ledger->save();
+        DB::connection(ModelCacheDatabase::SECOND_CONNECTION)->rollBack();
+
+        expect(Ledger::cached(1)?->name)->toBe('Old');
     });
 });

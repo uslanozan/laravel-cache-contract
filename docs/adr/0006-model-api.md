@@ -80,8 +80,18 @@ public function cacheContext(): array
   context and key of the current values and of the values before the change,
   so a row moved to another tenant leaves no stale entry.
 - A missing `ProvidesCacheContext` fails on the first read with a context,
-  where developers see it. A save never fails because of it: every entry of
-  the model is invalidated instead, and the problem is reported.
+  where developers see it. A save never fails because of it: the problem is
+  reported, and nothing is cleared, since every read of such a model throws
+  before it caches anything.
+- More generally, a save never fails because of the cache setup: the
+  package's own errors on this path (`CacheContractException`) are reported,
+  before and after the commit, so the commit and the transaction's other
+  after-commit callbacks still run. Exceptions from the model's own
+  `cacheContext()` propagate, as loader exceptions do (ADR 0007).
+- The after-commit callback goes to the model's own connection: with no
+  transaction open there, entries are cleared at once, because
+  `afterCommit()` alone would attach it to the last transaction on any
+  connection.
 
 It is an interface rather than a plain method, so the package can tell
 whether a model provides it and static analysis checks the signature.

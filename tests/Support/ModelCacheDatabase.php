@@ -9,6 +9,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Article;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Ledger;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Note;
@@ -20,17 +21,22 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Token;
 /**
  * An in-memory SQLite database on the "testing" connection with one row per
  * model-cache fixture: member 1, article 1, ranking 1, project 5 (tenant 7),
- * note 1 (tenant 7) and token "abc-123". The current tenant is 7.
+ * note 1 (tenant 7) and token "abc-123", and an empty `tblThings` table.
+ * Ledger 1 is on a second in-memory connection. The current tenant is 7.
  */
 final class ModelCacheDatabase
 {
     public const CONNECTION = 'testing';
 
+    public const SECOND_CONNECTION = 'ledger';
+
     public static function create(): void
     {
         config()->set('database.connections.'.self::CONNECTION, ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+        config()->set('database.connections.'.self::SECOND_CONNECTION, ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
         config()->set('database.default', self::CONNECTION);
         DB::purge(self::CONNECTION);
+        DB::purge(self::SECOND_CONNECTION);
 
         Schema::create('organizations', function (Blueprint $table) {
             $table->id();
@@ -70,6 +76,14 @@ final class ModelCacheDatabase
             $table->string('id')->primary();
             $table->string('name');
         });
+        Schema::create('tblThings', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+        });
+        Schema::connection(self::SECOND_CONNECTION)->create('ledgers', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+        });
 
         app()->instance('fixture.tenant', 7);
 
@@ -90,6 +104,7 @@ final class ModelCacheDatabase
             Project::create(['id' => 5, 'tenant_id' => 7, 'name' => 'Apollo']);
             Token::create(['id' => 'abc-123', 'name' => 'API']);
             Note::create(['id' => 1, 'tenant_id' => 7, 'body' => 'Hello']);
+            Ledger::create(['id' => 1, 'name' => 'Old']);
         });
     }
 

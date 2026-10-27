@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Uslanozan\CacheContract\Eloquent\ModelCache;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Eloquent\ProvidesCacheContext;
+use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
 
@@ -129,27 +130,40 @@ trait HasCache
     }
 
     /**
-     * Clears this model's entries once the change is committed. Never throws
-     * because of the cache setup: a model that needs a context but gives none
-     * has all its entries invalidated instead, and that is reported.
+     * Clears this model's entries once the change is committed. Never fails
+     * the save or the commit because of the cache setup: the package's own
+     * errors (a model it cannot cache, a missing ProvidesCacheContext, an
+     * invalid context) are reported instead.
      */
     protected function clearCacheAfterChange(): void
     {
-        $cache = static::modelCache();
+        try {
+            $cache = static::modelCache();
 
-        if ($cache->needsContext() && ! $this instanceof ProvidesCacheContext) {
-            report(ModelNotCachable::missingCacheContext(static::class));
-            $this->runAfterCommit(static fn () => $cache->flush());
+            if ($cache->needsContext() && ! $this instanceof ProvidesCacheContext) {
+                // Nothing to clear: every read of such a model throws before it caches anything.
+                report(ModelNotCachable::missingCacheContext(static::class));
+
+                return;
+            }
+
+            // Taken now: after the commit, getOriginal() already holds the new values.
+            $targets = $this->cacheTargets();
+        } catch (CacheContractException $e) {
+            report($e);
 
             return;
         }
 
-        // Taken now: after the commit, getOriginal() already holds the new values.
-        $targets = $this->cacheTargets();
-
         $this->runAfterCommit(static function () use ($cache, $targets): void {
             foreach ($targets as [$context, $id]) {
-                $cache->withContext($context)->forget($id);
+                try {
+                    $cache->withContext($context)->forget($id);
+                } catch (CacheContractException $e) {
+                    // Thrown here, it would fail the commit and skip the transaction's
+                    // other after-commit callbacks, queued jobs included.
+                    report($e);
+                }
             }
         });
     }
@@ -188,6 +202,14 @@ trait HasCache
      */
     private function runAfterCommit(Closure $callback): void
     {
-        $this->getConnection()->afterCommit($callback);
+        $connection = $this->getConnection();
+
+        // afterCommit() alone attaches it to the last open transaction on any connection.
+        // shortcut: a transaction on another connection opened inside one on this connection still gets it; register per connection if that case shows up.
+        if ($connection->transactionLevel() === 0) {
+            $callback();
+        } else {
+            $connection->afterCommit($callback);
+        }
     }
 }

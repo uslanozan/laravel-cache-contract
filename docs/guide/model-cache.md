@@ -86,9 +86,10 @@ $users->load('company');   // one query for all of them
 With `HasCache`, a model's entries are cleared when it is saved (created or
 updated), deleted or restored:
 
-- **After the commit.** Inside a transaction, the entries are cleared once it
-  commits; on rollback nothing is cleared. Outside a transaction they are
-  cleared right away.
+- **After the commit.** Inside a transaction on the model's connection, the
+  entries are cleared once it commits; on rollback nothing is cleared.
+  Without a transaction on that connection they are cleared right away, even
+  when another connection has one open.
 - **Only this model's entries**, with and without `withTrashed()`.
 - **The previous values too.** If the change moves the row to another tenant
   (or changes its key), the entries under the old values are cleared as well,
@@ -96,11 +97,22 @@ updated), deleted or restored:
 - Clearing follows the `invalidate` setting of [Redis errors](production.md):
   with the default `report`, a failure is reported and the old entry stays
   until its TTL ends.
+- **A save never fails because of the cache.** If the model cache cannot
+  handle the model (for example a table name that is not snake_case) or
+  rejects its context, the error is passed to `report()`, and the save, the
+  commit and the transaction's other after-commit callbacks, queued jobs
+  included, go ahead. An exception thrown by your own `cacheContext()` is not
+  caught.
 
 **Not seen by model events**, as in Eloquent itself: mass updates and deletes
 (`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL
 and changes from other applications. Call `User::flushCache()` after those, or
 keep the TTL short enough.
+
+**A read during a change:** a read that loads a row just before a change can
+write the old row back after the change clears it; it then stays until its
+TTL ends. `flushCache()` does not have this gap, because entries under the
+old generation are never read again.
 
 ### Models that need a context
 
@@ -128,9 +140,10 @@ class Project extends Model implements ProvidesCacheContext
 A model with `HasCache` that needs a context but does not implement it
 throws `ModelNotCachable` on the first read with a context, so you notice it
 while developing. If such a model is still saved (for example from a job
-that never reads it), the save goes through, every entry of the model is
-invalidated instead, and the problem is reported. Models whose only global
-scopes are `SoftDeletes` or listed in `safe_scopes` need no context.
+that never reads it), the save goes through and the problem is reported;
+there is nothing to clear, since such a model never has entries. Models
+whose only global scopes are `SoftDeletes` or listed in `safe_scopes` need
+no context.
 
 ### By hand
 

@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Uslanozan\CacheContract\Commands\InspectCommand;
 use Uslanozan\CacheContract\Commands\ListCommand;
+use Uslanozan\CacheContract\Commands\ScanCommand;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
@@ -120,6 +121,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $this->commands([
                 ListCommand::class,
                 InspectCommand::class,
+                ScanCommand::class,
             ]);
         }
     }

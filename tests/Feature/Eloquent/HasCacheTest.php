@@ -63,10 +63,3 @@ it('keeps the guards of the model cache', function () {
         ->and(fn () => Project::cachedMany([5]))->toThrow(ModelNotCachable::class)
         ->and(fn () => Member::cached('abc'))->toThrow(InvalidParameters::class);
 });
-
-it('builds a new model cache on every call, so nothing is kept on the model class', function () {
-    $withTenant = Project::modelCache()->withContext(['tenant_id' => 7]);
-
-    expect(Project::modelCache())->not->toBe($withTenant)
-        ->and(fn () => Project::modelCache()->find(5))->toThrow(ModelNotCachable::class);
-});

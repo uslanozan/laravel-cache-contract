@@ -54,3 +54,47 @@ the Phase 2 implementation.
   not use the trait.
 - Mass updates (`User::query()->update(...)`) do not fire model events;
   documentation must point to `flushCache()` for those.
+
+## Update 2026-10-25: final names and the cache context (LRVL-38)
+
+The working names above are now final: `ModelCache::for($class)` with
+`find()`, `findMany()`, `forget()` and `flush()`, and the `HasCache` trait with
+`cached()`, `cachedMany()`, `modelCache()`, `forgetCache()` and
+`flushCache()`. `flushCache()` gives the model's generation counter
+`model:{connection}:{database}:{table}` a new value (ADR 0009).
+
+**Cache context.** A model whose global scopes need a context (any scope
+other than `SoftDeletes` and its `safe_scopes`) caches its rows under that
+context, so a change can only clear the right entries if the model gives its
+context. Such a model with `HasCache` implements `ProvidesCacheContext`:
+
+```php
+public function cacheContext(): array
+{
+    return ['tenant_id' => $this->tenant_id];
+}
+```
+
+- It returns the same values reads pass to `withContext()`.
+- On save, delete and restore, entries are cleared after commit for the
+  context and key of the current values and of the values before the change,
+  so a row moved to another tenant leaves no stale entry.
+- A missing `ProvidesCacheContext` fails on the first read with a context,
+  where developers see it. A save never fails because of it: the problem is
+  reported, and nothing is cleared, since every read of such a model throws
+  before it caches anything.
+- More generally, a save never fails because of the cache setup: the
+  package's own errors on this path (`CacheContractException`) are reported,
+  before and after the commit, so the commit and the transaction's other
+  after-commit callbacks still run. An exception from the model's own
+  `cacheContext()` is reported as well, and the model's counter is bumped
+  after the commit, since the context is unknown. Unlike a loader (ADR 0007),
+  clearing after a save is side work the caller did not ask for.
+  `forgetCache()`, called directly, still throws.
+- The after-commit callback goes to the model's own connection: with no
+  transaction open there, entries are cleared at once, because
+  `afterCommit()` alone would attach it to the last transaction on any
+  connection.
+
+It is an interface rather than a plain method, so the package can tell
+whether a model provides it and static analysis checks the signature.

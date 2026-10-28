@@ -33,7 +33,10 @@ arch('value objects are immutable')
 // The manager is a singleton: if it could change, a tenant set in one request
 // could leak into the next one on the same Octane or queue worker.
 arch('the cache manager is immutable')
-    ->expect('Uslanozan\CacheContract\Runtime\CacheContractManager')
+    ->expect([
+        'Uslanozan\CacheContract\Runtime\CacheContractManager',
+        'Uslanozan\CacheContract\Runtime\GenerationCounters',
+    ])
     ->toBeReadonly()
     ->toBeFinal();
 

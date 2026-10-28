@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Exceptions;
 
 use LogicException;
+use Uslanozan\CacheContract\Eloquent\ProvidesCacheContext;
 
 /**
  * The model cache cannot cache this model, or not in the way it was asked to.
@@ -34,6 +35,17 @@ final class ModelNotCachable extends LogicException implements CacheContractExce
     public static function notSoftDeletable(string $class): self
     {
         return new self(sprintf('withTrashed() needs a model that uses SoftDeletes; %s does not.', $class));
+    }
+
+    public static function missingCacheContext(string $class): self
+    {
+        return new self(sprintf(
+            '%s needs a context and uses HasCache, so a change to it can only clear its cache entries if it '
+            .'implements %s: add cacheContext() returning the values you pass to withContext(), '
+            .'e.g. [\'tenant_id\' => $this->tenant_id].',
+            $class,
+            ProvidesCacheContext::class,
+        ));
     }
 
     /**

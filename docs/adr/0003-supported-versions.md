@@ -102,3 +102,27 @@ after every Laravel advisory.
 Verified locally in Docker against real Redis: every `prefer-lowest` cell
 passes at these floors (PHP 8.3 and 8.4 × Laravel 11/12/13; PHP 8.5 ×
 Laravel 12.40.0 and 13.0.0).
+
+## Update 2026-10-27: PHP floor raised for the zero-day
+
+A zero-day in PHP is fixed in **8.5.12, 8.4.27 and 8.3.36** (and 8.2.35,
+which is below our range). The company is patching its projects to these
+releases (LRVL-70). The package must not allow, or be tested on, a release
+that is still vulnerable.
+
+**Decision:**
+
+- `composer.json` requires `~8.3.36 || ~8.4.27 || ^8.5.12`: a separate floor
+  for each minor version. `^8.3.36` alone would not work, because it also
+  allows 8.4.0–8.4.26. `^8.5.12` keeps later versions (8.6+) open, as
+  `^8.3` did.
+- The CI matrix keeps PHP 8.3, 8.4 and 8.5. `setup-php` installs the latest
+  patch release of each, and Composer refuses to install on a PHP release
+  below the constraint, so a vulnerable runner fails the job instead of
+  passing quietly.
+- The Docker image is pinned to the patch release (`8.3.36` by default),
+  because a cached `8.3` tag can still be an older, vulnerable build.
+
+The Laravel constraints and the "minus Laravel 11 on PHP 8.5" rule do not
+change. Company projects on PHP 8.3 have to be on 8.3.36 or later to install
+the package.

@@ -12,6 +12,7 @@ use Uslanozan\CacheContract\Definitions\DefinitionValidator;
 use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Definitions\ResultType;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
+use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 
 /**
@@ -33,6 +34,7 @@ final readonly class ModelCacheFactory
         private CacheFactory $cache,
         private KeyFactory $keys,
         private RedisErrorPolicy $errors,
+        private GenerationCounters $counters,
         private ModelCacheConfig $config,
         private ?string $store = null,
     ) {}
@@ -82,6 +84,7 @@ final readonly class ModelCacheFactory
             $this->cache,
             $this->keys,
             $this->errors,
+            $this->counters,
             $this->config->safeScopesFor($class),
             $this->store,
             $this->config->chunkSize,

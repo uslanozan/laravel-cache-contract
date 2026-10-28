@@ -78,7 +78,7 @@ describe('find', function () {
     });
 
     it('builds the key from the table, the version, the ID, the connection and its database', function () {
-        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v1:id=1:@connection=testing:@database=%3Amemory%3A');
+        expect(ModelCache::for(Member::class)->key(1))->toMatch('/^cc:model:members:v1:id=1:@connection=testing:@database=%3Amemory%3A:~g\d+$/');
     });
 
     it('accepts a numeric string for an integer key and rejects anything else', function () {
@@ -97,7 +97,7 @@ describe('find', function () {
         $cache = ModelCache::for(Token::class);
 
         expect($cache->find('abc-123')?->name)->toBe('API')
-            ->and($cache->key('abc-123'))->toBe('cc:model:tokens:v1:id=abc-123:@connection=testing:@database=%3Amemory%3A');
+            ->and($cache->key('abc-123'))->toMatch('/^cc:model:tokens:v1:id=abc\-123:@connection=testing:@database=%3Amemory%3A:~g\d+$/');
     });
 
     it('keeps model entries out of the definition registry', function () {
@@ -130,7 +130,7 @@ describe('configuration', function () {
         ModelCache::for(Member::class)->find(1);
         $this->travel(61)->seconds();
 
-        expect(ModelCache::for(Member::class)->key(1))->toBe('cc:model:members:v2:id=1:@connection=testing:@database=%3Amemory%3A')
+        expect(ModelCache::for(Member::class)->key(1))->toMatch('/^cc:model:members:v2:id=1:@connection=testing:@database=%3Amemory%3A:~g\d+$/')
             ->and(modelCacheQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
     });
 
@@ -186,7 +186,7 @@ describe('context', function () {
         $tenant = $shared->withContext(['tenant_id' => 7]);
 
         expect($tenant)->not->toBe($shared)
-            ->and($tenant->key(5))->toBe('cc:model:projects:v1:id=5:@connection=testing:@database=%3Amemory%3A:@tenant_id=7')
+            ->and($tenant->key(5))->toMatch('/^cc:model:projects:v1:id=5:@connection=testing:@database=%3Amemory%3A:@tenant_id=7:~g\d+$/')
             ->and(app(ModelCacheFactory::class))->toBe(app(ModelCacheFactory::class));
     });
 
@@ -247,7 +247,7 @@ describe('soft deletes', function () {
 
         expect($cache->find(1))->toBeNull()
             ->and($cache->withTrashed()->find(1)?->trashed())->toBeTrue()
-            ->and($cache->withTrashed()->key(1))->toBe('cc:model:articles:v1:id=1:@connection=testing:@database=%3Amemory%3A:@trashed=with')
+            ->and($cache->withTrashed()->key(1))->toMatch('/^cc:model:articles:v1:id=1:@connection=testing:@database=%3Amemory%3A:@trashed=with:~g\d+$/')
             ->and($cache->find(1))->toBeNull();
     });
 

@@ -6,6 +6,7 @@ namespace Uslanozan\CacheContract\Tests\Fixtures\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Uslanozan\CacheContract\Eloquent\Concerns\HasCache;
 
 /**
  * A model with casts, a hidden column and a relation, for tests that cache
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class Member extends Model
 {
+    use HasCache;
+
     protected $guarded = [];
 
     protected $hidden = ['password'];

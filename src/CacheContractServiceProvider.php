@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Uslanozan\CacheContract\Commands\InspectCommand;
 use Uslanozan\CacheContract\Commands\ListCommand;
+use Uslanozan\CacheContract\Commands\ScanCommand;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
@@ -19,6 +20,7 @@ use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
+use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
@@ -88,11 +90,21 @@ class CacheContractServiceProvider extends ServiceProvider
             (array) $this->config($app)->get('cache-contract.models', []),
         ));
 
+        // Generation counters (ADR 0009), under the package prefix in the same
+        // store as the entries. Holds no request state.
+        $this->app->singleton(GenerationCounters::class, fn (Application $app): GenerationCounters => new GenerationCounters(
+            $app->make('cache'),
+            $app->make(RedisErrorPolicy::class),
+            (string) $this->config($app)->get('cache-contract.prefix', ''),
+            $this->store($app),
+        ));
+
         // Holds no request state: the ModelCache it builds is immutable too.
         $this->app->singleton(ModelCacheFactory::class, fn (Application $app): ModelCacheFactory => new ModelCacheFactory(
             $app->make('cache'),
             $app->make(KeyFactory::class),
             $app->make(RedisErrorPolicy::class),
+            $app->make(GenerationCounters::class),
             $app->make(ModelCacheConfig::class),
             $this->store($app),
         ));
@@ -109,6 +121,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $this->commands([
                 ListCommand::class,
                 InspectCommand::class,
+                ScanCommand::class,
             ]);
         }
     }

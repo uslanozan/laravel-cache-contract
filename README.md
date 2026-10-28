@@ -1,27 +1,49 @@
 # laravel-cache-contract
 
-> 🚧 **Work in progress.** Not ready for use yet; there is no release.
+> **Pre-release.** The API can still change before 1.0. There is no tagged
+> release yet; the first one is `v0.1.0`.
 
-A Laravel package that puts every cache key in a project under one central,
+A Laravel package that puts every cache entry in a project under one central,
 reviewable contract, on top of Laravel's own cache and Redis.
 
-- **Central definitions:** each cache entry type is defined once, in PHP, with
-  a required description, TTL and typed parameters. Unknown definitions and
-  wrong parameters fail loudly.
-- **Consistent keys:** keys are generated deterministically from the definition
-  and its context (tenant, locale, projection…), never typed by hand.
-- **Discovery:** list and search existing definitions, and get warned about
-  similar ones before creating a duplicate.
-- **Eloquent without per-model classes:** cache single models and ID lists
-  through one generic API, with bulk loading for partial hits.
-- **Enforcement:** a scanner and CI rules find cache calls that bypass the
-  contract.
+| | Feature | Status |
+| :--- | :--- | :--- |
+| **Definitions** | Each cache entry type is defined once in PHP, with a description, a TTL and typed parameters. Unknown IDs and wrong parameters fail loudly. | ✅ |
+| **Keys** | Keys are generated from the definition, its parameters and the context (tenant, locale…), never typed by hand. | ✅ |
+| **Runtime API** | `CacheContract::remember()`, `get`, `has`, `put`, `refresh`, `forget`; a cached `null`, `false` or `0` is a hit. | ✅ |
+| **Model cache** | `ModelCache::for(User::class)->find(5)` and `findMany()` without per-model classes. Models with global scopes (e.g. a tenant) need the tenant in the context; see [Model cache](docs/guide/model-cache.md#tenants-and-global-scopes). | ✅ |
+| **Discovery** | `cache-contract:list` and `cache-contract:inspect`, with "did you mean" suggestions for a mistyped ID. | ✅ (warnings for similar definitions: planned) |
+| **Scanner** | `cache-contract:scan` lists every cache call in a codebase with its file, line and how much of its key can be read. | ✅ |
+| **Invalidation** | Models with `HasCache` clear their entries after a change is committed, and `flushCache()` clears a whole model with a generation counter; see [Model cache](docs/guide/model-cache.md#automatic-invalidation). | ✅ for models (definitions: planned) |
+| **Enforcement** | Lint and PHPStan rules for CI. | 🗓️ planned |
 
-See the [roadmap](docs/ROADMAP.md) for the plan and current status.
+## Quick example
+
+```php
+// config/cache-contract.php
+'definitions' => [
+    'user' => [
+        'profile' => [
+            'purpose'     => 'profile',
+            'type'        => 'array',
+            'params'      => ['user_id' => 'int'],
+            'ttl'         => '1 hour',
+            'description' => 'Profile page data.',
+        ],
+    ],
+],
+```
+
+```php
+use Uslanozan\CacheContract\Facades\CacheContract;
+
+$profile = CacheContract::remember('user.profile', ['user_id' => 42], fn () => $this->loadProfile(42));
+// key: cc:user:profile:v1:user_id=42
+```
 
 ## Requirements
 
-- PHP 8.3 or newer
+- PHP 8.3.36+, 8.4.27+ or 8.5.12+ (earlier releases have a known zero-day)
 - Laravel 11.44.2+, 12.0.1+ or 13 (on PHP 8.5: Laravel 12.40+ or 13)
 - Redis (phpredis) as the cache store
 
@@ -30,6 +52,32 @@ See the [roadmap](docs/ROADMAP.md) for the plan and current status.
 > run it, but upgrading to Laravel 12.69+ or 13.30+ (the lowest releases with
 > no known advisories as of October 2026) is strongly recommended. See
 > [ADR 0003](docs/adr/0003-supported-versions.md).
+
+## Installation
+
+The package is not on Packagist yet, so install it from GitHub. There is no
+tag yet either, so require `dev-develop`; once `v0.1.0` is tagged, use `^0.1`.
+
+```json
+// composer.json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/uslanozan/laravel-cache-contract" }
+]
+```
+
+```bash
+composer require uslanozan/laravel-cache-contract:dev-develop
+php artisan vendor:publish --tag=cache-contract-config
+```
+
+Details: [Installation](docs/guide/installation.md).
+
+## Documentation
+
+The [user guide](docs/guide/README.md) covers installation, definitions, the
+runtime API, the model cache, the commands and production settings. The
+decisions behind the design are in [`docs/adr/`](docs/adr/), and the
+[changelog](CHANGELOG.md) lists what each release adds.
 
 ## Contributing
 

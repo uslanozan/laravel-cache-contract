@@ -10,7 +10,7 @@ services:
     build:
       context: docker/php
       args:
-        PHP_VERSION: ${PHP_VERSION:-8.3}
+        PHP_VERSION: ${PHP_VERSION:-8.3.36}
     volumes:
       - .:/app
       - composer-cache:/home/dev/.composer/cache

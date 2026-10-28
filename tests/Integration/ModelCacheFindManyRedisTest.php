@@ -12,8 +12,9 @@ use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
- * findMany() against real Redis (phpredis): 100 models take one MGET, one
- * query and one bulk write, and large lists are split into chunks.
+ * findMany() against real Redis (phpredis): 100 models take one read of the
+ * model's generation counter, one MGET, one query and one bulk write, and
+ * large lists are split into chunks.
  */
 
 beforeEach(function () {
@@ -62,15 +63,17 @@ function findManyRedisCost(Closure $operation): array
     return ['queries' => count(DB::getQueryLog()), 'redis' => $redis];
 }
 
-it('loads 100 models with one MGET, one query and one bulk write', function () {
+it('loads 100 models with one counter read, one MGET, one query and one bulk write', function () {
     $ids = [1, ...ModelCacheDatabase::addMembers(99)];
 
     $first = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(100));
     $second = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(100));
 
-    // The bulk write is one MULTI … EXEC transaction of 100 SETEX.
-    expect($first)->toBe(['queries' => 1, 'redis' => ['exec' => 1, 'mget' => 1, 'multi' => 1, 'setex' => 100]])
-        ->and($second)->toBe(['queries' => 0, 'redis' => ['mget' => 1]]);
+    // One MGET reads the generation counter (ADR 0009), created once with an
+    // atomic EVAL; one MGET reads the entries; the bulk write is one
+    // MULTI … EXEC transaction of 100 SETEX.
+    expect($first)->toBe(['queries' => 1, 'redis' => ['eval' => 1, 'exec' => 1, 'mget' => 2, 'multi' => 1, 'setex' => 100]])
+        ->and($second)->toBe(['queries' => 0, 'redis' => ['mget' => 2]]);
 });
 
 it('splits large lists into chunks', function () {
@@ -79,8 +82,9 @@ it('splits large lists into chunks', function () {
 
     $cost = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(5));
 
+    // Three chunks of entries, plus one read of the generation counter.
     expect($cost['queries'])->toBe(3)
-        ->and($cost['redis']['mget'])->toBe(3)
+        ->and($cost['redis']['mget'])->toBe(4)
         ->and($cost['redis']['exec'])->toBe(3)
         ->and($cost['redis']['setex'])->toBe(5);
 });

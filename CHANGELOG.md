@@ -40,6 +40,12 @@ model cache and the first commands.
   `withContext()` and `withTrashed()`; models with global scopes need a
   context unless the scope is listed in `safe_scopes`; per-model `ttl` and
   `version` overrides.
+- **`HasCache` trait:** `cached()`, `cachedMany()`, `modelCache()`,
+  `forgetCache()` and `flushCache()`. Saving, deleting or restoring a model
+  clears its entries after the commit, under its current and previous
+  context; `flushCache()` gives the model's generation counter a new value.
+  Models whose scopes need a context implement `ProvidesCacheContext`. A save
+  never fails because of the cache.
 - **Commands:** `cache-contract:list` (with `--section`, `--subject` and
   `--json`) and `cache-contract:inspect` (with `--param` and `--context`,
   and suggestions for a mistyped ID).

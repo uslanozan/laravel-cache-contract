@@ -13,10 +13,10 @@ $users = ModelCache::for(User::class)->findMany([3, 1]);  // Eloquent collection
 The first call loads from the database and caches the result; later calls
 read it from the cache until its TTL ends.
 
-> **Not yet included:** changes to a model do not clear its cache entry yet.
-> An entry stays until its TTL ends, so choose a TTL you can live with.
-> Automatic invalidation (`forgetCache()`, `flushCache()` and clearing on
-> save) comes in a later release.
+With the [`HasCache` trait](#the-hascache-trait), saving, deleting or
+restoring a model clears its entries after the transaction commits (see
+[Automatic invalidation](#automatic-invalidation)). Without the trait an entry
+stays until its TTL ends.
 
 ## The HasCache trait
 
@@ -34,6 +34,8 @@ class User extends Model
 User::cached(5);              // ModelCache::for(User::class)->find(5)
 User::cachedMany([3, 1, 2]);  // ModelCache::for(User::class)->findMany([3, 1, 2])
 User::modelCache();           // ModelCache::for(User::class)
+$user->forgetCache();         // this model's entries
+User::flushCache();           // every entry of the model
 ```
 
 Use `modelCache()` when a model needs a context or soft-deleted rows:
@@ -69,14 +71,91 @@ $users->load('company');   // one query for all of them
 ```
 
 - Cached models are read in one go, the rest are loaded with one query and
-  cached in one go. 100 models take one Redis read, one query and one
-  Redis write the first time, and one Redis read afterwards.
+  cached in one go. 100 models take two Redis reads (the model's generation
+  counter and the entries), one query and one Redis write the first time,
+  and two Redis reads afterwards.
 - The result is an Eloquent collection **in the order you asked for**.
 - An ID with no row is left out of the result (and cached as `null`).
   A repeated ID is returned once; `'1'` and `1` are the same ID.
 - Every ID is checked first: one invalid ID throws `InvalidParameters`
   before anything is read or written.
 - Very long lists are split into chunks (see `chunk_size` below).
+
+## Automatic invalidation
+
+With `HasCache`, a model's entries are cleared when it is saved (created or
+updated), deleted or restored:
+
+- **After the commit.** Inside a transaction on the model's connection, the
+  entries are cleared once it commits; on rollback nothing is cleared.
+  Without a transaction on that connection they are cleared right away, even
+  when another connection has one open.
+- **Only this model's entries**, with and without `withTrashed()`.
+- **The previous values too.** If the change moves the row to another tenant
+  (or changes its key), the entries under the old values are cleared as well,
+  so nothing stale is left behind.
+- Clearing follows the `invalidate` setting of [Redis errors](production.md):
+  with the default `report`, a failure is reported and the old entry stays
+  until its TTL ends.
+- **A save never fails because of the cache.** If the model cache cannot
+  handle the model (for example a table name that is not snake_case) or
+  rejects its context, the error is passed to `report()`, and the save, the
+  commit and the transaction's other after-commit callbacks, queued jobs
+  included, go ahead. If your own `cacheContext()` throws (for example on a
+  missing tenant), the exception is reported too, and since the context is
+  unknown, every entry of the model is invalidated after the commit, as with
+  `flushCache()`. `forgetCache()`, called by hand, still throws.
+
+**Not seen by model events**, as in Eloquent itself: mass updates and deletes
+(`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL
+and changes from other applications. Call `User::flushCache()` after those, or
+keep the TTL short enough.
+
+**A read during a change:** a read that loads a row just before a change can
+write the old row back after the change clears it; it then stays until its
+TTL ends. `flushCache()` does not have this gap, because entries under the
+old generation are never read again.
+
+### Models that need a context
+
+When a model's global scopes need a context (see
+[Tenants and global scopes](#tenants-and-global-scopes)), a change can only
+clear the right entries if the model says which context its row belongs to.
+Implement `ProvidesCacheContext` and return the same values you pass to
+`withContext()`:
+
+```php
+use Uslanozan\CacheContract\Eloquent\Concerns\HasCache;
+use Uslanozan\CacheContract\Eloquent\ProvidesCacheContext;
+
+class Project extends Model implements ProvidesCacheContext
+{
+    use HasCache;
+
+    public function cacheContext(): array
+    {
+        return ['tenant_id' => $this->tenant_id];
+    }
+}
+```
+
+A model with `HasCache` that needs a context but does not implement it
+throws `ModelNotCachable` on the first read with a context, so you notice it
+while developing. If such a model is still saved (for example from a job
+that never reads it), the save goes through and the problem is reported;
+there is nothing to clear, since such a model never has entries. Models
+whose only global scopes are `SoftDeletes` or listed in `safe_scopes` need
+no context.
+
+### By hand
+
+```php
+$user->forgetCache();   // this model's entries (current and previous values)
+User::flushCache();     // every entry of the model, for every ID and context
+```
+
+`flushCache()` gives the model's generation counter a new value (ADR 0009):
+every old entry becomes unreachable at once and expires through its TTL.
 
 ## Relations
 
@@ -178,12 +257,14 @@ wait up to 60 seconds before falling back.
 A key looks like:
 
 ```
-cc:model:users:v1:id=5:@connection=mysql:@database=app:@tenant_id=7
+cc:model:users:v1:id=5:@connection=mysql:@database=app:@tenant_id=7:~g8123
 ```
 
 It is built from the table, the version, the ID, the connection, its database
-and any context. `ModelCache::for(User::class)->key(5)` shows it, which helps
-when inspecting Redis. The section name `model` is reserved: definitions in
+and any context. The last segment is the value of the model's generation
+counter, which `flushCache()` changes. `ModelCache::for(User::class)->key(5)`
+shows the current key (it reads the counter from Redis), which helps when
+inspecting Redis. The section name `model` is reserved: definitions in
 the config cannot use it.
 
 ## Security
@@ -199,7 +280,7 @@ plain text. Keep tokens, passwords and personal data out of the context.
 
 | Exception | When |
 | :--- | :--- |
-| `ModelNotCachable` | The class is not a model; its table name is not snake_case; its key type is neither int nor string; it has global scopes and no context; `withTrashed()` on a model without `SoftDeletes`. |
+| `ModelNotCachable` | The class is not a model; its table name is not snake_case; its key type is neither int nor string; it has global scopes and no context; `withTrashed()` on a model without `SoftDeletes`; a model with `HasCache` that needs a context is read with one, or `forgetCache()` is called on it, without `ProvidesCacheContext`. |
 | `InvalidParameters` | An ID does not match the model's key type; a context name is reserved (`connection`, `database`, `trashed`). |
 | `InvalidConfiguration` | A `models` setting is invalid. |
 

@@ -101,8 +101,10 @@ updated), deleted or restored:
   handle the model (for example a table name that is not snake_case) or
   rejects its context, the error is passed to `report()`, and the save, the
   commit and the transaction's other after-commit callbacks, queued jobs
-  included, go ahead. An exception thrown by your own `cacheContext()` is not
-  caught.
+  included, go ahead. If your own `cacheContext()` throws (for example on a
+  missing tenant), the exception is reported too, and since the context is
+  unknown, every entry of the model is invalidated after the commit, as with
+  `flushCache()`. `forgetCache()`, called by hand, still throws.
 
 **Not seen by model events**, as in Eloquent itself: mass updates and deletes
 (`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL

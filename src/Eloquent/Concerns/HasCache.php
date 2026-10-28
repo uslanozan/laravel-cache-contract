@@ -7,6 +7,7 @@ namespace Uslanozan\CacheContract\Eloquent\Concerns;
 use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Throwable;
 use Uslanozan\CacheContract\Eloquent\ModelCache;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Eloquent\ProvidesCacheContext;
@@ -133,7 +134,8 @@ trait HasCache
      * Clears this model's entries once the change is committed. Never fails
      * the save or the commit because of the cache setup: the package's own
      * errors (a model it cannot cache, a missing ProvidesCacheContext, an
-     * invalid context) are reported instead.
+     * invalid context) and an exception from cacheContext() are reported
+     * instead.
      */
     protected function clearCacheAfterChange(): void
     {
@@ -146,11 +148,20 @@ trait HasCache
 
                 return;
             }
-
-            // Taken now: after the commit, getOriginal() already holds the new values.
-            $targets = $this->cacheTargets();
         } catch (CacheContractException $e) {
             report($e);
+
+            return;
+        }
+
+        try {
+            // Taken now: after the commit, getOriginal() already holds the new values.
+            $targets = $this->cacheTargets();
+        } catch (Throwable $e) {
+            // A bug in cacheContext(), such as a missing tenant: the context is unknown,
+            // so every entry of the model is invalidated to leave nothing stale.
+            report($e);
+            $this->runAfterCommit(static fn () => $cache->flush());
 
             return;
         }

@@ -16,6 +16,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Note;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\ReservedContextNote;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\ThrowingContextNote;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 
 /** Number of database queries $operation runs. */
@@ -208,6 +209,30 @@ describe('a save never fails because of the cache', function () {
         expect(Note::query()->findOrFail(1)->body)->toBe('Changed')
             ->and($ran)->toBeTrue();
         Exceptions::assertReported(InvalidParameters::class);
+    });
+
+    it('saves when cacheContext() throws, reports it and invalidates every entry of the model after the commit', function () {
+        Exceptions::fake();
+        $counter = 'model:testing::memory::notes';
+        $current = fn (): int => app(GenerationCounters::class)->currentOrFail([$counter])[$counter];
+        $before = $current();
+
+        DB::transaction(function () use ($current, $before) {
+            $note = ThrowingContextNote::query()->findOrFail(1);
+            $note->body = 'Changed';
+            $note->save();
+
+            expect($current())->toBe($before);
+        });
+
+        expect(Note::query()->findOrFail(1)->body)->toBe('Changed')
+            ->and($current())->not->toBe($before);
+        Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'No tenant');
+    });
+
+    it('still throws from forgetCache() when cacheContext() throws, since the caller asked for it', function () {
+        expect(fn () => ThrowingContextNote::query()->findOrFail(1)->forgetCache())
+            ->toThrow(RuntimeException::class, 'No tenant');
     });
 });
 

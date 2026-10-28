@@ -86,8 +86,11 @@ public function cacheContext(): array
 - More generally, a save never fails because of the cache setup: the
   package's own errors on this path (`CacheContractException`) are reported,
   before and after the commit, so the commit and the transaction's other
-  after-commit callbacks still run. Exceptions from the model's own
-  `cacheContext()` propagate, as loader exceptions do (ADR 0007).
+  after-commit callbacks still run. An exception from the model's own
+  `cacheContext()` is reported as well, and the model's counter is bumped
+  after the commit, since the context is unknown. Unlike a loader (ADR 0007),
+  clearing after a save is side work the caller did not ask for.
+  `forgetCache()`, called directly, still throws.
 - The after-commit callback goes to the model's own connection: with no
   transaction open there, entries are cleared at once, because
   `afterCommit()` alone would attach it to the last transaction on any

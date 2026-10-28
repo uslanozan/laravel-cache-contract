@@ -21,7 +21,7 @@ final readonly class Definition
      * @param  class-string<Model>|null  $subject  model the data is about, if any
      * @param  array<string, ParameterType>  $params  every declared parameter is required at call time
      * @param  list<string>  $tags
-     * @param  list<class-string<Model>>  $invalidatedBy  models whose changes clear this definition (Phase 3)
+     * @param  list<class-string<Model>>  $invalidatedBy  models whose changes clear this definition
      */
     public function __construct(
         public string $section,
@@ -50,12 +50,18 @@ final readonly class Definition
         $names = $this->tags;
 
         if ($this->invalidatedBy !== []) {
-            $names[] = 'def:'.$this->id;
+            $names[] = self::invalidationCounter($this->id);
         }
 
         $names = array_values(array_unique($names));
         sort($names, SORT_STRING);
 
         return $names;
+    }
+
+    /** "def:{id}": the counter a change to an invalidated_by model bumps. */
+    public static function invalidationCounter(string $id): string
+    {
+        return 'def:'.$id;
     }
 }

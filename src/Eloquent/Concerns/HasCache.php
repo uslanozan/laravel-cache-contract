@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Uslanozan\CacheContract\Eloquent\Concerns;
 
-use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Throwable;
@@ -14,6 +13,7 @@ use Uslanozan\CacheContract\Eloquent\ProvidesCacheContext;
 use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
+use Uslanozan\CacheContract\Invalidation\AfterCommit;
 
 /**
  * Shortcuts to the model cache on the model itself (ADR 0006). They only call
@@ -161,12 +161,12 @@ trait HasCache
             // A bug in cacheContext(), such as a missing tenant: the context is unknown,
             // so every entry of the model is invalidated to leave nothing stale.
             report($e);
-            $this->runAfterCommit(static fn () => $cache->flush());
+            AfterCommit::on($this->getConnection(), static fn () => $cache->flush());
 
             return;
         }
 
-        $this->runAfterCommit(static function () use ($cache, $targets): void {
+        AfterCommit::on($this->getConnection(), static function () use ($cache, $targets): void {
             foreach ($targets as [$context, $id]) {
                 try {
                     $cache->withContext($context)->forget($id);
@@ -205,22 +205,5 @@ trait HasCache
         }
 
         return array_values($targets);
-    }
-
-    /**
-     * Runs $callback after the current transaction on this model's
-     * connection commits, or now when there is none; never on rollback.
-     */
-    private function runAfterCommit(Closure $callback): void
-    {
-        $connection = $this->getConnection();
-
-        // afterCommit() alone attaches it to the last open transaction on any connection.
-        // shortcut: a transaction on another connection opened inside one on this connection still gets it; register per connection if that case shows up.
-        if ($connection->transactionLevel() === 0) {
-            $callback();
-        } else {
-            $connection->afterCommit($callback);
-        }
     }
 }

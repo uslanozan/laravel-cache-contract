@@ -38,8 +38,8 @@ The section `model` is reserved for the [model cache](model-cache.md).
 | `subject` | no | The Eloquent model the data is about, e.g. `App\Models\User::class`. |
 | `params` | no | The values that pick one entry out of many; see [Parameters](#parameters). |
 | `version` | no | A positive integer, default `1`; see [Versions](#versions). |
-| `tags` | no | A list of tag names. Validated today; group invalidation comes in a later release. |
-| `invalidated_by` | no | A list of model classes whose changes should clear this entry. Validated today; the invalidation itself comes in a later release. |
+| `tags` | no | A list of tag names. Each tag has a generation counter in the key; clearing by tag comes in a later release. |
+| `invalidated_by` | no | A list of model classes whose changes clear every entry of this definition; see [invalidated_by](#invalidated_by). |
 
 Two definitions with the same `subject` and `purpose` are rejected: that is
 the same data cached under two names.
@@ -50,6 +50,63 @@ The version is part of the key (`cc:user:profile:v2:…`). Bump it when the
 structure of the cached value changes, for example when a field is added to
 the cached array. The old entries are then no longer read, and they expire
 through their TTL; nothing has to be flushed.
+
+## invalidated_by
+
+List the models whose changes make the cached data wrong. When one of them
+is saved (created or updated), deleted or restored, every entry of the
+definition is invalidated:
+
+```php
+'member' => [
+    'active_list' => [
+        'purpose'        => 'active_list',
+        'type'           => 'array',
+        'params'         => ['organization_id' => 'int'],
+        'ttl'            => '10 minutes',
+        'description'    => 'Names of the active members of an organization.',
+        'invalidated_by' => [App\Models\Member::class],
+    ],
+],
+```
+
+```php
+CacheContract::remember('member.active_list', ['organization_id' => 1], fn () => $this->activeNames(1));
+
+Member::create([...]);   // a new member enters the list: the next call loads it again
+```
+
+- **Every entry of the definition**, for every parameter and context: a new
+  member of organization 2 also clears the list of organization 1. The
+  package cannot tell which entries a row belongs to.
+- **After the commit.** Inside a transaction on the model's connection, the
+  entries are invalidated once it commits; on rollback nothing changes.
+  Without a transaction on that connection they are invalidated right away.
+- **The model needs no `HasCache`.** Any Eloquent model works.
+- **The exact class.** A change to a subclass of a listed model is not seen,
+  as with Eloquent's own model events; list the subclass too.
+- **A save never fails because of the cache.** An invalid setting is passed
+  to `report()`. A Redis error follows the `invalidate` setting of
+  [Redis errors](production.md#when-redis-is-down): with the default
+  `report`, it is reported and the entries stay until their TTL ends.
+- **Not seen by model events**, as in Eloquent itself: mass updates and
+  deletes (`Member::query()->update([...])`), `saveQuietly()`,
+  `withoutEvents()`, raw SQL and changes from other applications. Keep the
+  TTL short enough for those.
+
+Each definition with `invalidated_by` has a generation counter (ADR 0009).
+A change gives it a new value, which is part of every key of the definition,
+so all the old entries become unreachable at once with one Redis write, and
+expire through their TTL. Reading such an entry costs one extra Redis
+command for the counter. A value loaded while a change commits is written
+under the old value, so it is never read.
+
+The listeners are registered when the application boots, from the
+`invalidated_by` lists only: the definitions are not validated at boot, so a
+broken config never stops the application from booting. It still fails on
+the first cache call and in `cache-contract:list`. After changing
+`invalidated_by`, restart long-running workers (`php artisan octane:reload`,
+`queue:restart`), as for any other config change.
 
 ## Validation
 

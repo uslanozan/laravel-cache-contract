@@ -7,6 +7,8 @@ use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
+use Uslanozan\CacheContract\Runtime\GenerationCounters;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 
 beforeEach(function () {
     config()->set('cache-contract.definitions', [
@@ -166,5 +168,67 @@ describe('context', function () {
 
         expect($scoped)->not->toBe($shared)
             ->and($shared->context())->toBe([]);
+    });
+});
+
+describe('generation counters', function () {
+    beforeEach(function () {
+        config()->set('cache-contract.definitions.company', [
+            'summary' => [
+                'purpose' => 'summary', 'type' => 'array', 'params' => ['company_id' => 'int'], 'ttl' => 300,
+                'description' => 'Company summary.', 'invalidated_by' => [Company::class],
+            ],
+            'billing' => [
+                'purpose' => 'billing', 'type' => 'array', 'ttl' => 300, 'description' => 'Billing data.',
+                'tags' => ['billing', 'companies'], 'invalidated_by' => [Company::class],
+            ],
+            'logo' => [
+                'purpose' => 'logo', 'type' => 'string', 'ttl' => 300, 'description' => 'Logo URL.', 'tags' => ['companies'],
+            ],
+        ]);
+    });
+
+    it('ends the key with the current value of the definition\'s counter', function () {
+        $generation = app(GenerationCounters::class)->currentOrFail(['def:company.summary'])['def:company.summary'];
+
+        expect(CacheContract::key('company.summary', ['company_id' => 3]))->toBe("cc:company:summary:v1:company_id=3:~g{$generation}");
+    });
+
+    it('adds a counter per tag, so a definition with tags only has one too', function () {
+        $generations = app(GenerationCounters::class)->currentOrFail(['billing', 'companies', 'def:company.billing']);
+
+        expect(CacheContract::key('company.billing'))->toBe('cc:company:billing:v1:~g'.implode('.', $generations))
+            ->and(CacheContract::key('company.logo'))->toBe("cc:company:logo:v1:~g{$generations['companies']}");
+    });
+
+    it('leaves the key of a definition without tags or invalidated_by as it was', function () {
+        expect(CacheContract::key('external.exchange_rates'))->toBe('cc:external:exchange_rates:v1:-');
+    });
+
+    it('stops reading every entry of the definition once its counter gets a new value', function () {
+        $calls = 0;
+        $loader = function () use (&$calls) {
+            return ++$calls;
+        };
+        CacheContract::remember('company.summary', ['company_id' => 3], $loader);
+        CacheContract::withContext(['tenant_id' => 7])->put('company.summary', ['company_id' => 4], 'cached');
+
+        app(GenerationCounters::class)->bump(['def:company.summary']);
+
+        expect(CacheContract::remember('company.summary', ['company_id' => 3], $loader))->toBe(2)
+            ->and(CacheContract::withContext(['tenant_id' => 7])->has('company.summary', ['company_id' => 4]))->toBeFalse()
+            ->and(CacheContract::get('company.summary', ['company_id' => 3]))->toBe(2);
+    });
+
+    it('writes a loaded value under the generation read before the loader ran', function () {
+        // An invalidation while the loader runs: the value it loaded may be stale.
+        $value = CacheContract::remember('company.summary', ['company_id' => 3], function () {
+            app(GenerationCounters::class)->bump(['def:company.summary']);
+
+            return 'loaded before the change';
+        });
+
+        expect($value)->toBe('loaded before the change')
+            ->and(CacheContract::has('company.summary', ['company_id' => 3]))->toBeFalse();
     });
 });

@@ -37,7 +37,7 @@ it('shows the definition and the key pattern', function () {
 
     // "Profile page data" without the final period: Laravel 11's
     // twoColumnDetail() strips trailing punctuation from values.
-    foreach (['3600 s (1 hour)', 'Profile page data', User::class, 'user_id: int', Company::class, 'users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
+    foreach (['3600 s (1 hour)', 'Profile page data', User::class, 'user_id: int', Company::class, 'users', 'def:user.profile, users', 'cc:user:profile:v2:user_id={int}', 'Pass --param=name=value'] as $expected) {
         expect($output)->toContain($expected);
     }
 });
@@ -45,6 +45,7 @@ it('shows the definition and the key pattern', function () {
 it('builds a concrete key from terminal parameters', function () {
     $this->artisan('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--context' => ['locale=tr']])
         ->expectsOutputToContain('cc:user:profile:v2:user_id=42:@locale=tr')
+        ->expectsOutputToContain('At runtime the key also ends with "~g"')
         ->assertSuccessful();
 });
 
@@ -61,6 +62,7 @@ it('shows the key of a definition without parameters right away', function () {
     $this->artisan('cache-contract:inspect', ['id' => 'external.exchange_rates'])
         ->expectsOutputToContain('cc:external:exchange_rates:v1:-')
         ->doesntExpectOutputToContain('Pass --param')
+        ->doesntExpectOutputToContain('At runtime')
         ->assertSuccessful();
 });
 

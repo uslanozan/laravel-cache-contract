@@ -16,6 +16,7 @@ use Uslanozan\CacheContract\Contracts\SimilarityEngine;
 use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
 use Uslanozan\CacheContract\Eloquent\ModelCacheConfig;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
+use Uslanozan\CacheContract\Invalidation\InvalidatedBy;
 use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
@@ -81,6 +82,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $app->make(DefinitionRegistry::class),
             $app->make(KeyFactory::class),
             $app->make(RedisErrorPolicy::class),
+            $app->make(GenerationCounters::class),
             $this->store($app),
         ));
 
@@ -112,6 +114,10 @@ class CacheContractServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Only the invalidated_by lists are read, without validating the definitions:
+        // boot runs on every request, and a broken config must not stop the application.
+        InvalidatedBy::listen($this->app->make('events'), $this->config($this->app)->get('cache-contract.definitions'));
+
         if ($this->app->runningInConsole()) {
             // php artisan vendor:publish --tag=cache-contract-config
             $this->publishes([

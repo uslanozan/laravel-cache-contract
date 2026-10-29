@@ -106,6 +106,10 @@ updated), deleted or restored:
   unknown, every entry of the model is invalidated after the commit, as with
   `flushCache()`. `forgetCache()`, called by hand, still throws.
 
+To clear a definition's entries when a model changes, list the model in the
+definition's [`invalidated_by`](definitions.md#invalidated_by); that needs no
+`HasCache`.
+
 **Not seen by model events**, as in Eloquent itself: mass updates and deletes
 (`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL
 and changes from other applications. Call `User::flushCache()` after those, or

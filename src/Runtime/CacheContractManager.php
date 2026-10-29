@@ -25,6 +25,8 @@ use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
  * The key comes from the definition and the parameters, the TTL from the
  * definition. Values are stored in an envelope, so a cached null is a hit
  * (ADR 0007). Redis connection errors follow the "redis_errors" setting.
+ * A definition with tags or invalidated_by reads its generation counters
+ * first, in one call, and their values end the key (ADR 0009).
  *
  * Immutable: withContext() returns a new instance and never changes this one,
  * so the shared instance carries no tenant or locale from one request or job
@@ -41,6 +43,7 @@ final readonly class CacheContractManager
         private DefinitionRegistry $definitions,
         private KeyFactory $keys,
         private RedisErrorPolicy $errors,
+        private GenerationCounters $counters,
         private ?string $store = null,
         private array $context = [],
     ) {}
@@ -53,7 +56,7 @@ final readonly class CacheContractManager
      */
     public function withContext(array $context): self
     {
-        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->store, array_merge($this->context, $context));
+        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->counters, $this->store, array_merge($this->context, $context));
     }
 
     /**
@@ -65,7 +68,10 @@ final readonly class CacheContractManager
     }
 
     /**
-     * The physical key for these parameters and this instance's context.
+     * The physical key for these parameters and this instance's context. For
+     * a definition with tags or invalidated_by it ends with the current values
+     * of its generation counters (ADR 0009), read from Redis; any Redis error
+     * then propagates.
      *
      * @param  array<string, mixed>  $params
      *
@@ -75,7 +81,11 @@ final readonly class CacheContractManager
      */
     public function key(string $id, array $params = []): string
     {
-        return $this->keys->make($this->definitions->get($id), $params, $this->context);
+        $definition = $this->definitions->get($id);
+        $key = $this->keys->make($definition, $params, $this->context); // checks the parameters before any I/O
+        $counters = $definition->generationCounters();
+
+        return $counters === [] ? $key : $this->keys->make($definition, $params, $this->context, $this->counters->currentOrFail($counters));
     }
 
     /**
@@ -87,7 +97,8 @@ final readonly class CacheContractManager
      */
     public function get(string $id, array $params = [], mixed $default = null): mixed
     {
-        $entry = $this->read($this->key($id, $params));
+        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+        $entry = $key === false ? false : $this->read($key);
 
         return Envelope::isHit($entry) ? Envelope::unwrap($entry) : value($default);
     }
@@ -99,7 +110,9 @@ final readonly class CacheContractManager
      */
     public function has(string $id, array $params = []): bool
     {
-        return Envelope::isHit($this->read($this->key($id, $params)));
+        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+
+        return $key !== false && Envelope::isHit($this->read($key));
     }
 
     /**
@@ -111,8 +124,9 @@ final readonly class CacheContractManager
     public function put(string $id, array $params, mixed $value): bool
     {
         $definition = $this->definitions->get($id);
+        $key = $this->keyFor($definition, $params, $this->errors->write);
 
-        return $this->write($definition, $this->keys->make($definition, $params, $this->context), $value);
+        return $key !== false && $this->write($definition, $key, $value);
     }
 
     /**
@@ -128,8 +142,10 @@ final readonly class CacheContractManager
     public function remember(string $id, array $params, Closure $loader): mixed
     {
         $definition = $this->definitions->get($id);
-        $key = $this->keys->make($definition, $params, $this->context);
-        $entry = $this->read($key);
+        // Read before the loader runs, so a value loaded across an invalidation
+        // is written under the old generation and never read (ADR 0009).
+        $key = $this->keyFor($definition, $params, $this->errors->read);
+        $entry = $key === false ? false : $this->read($key);
 
         if (Envelope::isHit($entry)) {
             return Envelope::unwrap($entry);
@@ -138,7 +154,7 @@ final readonly class CacheContractManager
         $value = $loader();
 
         // When the read failed, Redis is down: skip the write that would fail too.
-        if ($entry !== false) {
+        if ($key !== false && $entry !== false) {
             $this->write($definition, $key, $value);
         }
 
@@ -157,10 +173,13 @@ final readonly class CacheContractManager
     public function refresh(string $id, array $params, Closure $loader): mixed
     {
         $definition = $this->definitions->get($id);
-        $key = $this->keys->make($definition, $params, $this->context);
+        $key = $this->keyFor($definition, $params, $this->errors->write);
 
         $value = $loader();
-        $this->write($definition, $key, $value);
+
+        if ($key !== false) {
+            $this->write($definition, $key, $value);
+        }
 
         return $value;
     }
@@ -173,7 +192,11 @@ final readonly class CacheContractManager
      */
     public function forget(string $id, array $params = []): bool
     {
-        $key = $this->key($id, $params);
+        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->invalidate);
+
+        if ($key === false) {
+            return false;
+        }
 
         try {
             return $this->repository()->forget($key);
@@ -182,6 +205,27 @@ final readonly class CacheContractManager
 
             return false;
         }
+    }
+
+    /**
+     * The key, with the generations of the definition's counters read in one
+     * call; false when Redis could not be reached (handled with $mode,
+     * ADR 0007). A definition without counters needs no Redis here.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    private function keyFor(Definition $definition, array $params, RedisErrorMode $mode): string|false
+    {
+        $key = $this->keys->make($definition, $params, $this->context); // checks the parameters before any I/O
+        $counters = $definition->generationCounters();
+
+        if ($counters === []) {
+            return $key;
+        }
+
+        $generations = $this->counters->current($counters, $mode);
+
+        return $generations === false ? false : $this->keys->make($definition, $params, $this->context, $generations);
     }
 
     /**

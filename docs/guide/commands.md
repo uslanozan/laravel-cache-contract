@@ -46,6 +46,7 @@ php artisan cache-contract:inspect user.profile
   Params ........................................................ user_id: int
   Tags ..................................................................... -
   Invalidated by ........................................................... -
+  Counters ................................................................. -
   Description ............................................. Profile page data.
   Key pattern ............................... cc:user:profile:v2:user_id={int}
 
@@ -73,6 +74,13 @@ php artisan cache-contract:inspect user.profile --param=user_id=42 --context=loc
 Terminal input is always text, so `inspect` converts `--param` values to the
 declared type (`42` for an `int` parameter). Application code gets no such
 conversion; see [strict parameters](definitions.md#parameters).
+
+`Counters` lists the definition's generation counters: one per tag, and
+`def:<id>` for a definition with `invalidated_by`. `inspect` does not connect
+to Redis, so for such a definition the key it prints leaves out the last
+segment, `~g` followed by the counters' current values (see
+[invalidated_by](definitions.md#invalidated_by)).
+`CacheContract::key()` in `php artisan tinker` shows the full key.
 
 A secret parameter is never accepted with `--param`: `inspect` asks for it
 without showing what you type, and prints only its hash. See

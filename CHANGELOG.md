@@ -46,6 +46,11 @@ model cache and the first commands.
   context; `flushCache()` gives the model's generation counter a new value.
   Models whose scopes need a context implement `ProvidesCacheContext`. A save
   never fails because of the cache.
+- **`invalidated_by`:** saving, deleting or restoring a listed model
+  invalidates every entry of the definition after the commit, with the
+  definition's generation counter; the model needs no `HasCache`. Keys of
+  definitions with `tags` or `invalidated_by` end with their counters'
+  values, and `cache-contract:inspect` lists the counters.
 - **Commands:** `cache-contract:list` (with `--section`, `--subject` and
   `--json`) and `cache-contract:inspect` (with `--param` and `--context`,
   and suggestions for a mistyped ID).

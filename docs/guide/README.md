@@ -5,7 +5,7 @@ pre-release, so these pages describe the current `develop` branch; a page
 appears here when its feature exists.
 
 1. [Installation](installation.md): require the package, publish the config, choose the store.
-2. [Definitions](definitions.md): define cache entries, their TTLs and parameters.
+2. [Definitions](definitions.md): define cache entries, their TTLs, parameters and `invalidated_by`.
 3. [Runtime API](cache-contract.md): read and write entries with the `CacheContract` facade.
 4. [Model cache](model-cache.md): cache Eloquent models by ID without a definition.
 5. [Commands](commands.md): `cache-contract:list`, `cache-contract:inspect` and `cache-contract:scan`.

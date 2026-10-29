@@ -93,6 +93,11 @@ final class InspectCommand extends Command
             $key = $keys->make($definition, $this->convert($definition, $params), $context);
             $this->components->twoColumnDetail('Key', $key);
 
+            // The command never connects to Redis, so it cannot show the generations (ADR 0009).
+            if ($definition->generationCounters() !== []) {
+                $this->components->info('At runtime the key also ends with "~g" and the current value of each counter, read from Redis.');
+            }
+
             return self::SUCCESS;
         } catch (CacheContractException $e) {
             $this->components->error($e->getMessage());
@@ -122,6 +127,7 @@ final class InspectCommand extends Command
             'Params' => ListCommand::describeParams($definition) ?: '-',
             'Tags' => $definition->tags === [] ? '-' : implode(', ', $definition->tags),
             'Invalidated by' => $definition->invalidatedBy === [] ? '-' : implode(', ', $definition->invalidatedBy),
+            'Counters' => implode(', ', $definition->generationCounters()) ?: '-',
             'Description' => $definition->description,
         ] as $label => $value) {
             $this->components->twoColumnDetail($label, $value);

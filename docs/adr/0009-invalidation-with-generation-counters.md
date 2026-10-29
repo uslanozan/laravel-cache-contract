@@ -126,3 +126,29 @@ become readable again. The tests pin this as well.
 - On Redis Cluster, counters and entries may live in different hash slots,
   so a multi-key read across them needs care. This is decided together with
   cluster support (D13).
+
+## Update 2026-10-29: invalidated_by at runtime (LRVL-39)
+
+- **Reads.** The runtime API reads a definition's counters (its tags and
+  `def:{id}`) in one `many()` call before the entry, after checking the
+  parameters. A failed counter read follows the policy of the operation
+  (ADR 0007): `get`, `has` and `remember` treat it as a miss, `put` and
+  `refresh` write nothing, `forget` returns `false`. `key()` needs the real
+  values, so its Redis errors propagate. A definition without counters reads
+  none.
+- **Changes.** When a listed model is saved, deleted or restored, the
+  `def:{id}` counter of every definition that lists it gets a new value,
+  after the commit on the model's own connection (the same rule as
+  `HasCache`, ADR 0006). A `saved` event from a `save()` that wrote nothing
+  (neither created nor changed) is skipped, so it does not empty the whole
+  definition. The save never fails because of it. The model needs
+  no `HasCache`. The listener is bound to the exact class, as Eloquent's
+  model events are.
+- **Boot.** The listeners are registered at boot from the raw
+  `invalidated_by` lists, without validating the definitions. Boot runs on
+  every request, including ones that never use the cache (a health check),
+  so it must stay cheap and must not fail on a broken config, which still
+  fails on the first cache call and in `cache-contract:list`. Measured on
+  PHP 8.3 with half of the definitions listing two models: 0.33 ms for 500
+  definitions and 1.3 ms for 2,000, against 4.1 ms and 16.6 ms for full
+  validation.

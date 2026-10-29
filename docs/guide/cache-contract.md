@@ -25,7 +25,7 @@ typed parameter throws `InvalidParameters`, before Redis is touched. See
 | `put($id, $params, $value)` | `bool` | Caches the value for the definition's TTL; `false` if it could not be written. |
 | `refresh($id, $params, $loader)` | the value | Runs `$loader` and caches its result, even when a value is cached. |
 | `forget($id, $params = [])` | `bool` | Removes the entry; `false` if there was nothing to remove or Redis could not be reached. |
-| `key($id, $params = [])` | `string` | The key the other methods would use, without touching Redis. |
+| `key($id, $params = [])` | `string` | The key the other methods would use. For a definition with `tags` or `invalidated_by` it reads the generation counters from Redis, and a Redis error is thrown. |
 | `withContext($context)` | a new instance | Adds context values to every key (see below). |
 
 ```php
@@ -40,6 +40,11 @@ CacheContract::forget('user.profile', ['user_id' => 42]);
 CacheContract::key('user.profile', ['user_id' => 42]);
 // "cc:user:profile:v1:user_id=42"
 ```
+
+A definition with [`invalidated_by`](definitions.md#invalidated_by) or
+`tags` has keys that end with the current value of its generation counters,
+such as `cc:member:active_list:v1:organization_id=1:~g8123`. Every method
+reads them first, in one Redis command.
 
 ## Cached `null`, `false` and `0`
 

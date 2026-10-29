@@ -5,9 +5,11 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
+use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
 use Uslanozan\CacheContract\Tests\Fakes\FailingStore;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 
 beforeEach(function () {
     config()->set('cache-contract.definitions.external.exchange_rates', [
@@ -79,6 +81,59 @@ describe('throw', function () {
 
         expect(CacheContract::get('external.exchange_rates', [], 'default'))->toBe('default')
             ->and(fn () => CacheContract::forget('external.exchange_rates'))->toThrow(RedisException::class);
+    });
+});
+
+describe('a definition with generation counters', function () {
+    beforeEach(function () {
+        config()->set('cache-contract.definitions.company.summary', [
+            'purpose' => 'summary', 'type' => 'array', 'params' => ['company_id' => 'int'], 'ttl' => 300,
+            'description' => 'Company summary.', 'invalidated_by' => [Company::class],
+        ]);
+    });
+
+    it('treats a failed counter read like a failed read of the entry, and writes nothing', function () {
+        $this->store->fail('get');
+        $params = ['company_id' => 3];
+
+        expect(CacheContract::remember('company.summary', $params, fn () => 'loaded'))->toBe('loaded')
+            ->and(CacheContract::refresh('company.summary', $params, fn () => 'refreshed'))->toBe('refreshed')
+            ->and(CacheContract::get('company.summary', $params, 'default'))->toBe('default')
+            ->and(CacheContract::has('company.summary', $params))->toBeFalse()
+            ->and(CacheContract::put('company.summary', $params, 'value'))->toBeFalse()
+            ->and(CacheContract::forget('company.summary', $params))->toBeFalse()
+            ->and(array_unique($this->store->calls))->toBe(['get']);
+
+        Exceptions::assertReported(RedisException::class);
+    });
+
+    it('follows the mode of the operation for a failed counter read', function (string $operation, Closure $call) {
+        redisErrors([$operation => 'throw']);
+        $this->store->fail('get');
+
+        expect($call)->toThrow(RedisException::class);
+    })->with([
+        'read' => ['read', fn () => CacheContract::get('company.summary', ['company_id' => 3])],
+        'write' => ['write', fn () => CacheContract::put('company.summary', ['company_id' => 3], 1)],
+        'invalidate' => ['invalidate', fn () => CacheContract::forget('company.summary', ['company_id' => 3])],
+    ]);
+
+    it('checks the parameters before reading the counters', function () {
+        expect(fn () => CacheContract::remember('company.summary', ['company_id' => '3'], fn () => 1))->toThrow(InvalidParameters::class)
+            ->and($this->store->calls)->toBe([]);
+    });
+
+    it('checks the parameters before reading the counters in key() too', function () {
+        $this->store->fail('get');
+
+        expect(fn () => CacheContract::key('company.summary', ['company_id' => '3']))->toThrow(InvalidParameters::class)
+            ->and($this->store->calls)->toBe([]);
+    });
+
+    it('lets key() fail whatever the mode, since it cannot show a key without the counters', function () {
+        $this->store->fail('get');
+
+        expect(fn () => CacheContract::key('company.summary', ['company_id' => 3]))->toThrow(RedisException::class);
     });
 });
 

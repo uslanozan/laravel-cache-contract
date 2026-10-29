@@ -11,7 +11,8 @@ $users = ModelCache::for(User::class)->findMany([3, 1]);  // Eloquent collection
 ```
 
 The first call loads from the database and caches the result; later calls
-read it from the cache until its TTL ends.
+read it from the cache until its TTL ends. Inside a database transaction
+nothing is cached (see [Inside a transaction](#inside-a-transaction)).
 
 With the [`HasCache` trait](#the-hascache-trait), saving, deleting or
 restoring a model clears its entries after the transaction commits (see
@@ -119,6 +120,24 @@ keep the TTL short enough.
 write the old row back after the change clears it; it then stays until its
 TTL ends. `flushCache()` does not have this gap, because entries under the
 old generation are never read again.
+
+### Inside a transaction
+
+While a transaction is open on the model's connection, the model cache still
+reads cached entries but writes none. A row it loads there may not be
+committed yet, and if the transaction rolls back, a cached copy would serve
+a row that never existed.
+
+- `find()` and `findMany()` inside `DB::transaction()` load what is not
+  cached from the database on every call, until the transaction ends.
+- A cached entry read inside the transaction holds the last committed
+  values, not the transaction's own changes. Read with Eloquent there if you
+  need those.
+- A transaction on another connection changes nothing.
+- **Tests are not affected.** The transaction that `RefreshDatabase` or
+  `DatabaseTransactions` opens around each test does not count, so models are
+  cached in your tests as in production. A transaction the test opens itself
+  does count.
 
 ### Models that need a context
 

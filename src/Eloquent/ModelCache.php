@@ -18,6 +18,7 @@ use Uslanozan\CacheContract\Definitions\ParameterType;
 use Uslanozan\CacheContract\Eloquent\Concerns\HasCache;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
+use Uslanozan\CacheContract\Invalidation\AfterCommit;
 use Uslanozan\CacheContract\Runtime\Envelope;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorMode;
@@ -41,7 +42,9 @@ use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
  * invalidated at once.
  * An entry holds the row's raw attributes in the ADR 0007 envelope, and a
  * read rebuilds the model with newFromBuilder() (ADR 0008). An ID with no row
- * is cached too, as null.
+ * is cached too, as null. While a transaction is open on the model's
+ * connection, entries are read but nothing is written: the rows it sees may
+ * not be committed, and a rollback would leave them in the cache.
  *
  * Immutable: withContext() and withTrashed() return a copy, so a tenant set
  * for one call never reaches the next request (Octane, queue workers).
@@ -243,7 +246,7 @@ final readonly class ModelCache
         $found = $this->query($model)->whereKey($id)->first();
 
         // When the read failed, Redis is down: skip the write that would fail too (ADR 0007).
-        if ($entry !== false) {
+        if ($entry !== false && ! AfterCommit::isOpen($model->getConnection())) {
             $this->write($key, $found?->getAttributes());
         }
 
@@ -347,7 +350,7 @@ final readonly class ModelCache
                 $writes[$key] = Envelope::wrap($found[$id]?->getAttributes());
             }
 
-            if (! $readFailed) {
+            if (! $readFailed && ! AfterCommit::isOpen($model->getConnection())) {
                 $this->writeMany($writes);
             }
         }

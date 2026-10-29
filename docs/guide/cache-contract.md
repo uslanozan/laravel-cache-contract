@@ -90,6 +90,25 @@ $cache->remember('user.active_list', ['role' => 'admin'], fn () => $this->load()
   `withContext()` where you need it; calling it again adds to the existing
   context.
 
+## Inside a database transaction
+
+`CacheContract` does not know which database your loader reads, so it caches
+whatever the loader returns. Inside a transaction that can be data the
+transaction has not committed yet; if it rolls back, the cached value stays
+until its TTL ends. Call `remember()`, `put()` and `refresh()` before the
+transaction starts or after it commits:
+
+```php
+DB::transaction(function () {
+    // ... change the data
+});
+
+$list = CacheContract::remember('member.active_list', ['organization_id' => 1], fn () => $this->load(1));
+```
+
+The [model cache](model-cache.md#inside-a-transaction) does this itself: it
+writes nothing while a transaction is open on the model's connection.
+
 ## Redis errors
 
 When Redis cannot be reached, the default is to report the error and carry on

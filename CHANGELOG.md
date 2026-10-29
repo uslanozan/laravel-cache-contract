@@ -46,6 +46,10 @@ model cache and the first commands.
   context; `flushCache()` gives the model's generation counter a new value.
   Models whose scopes need a context implement `ProvidesCacheContext`. A save
   never fails because of the cache.
+- **Transactions:** while a transaction is open on the model's connection,
+  the model cache reads cached entries but writes none, so a row that is
+  rolled back is never cached. The transaction `RefreshDatabase` and
+  `DatabaseTransactions` open around each test does not count.
 - **`invalidated_by`:** saving, deleting or restoring a listed model
   invalidates every entry of the definition after the commit, with the
   definition's generation counter; the model needs no `HasCache`. Keys of

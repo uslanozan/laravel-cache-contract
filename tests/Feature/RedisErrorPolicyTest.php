@@ -123,6 +123,13 @@ describe('a definition with generation counters', function () {
             ->and($this->store->calls)->toBe([]);
     });
 
+    it('checks the parameters before reading the counters in key() too', function () {
+        $this->store->fail('get');
+
+        expect(fn () => CacheContract::key('company.summary', ['company_id' => '3']))->toThrow(InvalidParameters::class)
+            ->and($this->store->calls)->toBe([]);
+    });
+
     it('lets key() fail whatever the mode, since it cannot show a key without the counters', function () {
         $this->store->fail('get');
 

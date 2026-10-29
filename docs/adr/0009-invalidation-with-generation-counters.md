@@ -139,7 +139,9 @@ become readable again. The tests pin this as well.
 - **Changes.** When a listed model is saved, deleted or restored, the
   `def:{id}` counter of every definition that lists it gets a new value,
   after the commit on the model's own connection (the same rule as
-  `HasCache`, ADR 0006). The save never fails because of it. The model needs
+  `HasCache`, ADR 0006). A `saved` event from a `save()` that wrote nothing
+  (neither created nor changed) is skipped, so it does not empty the whole
+  definition. The save never fails because of it. The model needs
   no `HasCache`. The listener is bound to the exact class, as Eloquent's
   model events are.
 - **Boot.** The listeners are registered at boot from the raw

@@ -82,9 +82,10 @@ final readonly class CacheContractManager
     public function key(string $id, array $params = []): string
     {
         $definition = $this->definitions->get($id);
+        $key = $this->keys->make($definition, $params, $this->context); // checks the parameters before any I/O
         $counters = $definition->generationCounters();
 
-        return $this->keys->make($definition, $params, $this->context, $counters === [] ? [] : $this->counters->currentOrFail($counters));
+        return $counters === [] ? $key : $this->keys->make($definition, $params, $this->context, $this->counters->currentOrFail($counters));
     }
 
     /**

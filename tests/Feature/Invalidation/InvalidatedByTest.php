@@ -125,6 +125,20 @@ describe('a change to a listed model', function () {
         expect($titles())->toBe(['Hello']);
     });
 
+    it('keeps the key on a save that has nothing to write, and still changes it on delete', function () {
+        $key = fn () => CacheContract::key('organization.summary');
+        $before = $key();
+
+        $organization = Organization::query()->findOrFail(1);
+        $organization->save(); // no UPDATE, but Eloquent still fires "saved"
+
+        expect($key())->toBe($before);
+
+        $organization->delete();
+
+        expect($key())->not->toBe($before);
+    });
+
     it('works for a model without HasCache', function () {
         $loads = 0;
         $summary = function () use (&$loads) {

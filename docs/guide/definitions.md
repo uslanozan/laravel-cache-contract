@@ -82,6 +82,9 @@ Member::create([...]);   // a new member enters the list: the next call loads it
 - **After the commit.** Inside a transaction on the model's connection, the
   entries are invalidated once it commits; on rollback nothing changes.
   Without a transaction on that connection they are invalidated right away.
+- **Only real changes.** Eloquent fires its `saved` event even when
+  `save()` had nothing to write; such a save invalidates nothing. A delete or
+  a restore always does.
 - **The model needs no `HasCache`.** Any Eloquent model works.
 - **The exact class.** A change to a subclass of a listed model is not seen,
   as with Eloquent's own model events; list the subclass too.

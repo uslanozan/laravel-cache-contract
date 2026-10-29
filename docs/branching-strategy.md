@@ -4,12 +4,6 @@
 `main` only ever contains released code; every commit on `main` is a version
 tag.
 
-> **Temporary (since 2026-10-22):** until the patched PHP version is announced
-> (LRVL-70), branch from and open PRs into `chore/lrvl-70-php-patch-integration`
-> instead of `develop`, and end PR titles with `[before-patch]`. Same rules as
-> `develop`. Afterwards the branch is squash-merged into `develop` and this
-> note is removed. Details: [AGENTS.md](../AGENTS.md).
-
 ```text
 feat/LRVL-12-registry ──squash──▶ develop ──merge commit──▶ main (tag v0.2.0)
                                       ▲                         │

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Filesystem\Filesystem;
 use PhpParser\Error;
 use Uslanozan\CacheContract\Scanner\CacheUsage;
+use Uslanozan\CacheContract\Scanner\Operation;
 use Uslanozan\CacheContract\Scanner\Scanner;
 
 // The fixtures rebuild the call styles found in docs/research/cache-usage-in-the-wild.md.
@@ -170,6 +171,38 @@ it('finds direct Redis calls as their own style', function () {
         'redis zadd other template feed:{id}',
         'redis del forget exact online:count',
     ]);
+});
+
+it('finds the listed methods of a configured wrapper where they are called, with their configured operation', function () {
+    $wrapper = 'Uslanozan\CacheContract\Tests\Fixtures\Scanner\CacheProperties';
+    $scanner = new Scanner([
+        "\\{$wrapper}" => ['has' => Operation::Read, 'get' => Operation::Read, 'store' => Operation::Write, 'FLUSHALL' => Operation::Forget],
+    ]);
+
+    $usages = array_map(
+        fn (CacheUsage $usage) => implode(' ', [
+            $usage->line, $usage->style->value, $usage->wrapper ?? '-', $usage->method, $usage->operation->value, $usage->keyKind->value, $usage->key ?? '-',
+        ]),
+        $scanner->scanFile(__DIR__.'/../../Fixtures/Scanner/WrapperUsage.php'),
+    );
+
+    // The Cache:: calls inside the wrapper are still found; addProperty() and Unrelated::get() are not listed.
+    expect($usages)->toBe([
+        '21 facade - has read opaque md5(json_encode($this->properties))',
+        '26 facade - get read opaque md5(json_encode($this->properties))',
+        '31 facade - forever write opaque md5(json_encode($this->properties))',
+        "54 wrapper {$wrapper} HAS read unresolved -",
+        "55 wrapper {$wrapper} get read unresolved -",
+        "58 wrapper {$wrapper} store write unresolved -",
+        "60 wrapper {$wrapper} get read unresolved -",
+        "65 wrapper {$wrapper} store write unresolved -",
+        "66 wrapper {$wrapper} get read unresolved -",
+        "68 wrapper {$wrapper} flushAll forget unresolved -",
+    ]);
+});
+
+it('finds no wrapper calls when none are configured', function () {
+    expect(array_filter(scannedUsages('WrapperUsage'), fn (string $usage) => str_starts_with($usage, 'wrapper')))->toBe([]);
 });
 
 it('ignores the calls a text search mistakes for cache usage', function () {

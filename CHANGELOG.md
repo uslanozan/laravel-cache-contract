@@ -59,7 +59,10 @@ model cache and the first commands.
   file, line, class, method and operation, and reads its key as `exact`,
   `template` (`feed:{id}`), `opaque`, `unresolved` or `none`. It has
   `--path` and `--json`, the `scanner.paths` and `scanner.exclude` settings,
-  and exits non-zero when a path cannot be scanned.
+  and exits non-zero when a path cannot be scanned. Calls to the methods of
+  your own wrapper classes, declared in `scanner.wrappers`, are listed where
+  they are made, with a summary line of their own. The table shows each
+  location as one clickable `path:line`.
 
 ### Requirements
 

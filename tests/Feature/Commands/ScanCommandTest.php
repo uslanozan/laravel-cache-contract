@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
+use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
 // A small project in a temporary directory, used as the application's base path.
 beforeEach(function () {
@@ -56,14 +57,15 @@ function scanJson(array $options = []): array
 it('lists every cache call in a table, says what the count means and fails on a file it cannot scan', function () {
     $this->artisan('cache-contract:scan')
         ->expectsTable(
-            ['File', 'Line', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
+            ['Location', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
             [
-                ['app/Billing/Invoice.php', 11, 'Invoice::total', 'facade', 'remember', 'template', 'invoice:{id}'],
-                ['app/Reports/Daily.php', 3, '-', 'facade', 'forget', 'unresolved', '$key'],
+                ['app/Billing/Invoice.php:11', 'Invoice::total', 'facade', 'remember', 'template', 'invoice:{id}'],
+                ['app/Reports/Daily.php:3', '-', 'facade', 'forget', 'unresolved', '$key'],
             ],
         )
         ->expectsOutputToContain('2 usage points in 2 files. A usage point is a place in the source, not a runtime call count.')
         ->expectsOutputToContain('Keys: 0 exact, 1 template, 0 opaque, 1 unresolved, 0 none')
+        ->doesntExpectOutputToContain('Wrapper calls')
         ->expectsOutputToContain('app/Broken.php')
         ->assertFailed();
 });
@@ -78,6 +80,7 @@ it('prints machine-readable JSON', function () {
             'class' => 'App\Billing\Invoice',
             'function' => 'total',
             'style' => 'facade',
+            'wrapper' => null,
             'method' => 'remember',
             'operation' => 'remember',
             'key_kind' => 'template',
@@ -115,3 +118,45 @@ it('fails on a path that does not exist', function () {
         ->expectsOutputToContain('Not scanned: app/Missing: Not a file or directory.')
         ->assertFailed();
 });
+
+it('reports the call sites of configured wrappers, with a summary line of their own', function () {
+    file_put_contents("{$this->root}/app/Reports/Weekly.php", <<<'PHP'
+        <?php
+
+        use App\Support\CacheProperties;
+
+        $cache = new CacheProperties;
+        $cache->addProperty(7);
+        $cache->has() ? $cache->get() : $cache->store(1);
+        PHP);
+    config()->set('cache-contract.scanner.wrappers', [
+        'App\Support\CacheProperties' => ['has' => 'read', 'get' => 'read', 'store' => 'write'],
+    ]);
+
+    $this->artisan('cache-contract:scan', ['--path' => ['app/Reports/Weekly.php']])
+        ->expectsTable(
+            ['Location', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
+            [
+                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
+                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
+                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'write', 'unresolved', '-'],
+            ],
+        )
+        ->expectsOutputToContain('3 usage points in 1 files.')
+        ->expectsOutputToContain('Wrapper calls: 2 read, 1 write')
+        ->assertSuccessful();
+
+    expect(scanJson(['--path' => ['app/Reports/Weekly.php']])['usages'][2])->toMatchArray([
+        'line' => 7,
+        'style' => 'wrapper',
+        'wrapper' => 'App\Support\CacheProperties',
+        'method' => 'store',
+        'operation' => 'write',
+    ]);
+});
+
+it('rejects a wrapper method with an unknown operation', function () {
+    config()->set('cache-contract.scanner.wrappers', ['App\Support\CacheProperties' => ['get' => 'fetch']]);
+
+    $this->artisan('cache-contract:scan');
+})->throws(InvalidConfiguration::class, 'got App\Support\CacheProperties => [get => fetch].');

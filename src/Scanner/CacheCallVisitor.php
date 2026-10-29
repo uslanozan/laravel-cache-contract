@@ -19,6 +19,7 @@ use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\NullsafePropertyFetch;
 use PhpParser\Node\Expr\PropertyFetch;
@@ -82,10 +83,10 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     /** @var list<string|null> names of the functions being walked; a closure repeats the one around it */
     private array $functions = [];
 
-    /** @var list<list<string>> cache-typed property names, one entry per class being walked */
+    /** @var list<array<string, string>> property name => class it is typed as, one entry per class being walked */
     private array $properties = [];
 
-    /** @var list<list<string>> cache-typed variable names, one entry per function being walked */
+    /** @var list<array<string, string>> parameter name => class it is typed as, one entry per function being walked */
     private array $variables = [];
 
     /** @var list<array<string, Expr>> constant values by name, one entry per class being walked */
@@ -94,11 +95,26 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     /** @var list<array<string, Expr>> values of the variables assigned once, one entry per scope being walked */
     private array $assignments = [];
 
+    /** @var array<string, array{string, array<string, Operation>}> lower-case class => [class, lower-case method => operation] */
+    private readonly array $wrappers;
+
     private readonly Standard $printer;
 
-    public function __construct(private readonly string $file)
+    /**
+     * @param  array<string, array<string, Operation>>  $wrappers  wrapper class => method => what it does to the cache
+     */
+    public function __construct(private readonly string $file, array $wrappers = [])
     {
         $this->printer = new Standard;
+        $byName = [];
+
+        // PHP class and method names are case-insensitive.
+        foreach ($wrappers as $class => $methods) {
+            $class = ltrim($class, '\\');
+            $byName[strtolower($class)] = [$class, array_change_key_case($methods)];
+        }
+
+        $this->wrappers = $byName;
     }
 
     /**
@@ -116,7 +132,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     {
         if ($node instanceof ClassLike) {
             $this->classes[] = $node->namespacedName?->toString();
-            $this->properties[] = $this->cacheProperties($node);
+            $this->properties[] = $this->propertyTypes($node);
             $this->constants[] = $this->constantsOf($node);
         } elseif ($node instanceof FunctionLike) {
             $this->functions[] = match (true) {
@@ -124,7 +140,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
                 $node instanceof Function_ => $node->namespacedName?->toString() ?? $node->name->toString(),
                 default => end($this->functions) ?: null,
             };
-            $this->variables[] = $this->cacheVariables($node);
+            $this->variables[] = $this->parameterTypes($node);
             $this->assignments[] = $this->assignmentsIn(
                 $node->getStmts() ?? [],
                 $node->getParams(),
@@ -166,6 +182,8 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             return;
         }
 
+        $wrapper = null;
+
         if ($call instanceof FuncCall) {
             // cache() without arguments is only a receiver; the chained call is the operation.
             if (! $this->isFunction($call, ['cache']) || $call->getArgs() === []) {
@@ -175,6 +193,10 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             $style = CallStyle::Helper;
             $method = 'cache';
             $operation = $call->getArgs()[0]->value instanceof Array_ ? Operation::Write : Operation::Read;
+        } elseif (($found = $this->wrapperCall($call)) !== null) {
+            // Checked before the receiver methods: a wrapper may have its own store().
+            [$wrapper, $method, $operation] = $found;
+            $style = CallStyle::Wrapper;
         } else {
             if (! $call->name instanceof Identifier || $this->isReceiverMethod($call)) {
                 return;
@@ -189,7 +211,8 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             return;
         }
 
-        [$keyKind, $key] = $this->key($call->getArgs()[0]->value ?? null);
+        // A wrapper builds its key inside; which argument feeds it, if any, is not known.
+        [$keyKind, $key] = $wrapper === null ? $this->key($call->getArgs()[0]->value ?? null) : [KeyKind::Unresolved, null];
 
         $this->usages[] = new CacheUsage(
             $this->file,
@@ -201,7 +224,47 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             $operation,
             $keyKind,
             $key,
+            $wrapper,
         );
+    }
+
+    /**
+     * The wrapper class, method and operation of a call to a method listed in
+     * scanner.wrappers, or null for any other call.
+     *
+     * @return array{string, string, Operation}|null
+     */
+    private function wrapperCall(StaticCall|MethodCall|NullsafeMethodCall $call): ?array
+    {
+        if (! $call->name instanceof Identifier) {
+            return null;
+        }
+
+        $class = $call instanceof StaticCall
+            ? ($call->class instanceof Name ? $call->class->toString() : null)
+            : $this->receiverClass($call->var);
+        [$wrapper, $methods] = $this->wrappers[strtolower((string) $class)] ?? [null, []];
+        $operation = $methods[$call->name->toLowerString()] ?? null;
+
+        return $wrapper === null || $operation === null ? null : [$wrapper, $call->name->toString(), $operation];
+    }
+
+    /**
+     * The class of a receiver: new X, a typed property or parameter, or a
+     * variable assigned one of those once. Null when it cannot be seen.
+     */
+    private function receiverClass(Expr $expr): ?string
+    {
+        $expr = $this->follow($expr);
+
+        return match (true) {
+            $expr instanceof New_ => $expr->class instanceof Name ? $expr->class->toString() : null,
+            $expr instanceof PropertyFetch => $expr->var instanceof Variable && $expr->var->name === 'this' && $expr->name instanceof Identifier
+                ? ((end($this->properties) ?: [])[$expr->name->toString()] ?? null)
+                : null,
+            $expr instanceof Variable => is_string($expr->name) ? ((end($this->variables) ?: [])[$expr->name] ?? null) : null,
+            default => null,
+        };
     }
 
     /**
@@ -241,21 +304,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
                 : null;
         }
 
-        if ($expr instanceof PropertyFetch) {
-            return $expr->var instanceof Variable && $expr->var->name === 'this'
-                && $expr->name instanceof Identifier
-                && in_array($expr->name->toString(), end($this->properties) ?: [], true)
-                    ? CallStyle::Repository
-                    : null;
-        }
-
-        if ($expr instanceof Variable) {
-            return is_string($expr->name) && in_array($expr->name, end($this->variables) ?: [], true)
-                ? CallStyle::Repository
-                : null;
-        }
-
-        return null;
+        return in_array($this->receiverClass($expr), self::CACHE_TYPES, true) ? CallStyle::Repository : null;
     }
 
     private function facadeStyle(Node $class): ?CallStyle
@@ -502,74 +551,81 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     }
 
     /**
-     * Properties typed as a cache, promoted from a cache-typed constructor
-     * parameter, or assigned one in the constructor ($this->cache = $cache).
+     * The class each property is typed as: declared on the property, promoted
+     * from a typed constructor parameter, or assigned one in the constructor
+     * ($this->cache = $cache).
      *
-     * @return list<string>
+     * @return array<string, string>
      */
-    private function cacheProperties(ClassLike $class): array
+    private function propertyTypes(ClassLike $class): array
     {
-        $names = [];
+        $types = [];
 
         foreach ($class->getProperties() as $property) {
-            if ($this->isCacheType($property->type)) {
-                foreach ($property->props as $prop) {
-                    $names[] = $prop->name->toString();
-                }
+            $type = $this->className($property->type);
+
+            if ($type === null) {
+                continue;
+            }
+
+            foreach ($property->props as $prop) {
+                $types[$prop->name->toString()] = $type;
             }
         }
 
         $constructor = $class->getMethod('__construct');
 
         if ($constructor === null) {
-            return $names;
+            return $types;
         }
 
-        $parameters = $this->cacheVariables($constructor);
+        $parameters = $this->parameterTypes($constructor);
 
         foreach ($constructor->params as $param) {
-            if ($param->isPromoted() && $param->var instanceof Variable && in_array($param->var->name, $parameters, true)) {
-                $names[] = $param->var->name;
+            if ($param->isPromoted() && $param->var instanceof Variable && is_string($param->var->name) && isset($parameters[$param->var->name])) {
+                $types[$param->var->name] = $parameters[$param->var->name];
             }
         }
 
         foreach ((new NodeFinder)->findInstanceOf($constructor->stmts ?? [], Assign::class) as $assign) {
             if ($assign->var instanceof PropertyFetch && $assign->var->name instanceof Identifier
-                && $assign->expr instanceof Variable && in_array($assign->expr->name, $parameters, true)) {
-                $names[] = $assign->var->name->toString();
+                && $assign->expr instanceof Variable && is_string($assign->expr->name) && isset($parameters[$assign->expr->name])) {
+                $types[$assign->var->name->toString()] = $parameters[$assign->expr->name];
             }
         }
 
-        return $names;
+        return $types;
     }
 
     /**
-     * Cache-typed parameters of a function. Closures and arrow functions also
-     * see the ones of the function around them.
+     * The class each parameter of a function is typed as. Closures and arrow
+     * functions also see the ones of the function around them.
      *
-     * @return list<string>
+     * @return array<string, string>
      */
-    private function cacheVariables(FunctionLike $function): array
+    private function parameterTypes(FunctionLike $function): array
     {
-        $names = $function instanceof Closure || $function instanceof ArrowFunction
+        $types = $function instanceof Closure || $function instanceof ArrowFunction
             ? (end($this->variables) ?: [])
             : [];
 
         foreach ($function->getParams() as $param) {
-            if ($this->isCacheType($param->type) && $param->var instanceof Variable && is_string($param->var->name)) {
-                $names[] = $param->var->name;
+            $type = $this->className($param->type);
+
+            if ($type !== null && $param->var instanceof Variable && is_string($param->var->name)) {
+                $types[$param->var->name] = $type;
             }
         }
 
-        return $names;
+        return $types;
     }
 
-    private function isCacheType(?Node $type): bool
+    private function className(?Node $type): ?string
     {
         if ($type instanceof NullableType) {
             $type = $type->type;
         }
 
-        return $type instanceof Name && in_array($type->toString(), self::CACHE_TYPES, true);
+        return $type instanceof Name ? $type->toString() : null;
     }
 }

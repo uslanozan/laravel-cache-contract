@@ -201,6 +201,24 @@ it('finds the listed methods of a configured wrapper where they are called, with
     ]);
 });
 
+it('reads X|null as ?X, for cache types and wrappers', function () {
+    // Inline, not a fixture: Pint would rewrite X|null to ?X.
+    $code = <<<'PHP'
+        <?php
+        use Illuminate\Contracts\Cache\Repository;
+        function handle(Repository|null $cache, App\Wrapper|null $wrapper, App\Wrapper|App\Other $either): void
+        {
+            $cache?->get('a');
+            $wrapper?->get();
+            $either->get();
+        }
+        PHP;
+
+    $usages = (new Scanner(['App\Wrapper' => ['get' => Operation::Read]]))->scanCode($code);
+
+    expect(array_map(fn (CacheUsage $usage) => $usage->style->value, $usages))->toBe(['repository', 'wrapper']);
+});
+
 it('finds no wrapper calls when none are configured', function () {
     expect(array_filter(scannedUsages('WrapperUsage'), fn (string $usage) => str_starts_with($usage, 'wrapper')))->toBe([]);
 });

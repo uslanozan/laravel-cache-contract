@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
-use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
 // A small project in a temporary directory, used as the application's base path.
 beforeEach(function () {
@@ -143,6 +142,7 @@ it('reports the call sites of configured wrappers, with a summary line of their 
             ],
         )
         ->expectsOutputToContain('3 usage points in 1 files.')
+        ->expectsOutputToContain('Keys: 0 exact, 0 template, 0 opaque, 0 unresolved, 0 none')
         ->expectsOutputToContain('Wrapper calls: 2 read, 1 write')
         ->assertSuccessful();
 
@@ -158,5 +158,7 @@ it('reports the call sites of configured wrappers, with a summary line of their 
 it('rejects a wrapper method with an unknown operation', function () {
     config()->set('cache-contract.scanner.wrappers', ['App\Support\CacheProperties' => ['get' => 'fetch']]);
 
-    $this->artisan('cache-contract:scan');
-})->throws(InvalidConfiguration::class, 'got App\Support\CacheProperties => [get => fetch].');
+    $this->artisan('cache-contract:scan')
+        ->expectsOutputToContain('got App\Support\CacheProperties => [get => fetch].')
+        ->assertFailed();
+});

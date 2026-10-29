@@ -57,13 +57,14 @@ function scanJson(array $options = []): array
 it('lists every cache call in a table, says what the count means and fails on a file it cannot scan', function () {
     $this->artisan('cache-contract:scan')
         ->expectsTable(
-            ['Location', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
+            ['Location', 'In', 'Category', 'Style', 'Operation', 'Key kind', 'Key'],
             [
-                ['app/Billing/Invoice.php:11', 'Invoice::total', 'facade', 'remember', 'template', 'invoice:{id}'],
-                ['app/Reports/Daily.php:3', '-', 'facade', 'forget', 'unresolved', '$key'],
+                ['app/Billing/Invoice.php:11', 'Invoice::total', 'cache', 'facade', 'remember', 'template', 'invoice:{id}'],
+                ['app/Reports/Daily.php:3', '-', 'cache', 'facade', 'forget', 'unresolved', '$key'],
             ],
         )
         ->expectsOutputToContain('2 usage points in 2 files. A usage point is a place in the source, not a runtime call count.')
+        ->expectsOutputToContain('Categories: 2 cache, 0 redis, 0 indirect, 0 wrapper')
         ->expectsOutputToContain('Keys: 0 exact, 1 template, 0 opaque, 1 unresolved, 0 none')
         ->doesntExpectOutputToContain('Wrapper calls')
         ->expectsOutputToContain('app/Broken.php')
@@ -79,6 +80,7 @@ it('prints machine-readable JSON', function () {
             'line' => 11,
             'class' => 'App\Billing\Invoice',
             'function' => 'total',
+            'category' => 'cache',
             'style' => 'facade',
             'wrapper' => null,
             'method' => 'remember',
@@ -135,11 +137,11 @@ it('reports the call sites of configured wrappers, with a summary line of their 
 
     $this->artisan('cache-contract:scan', ['--path' => ['app/Reports/Weekly.php']])
         ->expectsTable(
-            ['Location', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
+            ['Location', 'In', 'Category', 'Style', 'Operation', 'Key kind', 'Key'],
             [
-                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
-                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
-                ['app/Reports/Weekly.php:7', '-', 'wrapper (CacheProperties)', 'write', 'unresolved', '-'],
+                ['app/Reports/Weekly.php:7', '-', 'wrapper', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
+                ['app/Reports/Weekly.php:7', '-', 'wrapper', 'wrapper (CacheProperties)', 'read', 'unresolved', '-'],
+                ['app/Reports/Weekly.php:7', '-', 'wrapper', 'wrapper (CacheProperties)', 'write', 'unresolved', '-'],
             ],
         )
         ->expectsOutputToContain('3 usage points in 1 files.')
@@ -148,11 +150,34 @@ it('reports the call sites of configured wrappers, with a summary line of their 
 
     expect(scanJson(['--path' => ['app/Reports/Weekly.php']])['usages'][2])->toMatchArray([
         'line' => 7,
+        'category' => 'wrapper',
         'style' => 'wrapper',
         'wrapper' => 'App\Support\CacheProperties',
         'method' => 'store',
         'operation' => 'write',
     ]);
+});
+
+it('reports the rate limiter and throttle middleware as indirect usage', function () {
+    file_put_contents("{$this->root}/app/Reports/routes.php", <<<'PHP'
+        <?php
+
+        RateLimiter::hit('export:'.$user->id);
+        Route::middleware(['auth', 'throttle:60,1'])->get('/export', fn () => null);
+        PHP);
+
+    $this->artisan('cache-contract:scan', ['--path' => ['app/Reports/routes.php']])
+        ->expectsTable(
+            ['Location', 'In', 'Category', 'Style', 'Operation', 'Key kind', 'Key'],
+            [
+                ['app/Reports/routes.php:3', '-', 'indirect', 'rate-limiter', 'other', 'template', 'export:{id}'],
+                ['app/Reports/routes.php:4', '-', 'indirect', 'throttle', 'other', 'unresolved', "'throttle:60,1'"],
+            ],
+        )
+        ->expectsOutputToContain('Categories: 0 cache, 0 redis, 2 indirect, 0 wrapper')
+        ->assertSuccessful();
+
+    expect(array_column(scanJson(['--path' => ['app/Reports/routes.php']])['usages'], 'category'))->toBe(['indirect', 'indirect']);
 });
 
 it('rejects a wrapper method with an unknown operation', function () {

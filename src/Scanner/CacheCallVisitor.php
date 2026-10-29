@@ -51,10 +51,15 @@ use PhpParser\PrettyPrinter\Standard;
  */
 final class CacheCallVisitor extends NodeVisitorAbstract
 {
-    /** "Cache" and "Redis" alone are the global aliases from config/app.php. */
+    /** "Cache", "Redis" and "RateLimiter" alone are the global aliases from config/app.php. */
     private const CACHE_FACADES = ['Cache', 'Illuminate\Support\Facades\Cache'];
 
     private const REDIS_FACADES = ['Redis', 'Illuminate\Support\Facades\Redis'];
+
+    private const RATE_LIMITER_FACADES = ['RateLimiter', 'Illuminate\Support\Facades\RateLimiter'];
+
+    /** A throttle middleware string with its arguments: 'throttle:60,1', 'throttle:api'. */
+    private const THROTTLE = '/^throttle:\w/';
 
     private const CACHE_TYPES = [
         'Illuminate\Contracts\Cache\Repository',
@@ -156,6 +161,20 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             );
         } elseif ($node instanceof StaticCall || $node instanceof MethodCall || $node instanceof NullsafeMethodCall || $node instanceof FuncCall) {
             $this->record($node);
+        } elseif ($node instanceof String_ && preg_match(self::THROTTLE, $node->value) === 1) {
+            // Any string, not only a middleware() argument, so route groups and the Kernel's arrays count too.
+            // The limiter builds its key at runtime from the route and the user or IP.
+            $this->usages[] = new CacheUsage(
+                $this->file,
+                $node->getStartLine(),
+                end($this->classes) ?: null,
+                end($this->functions) ?: null,
+                CallStyle::Throttle,
+                'throttle',
+                Operation::Other,
+                KeyKind::Unresolved,
+                $this->printer->prettyPrintExpr($node),
+            );
         }
 
         return null;
@@ -316,6 +335,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
         return match (true) {
             in_array($class->toString(), self::CACHE_FACADES, true) => CallStyle::Facade,
             in_array($class->toString(), self::REDIS_FACADES, true) => CallStyle::Redis,
+            in_array($class->toString(), self::RATE_LIMITER_FACADES, true) => CallStyle::RateLimiter,
             default => null,
         };
     }

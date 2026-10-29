@@ -104,15 +104,16 @@ php artisan cache-contract:scan --path=app
 ```
 
 ```
-+--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
-| File                                       | Line | In                        | Style  | Operation | Key kind | Key          |
-+--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
-| app/Http/Controllers/ProfileController.php | 11   | ProfileController::show   | facade | remember  | template | profile:{id} |
-| app/Http/Controllers/ProfileController.php | 16   | ProfileController::update | facade | forget    | template | profile:{id} |
-| app/Http/Controllers/ProfileController.php | 17   | ProfileController::update | facade | forget    | exact    | settings     |
-+--------------------------------------------+------+---------------------------+--------+-----------+----------+--------------+
++-----------------------------------------------+---------------------------+----------+--------+-----------+----------+--------------+
+| Location                                      | In                        | Category | Style  | Operation | Key kind | Key          |
++-----------------------------------------------+---------------------------+----------+--------+-----------+----------+--------------+
+| app/Http/Controllers/ProfileController.php:11 | ProfileController::show   | cache    | facade | remember  | template | profile:{id} |
+| app/Http/Controllers/ProfileController.php:16 | ProfileController::update | cache    | facade | forget    | template | profile:{id} |
+| app/Http/Controllers/ProfileController.php:17 | ProfileController::update | cache    | facade | forget    | exact    | settings     |
++-----------------------------------------------+---------------------------+----------+--------+-----------+----------+--------------+
 
 3 usage points in 1 files. A usage point is a place in the source, not a runtime call count.
+Categories: 3 cache, 0 redis, 0 indirect, 0 wrapper
 Keys: 1 exact, 2 template, 0 opaque, 0 unresolved, 0 none
 ```
 

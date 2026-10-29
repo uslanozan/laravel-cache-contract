@@ -28,4 +28,20 @@ enum CallStyle: string
 
     /** A listed method of a wrapper class from scanner.wrappers; the cache call itself is inside the wrapper. */
     case Wrapper = 'wrapper';
+
+    /** RateLimiter::hit(...): the framework's rate limiter, which keeps its counters in the cache. */
+    case RateLimiter = 'rate-limiter';
+
+    /** A 'throttle:60,1' middleware string: the rate limiter again, through middleware. */
+    case Throttle = 'throttle';
+
+    public function category(): Category
+    {
+        return match ($this) {
+            self::Facade, self::Helper, self::Repository, self::Container => Category::Cache,
+            self::Redis => Category::Redis,
+            self::RateLimiter, self::Throttle => Category::Indirect,
+            self::Wrapper => Category::Wrapper,
+        };
+    }
 }

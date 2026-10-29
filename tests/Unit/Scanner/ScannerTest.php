@@ -201,6 +201,39 @@ it('finds the listed methods of a configured wrapper where they are called, with
     ]);
 });
 
+it('finds the rate limiter and throttle middleware strings as their own styles', function () {
+    expect(scannedUsages('IndirectUsage'))->toBe([
+        "throttle throttle other unresolved 'throttle:api'",
+        'rate-limiter hit other template login:{id}',
+        'rate-limiter attempt other template send-message:{id}',
+        'rate-limiter clear forget template login:{id}',
+        "throttle throttle other unresolved 'throttle:60,1'",
+        "throttle throttle other unresolved 'throttle:uploads'",
+    ]);
+});
+
+it('puts every usage in the category of its style', function () {
+    $scanner = new Scanner(['Uslanozan\CacheContract\Tests\Fixtures\Scanner\CacheProperties' => ['get' => Operation::Read]]);
+    $categories = [];
+
+    foreach (['FacadeUsage', 'HelperUsage', 'RepositoryUsage', 'ContainerUsage', 'RedisUsage', 'IndirectUsage', 'WrapperUsage'] as $fixture) {
+        foreach ($scanner->scanFile(__DIR__."/../../Fixtures/Scanner/{$fixture}.php") as $usage) {
+            $categories[$usage->style->value] = $usage->category->value;
+        }
+    }
+
+    expect($categories)->toBe([
+        'facade' => 'cache',
+        'helper' => 'cache',
+        'repository' => 'cache',
+        'container' => 'cache',
+        'redis' => 'redis',
+        'throttle' => 'indirect',
+        'rate-limiter' => 'indirect',
+        'wrapper' => 'wrapper',
+    ]);
+});
+
 it('finds no wrapper calls when none are configured', function () {
     expect(array_filter(scannedUsages('WrapperUsage'), fn (string $usage) => str_starts_with($usage, 'wrapper')))->toBe([]);
 });

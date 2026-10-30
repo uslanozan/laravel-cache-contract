@@ -232,7 +232,8 @@ it('puts every usage in the category of its style', function () {
         'rate-limiter' => 'indirect',
         'wrapper' => 'wrapper',
     ]);
-  });
+});
+
 it('reads X|null as ?X, for cache types and wrappers', function () {
     // Inline, not a fixture: Pint would rewrite X|null to ?X.
     $code = <<<'PHP'

@@ -97,7 +97,7 @@ final class ScanCommand extends Command
                 fn (CacheUsage $usage): string => $usage->keyKind->value,
                 array_filter($result->usages, fn (CacheUsage $usage): bool => $usage->wrapper === null),
             ));
-          
+
             $categories = array_count_values(array_map(fn (CacheUsage $usage): string => $usage->category->value, $result->usages));
 
             $this->newLine();

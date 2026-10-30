@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
-use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
 // A small project in a temporary directory, used as the application's base path.
 beforeEach(function () {

@@ -59,8 +59,11 @@ final class CacheCallVisitor extends NodeVisitorAbstract
 
     private const RATE_LIMITER_FACADES = ['RateLimiter', 'Illuminate\Support\Facades\RateLimiter'];
 
-    /** A throttle middleware string with its arguments: 'throttle:60,1', 'throttle:api'. */
-    private const THROTTLE = '/^throttle:\w/';
+    /** RateLimiter methods that define or look up a limiter and touch no cache key. */
+    private const RATE_LIMITER_DEFINITIONS = ['for', 'limiter'];
+
+    /** A throttle middleware string: 'throttle:60,1', 'throttle:api'. Arguments have no spaces, so '__("throttle:limit reached")' is left out. */
+    private const THROTTLE = '/^throttle:[\w-]+(,[\w-]+)*$/';
 
     private const CACHE_TYPES = [
         'Illuminate\Contracts\Cache\Repository',
@@ -227,7 +230,7 @@ final class CacheCallVisitor extends NodeVisitorAbstract
             $operation = Operation::fromMethod($method);
         }
 
-        if ($style === null) {
+        if ($style === null || ($style === CallStyle::RateLimiter && in_array(strtolower($method), self::RATE_LIMITER_DEFINITIONS, true))) {
             return;
         }
 

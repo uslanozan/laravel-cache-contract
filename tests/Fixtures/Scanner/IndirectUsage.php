@@ -22,8 +22,11 @@ final class IndirectUsage
         Route::middleware('throttle:60,1')->group(fn () => null);
         $route->middleware(['auth', 'throttle:uploads']);
 
-        // Not throttle middleware: no limiter after the colon, or no colon at all.
+        // Not cache usage: limiter definitions, and strings that are not throttle middleware.
+        RateLimiter::for('api', fn () => null);
+        RateLimiter::limiter('api');
         $route->middleware('throttle');
         $route->name('throttle:');
+        __('throttle:limit reached');
     }
 }

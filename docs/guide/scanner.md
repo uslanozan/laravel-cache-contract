@@ -47,7 +47,7 @@ under the table, and the calls in every other file are still reported.
 | Direct Redis | `Redis::get(…)`, `Redis::connection()->del(…)` |
 | Wrapper | a call to a listed method of one of your [wrapper classes](#wrappers) |
 | Rate limiter | `RateLimiter::hit('login:'.$id)`, `RateLimiter::attempt(…)`, `\RateLimiter::clear(…)` |
-| Throttle middleware | any `'throttle:…'` string: `->middleware('throttle:60,1')`, `['auth', 'throttle:api']`, a middleware group in `app/Http/Kernel.php` |
+| Throttle middleware | a `'throttle:…'` string with no spaces, anywhere: `->middleware('throttle:60,1')`, `['auth', 'throttle:api']`, a middleware group in `app/Http/Kernel.php` |
 
 Each call is reported with its file, line, class and method, and:
 
@@ -98,7 +98,9 @@ treat each category. Indirect usage is listed so you can see how much of the
 store the framework uses, but there is nothing to move into a definition. A
 `throttle:` string is reported with the key kind `unresolved`, since the
 limiter builds its key at runtime from the route and the user or IP; a
-`RateLimiter::` call has its key read like any other.
+`RateLimiter::` call has its key read like any other. `RateLimiter::for()` and
+`RateLimiter::limiter()` are not listed: they define or look up a limiter and
+touch no cache key.
 
 Session, queue and other drivers that can be set to `cache` or `redis` are
 not reported: whether they touch the cache store depends on your

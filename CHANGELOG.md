@@ -57,7 +57,10 @@ model cache and the first commands.
   values, and `cache-contract:inspect` lists the counters.
 - **Commands:** `cache-contract:list` (with `--section`, `--subject` and
   `--json`) and `cache-contract:inspect` (with `--param` and `--context`,
-  and suggestions for a mistyped ID).
+  and suggestions for a mistyped ID). For a definition with generation
+  counters, `inspect` shows them in the key pattern (`~g{users}`) and builds
+  the full key from `--generation=name=value`, or from the current values in
+  Redis with `--live`, which only reads.
 - **Scanner:** `cache-contract:scan` lists every cache call in the source
   (facade, helper, injected repository, container, direct Redis) with its
   file, line, class, method and operation, and reads its key as `exact`,

@@ -23,8 +23,59 @@ beforeEach(function () {
         ],
         'external' => [
             'exchange_rates' => ['purpose' => 'exchange_rates', 'type' => 'array', 'ttl' => 600, 'description' => 'Rates.'],
+            'flags' => ['purpose' => 'flags', 'type' => 'array', 'ttl' => 600, 'tags' => ['flags'], 'description' => 'Feature flags.'],
         ],
     ]);
+});
+
+describe('generation counters', function () {
+    it('ends the key pattern with the counters, in name order', function () {
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'user.profile']);
+
+        expect($exit)->toBe(0)
+            ->and(Artisan::output())->toContain('cc:user:profile:v2:user_id={int}:~g{def:user.profile}.{users}');
+    });
+
+    it('writes only the counters for a definition without parameters', function () {
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'external.flags']);
+
+        expect($exit)->toBe(0)
+            ->and(Artisan::output())->toContain('cc:external:flags:v1:~g{flags}');
+    });
+
+    it('builds the full key from --generation', function () {
+        $this->artisan('cache-contract:inspect', [
+            'id' => 'user.profile',
+            '--param' => ['user_id=42'],
+            '--generation' => ['users=8123', 'def:user.profile=9907'],
+        ])
+            ->expectsOutputToContain('cc:user:profile:v2:user_id=42:~g9907.8123')
+            ->doesntExpectOutputToContain('At runtime')
+            ->assertSuccessful();
+    });
+
+    it('rejects generations that are not exactly the counters', function (array $generations, string $message) {
+        $this->artisan('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--generation' => $generations])
+            ->expectsOutputToContain($message)
+            ->assertFailed();
+    })->with([
+        'missing counter' => [['users=8123'], 'expected [def:user.profile, users], got [users]'],
+        'not an int' => [['users=abc', 'def:user.profile=1'], 'generation "users" must be int, "abc" given'],
+    ]);
+
+    it('rejects --generation together with --live', function () {
+        $this->artisan('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--generation' => ['users=1'], '--live' => true])
+            ->expectsOutputToContain('pass either --generation or --live, not both')
+            ->assertFailed();
+    });
+
+    it('needs no Redis with --live for a definition without counters', function () {
+        config()->set('cache-contract.store', 'unreachable');
+
+        $this->artisan('cache-contract:inspect', ['id' => 'external.exchange_rates', '--live' => true])
+            ->expectsOutputToContain('cc:external:exchange_rates:v1:-')
+            ->assertSuccessful();
+    });
 });
 
 // Several checks on one output: read it whole. Chained expectsOutputToContain()

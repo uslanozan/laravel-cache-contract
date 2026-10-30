@@ -63,6 +63,14 @@ describe('report (default)', function () {
 });
 
 describe('add and pull', function () {
+    it('checks the parameters before touching the store', function (Closure $call) {
+        expect($call)->toThrow(InvalidParameters::class)
+            ->and($this->store->calls)->toBe([]);
+    })->with([
+        'add' => [fn () => CacheContract::add('external.exchange_rates', ['region' => 'eu'], 'x')],
+        'pull' => [fn () => CacheContract::pull('external.exchange_rates', ['region' => 'eu'])],
+    ]);
+
     it('treats a failed add as not written', function () {
         // The array store has no atomic add, so Laravel reads, then writes.
         $this->store->fail('put');

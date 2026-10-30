@@ -106,7 +106,8 @@ describe('pull', function () {
             ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
     });
 
-    it('gives the value only to the call that removes it', function () {
+    // Stores without GETDEL; on Redis the read and the delete are one command.
+    it('gives the value only to the call that removes it on other stores', function () {
         CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
 
         // Another request removes the entry between this pull's read and its delete.
@@ -115,13 +116,6 @@ describe('pull', function () {
         expect(CacheContract::pull('user.profile', ['user_id' => 1], 'taken'))->toBe('taken');
     });
 });
-
-it('checks the parameters of add and pull before touching the cache', function (Closure $call) {
-    expect($call)->toThrow(InvalidParameters::class);
-})->with([
-    'add' => [fn () => CacheContract::add('user.profile', ['id' => 1], 'x')],
-    'pull' => [fn () => CacheContract::pull('user.profile', ['user_id' => '1'])],
-]);
 
 it('returns the default on a miss, also from a closure', function () {
     expect(CacheContract::get('external.exchange_rates', [], 'none'))->toBe('none')

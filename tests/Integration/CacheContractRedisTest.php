@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\CacheContract;
+use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
  * The facade against real Redis (phpredis). The `array` store keeps integers
@@ -83,48 +82,64 @@ it('forgets an entry', function () {
 });
 
 describe('add and pull', function () {
-    it('adds once, atomically, with the TTL of the definition', function () {
-        expect(CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'a']))->toBeTrue()
-            ->and(CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'b']))->toBeFalse()
-            ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['lock' => 'a']);
-
+    it('adds in one command, with the TTL of the definition', function () {
         /** @var RedisStore $store */
         $store = Cache::store('contract')->getStore();
+        $results = [];
+
+        // One command (Laravel's SET NX EX script): nothing can run between the check and the write.
+        $commands = RedisCommandCounter::count($store->connection(), function () use (&$results) {
+            $results[] = CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'a']);
+        });
+
+        $results[] = CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'b']);
         $ttl = $store->connection()->ttl($store->getPrefix().CacheContract::key('user.profile', ['user_id' => 1]));
 
-        expect($ttl)->toBeGreaterThan(290)->toBeLessThanOrEqual(300);
+        expect($commands)->toBe(['eval' => 1])
+            ->and($results)->toBe([true, false])
+            ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['lock' => 'a'])
+            ->and($ttl)->toBeGreaterThan(290)->toBeLessThanOrEqual(300);
     });
 
-    it('gives a pulled value to one of two interleaved requests only', function () {
+    it('reads and removes in one command, so nothing can change the entry in between', function () {
+        /** @var RedisStore $store */
+        $store = Cache::store('contract')->getStore();
         CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
-        $other = null;
+        $pulled = null;
 
-        // Request B pulls the same entry right after request A has read it.
-        Event::listen(CacheHit::class, function () use (&$other) {
-            if ($other === null) {
-                $other = 'running';
-                $other = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
-            }
+        $commands = RedisCommandCounter::count($store->connection(), function () use (&$pulled) {
+            $pulled = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
         });
 
-        $first = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
-
-        expect([$first, $other])->toBe(['taken', ['token' => 'abc']]);
+        expect($commands)->toBe(['getdel' => 1])
+            ->and($pulled)->toBe(['token' => 'abc'])
+            ->and(CacheContract::pull('user.profile', ['user_id' => 1], 'taken'))->toBe('taken')
+            ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
     });
 
-    it('shows that Laravel\'s own pull gives the value to both requests', function () {
-        $cache = Cache::store('contract');
-        $cache->put('raw-token', 'abc', 60);
-        $other = null;
+    it('decodes a pulled value like a read, also with a phpredis serializer', function (array $values) {
+        config()->set('database.redis.contract.options', ['serializer' => Redis::SERIALIZER_PHP]);
+        app('redis')->purge('contract');
+        Cache::forgetDriver('contract');
 
-        Event::listen(CacheHit::class, function () use (&$other, $cache) {
-            if ($other === null) {
-                $other = 'running';
-                $other = $cache->pull('raw-token');
-            }
-        });
+        foreach ($values as $i => $value) {
+            CacheContract::put('user.profile', ['user_id' => $i], $value);
+        }
 
-        expect([$cache->pull('raw-token'), $other])->toBe(['abc', 'abc']);
+        expect(array_map(fn (int $i): mixed => CacheContract::pull('user.profile', ['user_id' => $i], 'missing'), array_keys($values)))
+            ->toBe($values);
+    })->with([
+        'mixed values' => [[['token' => 'abc'], 0, null, false, '', 7, 1.5]],
+    ]);
+
+    it('returns the default when Redis is unreachable', function () {
+        config()->set('cache-contract.store', 'unreachable');
+        Exceptions::fake();
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default')
+            ->and(CacheContract::add('user.profile', ['user_id' => 1], 'x'))->toBeFalse();
+
+        Exceptions::assertReported(RedisException::class);
     });
 });
 

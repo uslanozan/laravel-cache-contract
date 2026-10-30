@@ -32,13 +32,14 @@ function validDefinition(array $overrides = []): array
 
 /**
  * @param  array<mixed>  $definitions
+ * @param  mixed  $tags  the "tags" config; "users" is declared by default
  * @return list<string>
  */
-function errorsFor(mixed $definitions): array
+function errorsFor(mixed $definitions, mixed $tags = ['users' => 'Data shown about users.']): array
 {
     return array_map(
         fn (ValidationError $error): string => (string) $error,
-        (new DefinitionValidator)->validate($definitions),
+        (new DefinitionValidator)->validate($definitions, $tags),
     );
 }
 
@@ -132,4 +133,41 @@ it('rejects config that is not shaped as sections of definitions', function () {
     expect(errorsFor('nope'))->toBe(['"definitions" must be an array of sections'])
         ->and(errorsFor(['user' => 'nope']))->toBe(['user: a section must be an array of definitions'])
         ->and(errorsFor(['user' => ['profile' => 'nope']]))->toBe(['user.profile: a definition must be an array of fields']);
+});
+
+describe('tags', function () {
+    it('rejects a tag the "tags" config does not declare, with a suggestion', function () {
+        expect(errorsFor(['user' => ['active_list' => validDefinition(['tags' => ['usres', 'billing']])]]))->toBe([
+            'user.active_list: tag "usres" is not declared under "tags" (did you mean "users"?)',
+            'user.active_list: tag "billing" is not declared under "tags"',
+        ]);
+    });
+
+    it('rejects every tag when none is declared', function () {
+        expect(errorsFor(['user' => ['active_list' => validDefinition()]], []))->toBe([
+            'user.active_list: tag "users" is not declared under "tags"',
+        ]);
+    });
+
+    it('rejects a broken "tags" config', function (mixed $tags, array $expected) {
+        expect(errorsFor(['user' => ['active_list' => validDefinition(['tags' => null])]], $tags))->toBe($expected);
+    })->with([
+        'not an array' => ['users', ['"tags" must map each tag name to a description, e.g. \'users\' => \'Data shown about users.\'']],
+        'a list of names' => [['users', 'billing'], ['"tags" must map each tag name to a description, e.g. \'users\' => \'Data shown about users.\'']],
+        'not snake_case' => [['Users' => 'x'], ['tags.Users: tag name must be snake_case']],
+        'reserved model: prefix' => [['model:users' => 'x'], ['tags.model:users: tags starting with "model:" are reserved for the package\'s own counters (ADR 0009); choose another name']],
+        'reserved def: prefix' => [['def:user.profile' => 'x'], ['tags.def:user.profile: tags starting with "def:" are reserved for the package\'s own counters (ADR 0009); choose another name']],
+        'no description' => [['users' => ''], ['tags.users: a tag needs a non-empty description of what it groups']],
+        'description not a string' => [['users' => ['x']], ['tags.users: a tag needs a non-empty description of what it groups']],
+    ]);
+
+    it('reports a tag with a bad description once, not again on the definitions that use it', function () {
+        expect(errorsFor(['user' => ['active_list' => validDefinition()]], ['users' => ' ']))->toBe([
+            'tags.users: a tag needs a non-empty description of what it groups',
+        ]);
+    });
+
+    it('accepts an empty "tags" config', function () {
+        expect(errorsFor(['user' => ['active_list' => validDefinition(['tags' => null])]], []))->toBe([]);
+    });
 });

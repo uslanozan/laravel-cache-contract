@@ -136,6 +136,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tags
+    |--------------------------------------------------------------------------
+    |
+    | Every tag a definition may carry, with what it groups (ADR 0002). Names
+    | are snake_case. CacheContract::flushTag('users') invalidates every entry
+    | of every definition tagged "users" at once, for every parameter and
+    | context (ADR 0009).
+    |
+    | 'users' => 'Data shown about users.',
+    |
+    */
+
+    'tags' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Scanner
     |--------------------------------------------------------------------------
     |

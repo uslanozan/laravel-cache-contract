@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\CacheContract;
 
@@ -78,6 +80,52 @@ it('forgets an entry', function () {
     expect(CacheContract::forget('user.profile', ['user_id' => 1]))->toBeTrue()
         ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse()
         ->and(CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'Barış']))->toBe(['name' => 'Barış']);
+});
+
+describe('add and pull', function () {
+    it('adds once, atomically, with the TTL of the definition', function () {
+        expect(CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'a']))->toBeTrue()
+            ->and(CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'b']))->toBeFalse()
+            ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['lock' => 'a']);
+
+        /** @var RedisStore $store */
+        $store = Cache::store('contract')->getStore();
+        $ttl = $store->connection()->ttl($store->getPrefix().CacheContract::key('user.profile', ['user_id' => 1]));
+
+        expect($ttl)->toBeGreaterThan(290)->toBeLessThanOrEqual(300);
+    });
+
+    it('gives a pulled value to one of two interleaved requests only', function () {
+        CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
+        $other = null;
+
+        // Request B pulls the same entry right after request A has read it.
+        Event::listen(CacheHit::class, function () use (&$other) {
+            if ($other === null) {
+                $other = 'running';
+                $other = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
+            }
+        });
+
+        $first = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
+
+        expect([$first, $other])->toBe(['taken', ['token' => 'abc']]);
+    });
+
+    it('shows that Laravel\'s own pull gives the value to both requests', function () {
+        $cache = Cache::store('contract');
+        $cache->put('raw-token', 'abc', 60);
+        $other = null;
+
+        Event::listen(CacheHit::class, function () use (&$other, $cache) {
+            if ($other === null) {
+                $other = 'running';
+                $other = $cache->pull('raw-token');
+            }
+        });
+
+        expect([$cache->pull('raw-token'), $other])->toBe(['abc', 'abc']);
+    });
 });
 
 it('keeps tenants apart in Redis', function () {

@@ -130,6 +130,65 @@ final readonly class CacheContractManager
     }
 
     /**
+     * Caches a value only when none is cached yet, for the definition's TTL,
+     * in one atomic step on Redis: of two concurrent calls, one writes. A
+     * cached null counts as cached.
+     *
+     * @param  array<string, mixed>  $params
+     * @return bool true when this call wrote the value
+     */
+    public function add(string $id, array $params, mixed $value): bool
+    {
+        $definition = $this->definitions->get($id);
+        $key = $this->keyFor($definition, $params, $this->errors->write);
+
+        if ($key === false) {
+            return false;
+        }
+
+        try {
+            return $this->repository()->add($key, Envelope::wrap($value), $definition->ttl);
+        } catch (Throwable $e) {
+            $this->errors->handle($e, $this->errors->write);
+
+            return false;
+        }
+    }
+
+    /**
+     * The cached value, removed in the same call, or $default when nothing is
+     * cached. Only the call whose delete removes the entry gets the value: of
+     * two concurrent pulls, one gets it and the other gets $default, so a
+     * one-time token is used once. Laravel's Cache::pull() reads and deletes
+     * separately, so both would get it.
+     *
+     * When the delete fails, $default is returned too: a value that could not
+     * be removed is not handed out.
+     *
+     * @param  array<string, mixed>  $params
+     * @param  mixed  $default  a value, or a closure that returns one
+     */
+    public function pull(string $id, array $params = [], mixed $default = null): mixed
+    {
+        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+        $entry = $key === false ? false : $this->read($key);
+
+        if ($key === false || ! Envelope::isHit($entry)) {
+            return value($default);
+        }
+
+        try {
+            $removed = $this->repository()->forget($key);
+        } catch (Throwable $e) {
+            $this->errors->handle($e, $this->errors->invalidate);
+
+            return value($default);
+        }
+
+        return $removed ? Envelope::unwrap($entry) : value($default);
+    }
+
+    /**
      * The cached value; on a miss, runs $loader, caches its result and
      * returns it. A null result is cached too.
      *

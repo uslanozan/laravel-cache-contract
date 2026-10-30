@@ -39,6 +39,7 @@ use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\Function_;
+use PhpParser\Node\UnionType;
 use PhpParser\NodeFinder;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\PrettyPrinter\Standard;
@@ -644,6 +645,12 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     {
         if ($type instanceof NullableType) {
             $type = $type->type;
+        }
+
+        // X|null is ?X written out; a union of several classes has no one class.
+        if ($type instanceof UnionType) {
+            $classes = array_filter($type->types, fn (Node $part): bool => ! ($part instanceof Identifier && $part->toLowerString() === 'null'));
+            $type = count($classes) === 1 ? reset($classes) : null;
         }
 
         return $type instanceof Name ? $type->toString() : null;

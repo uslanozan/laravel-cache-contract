@@ -20,8 +20,9 @@ Keys: 2 exact, 9 template, 1 opaque, 5 unresolved, 0 none
 Wrapper calls: 3 read, 1 write
 ```
 
-The last line appears only when [wrapper](#wrappers) calls are found; they
-are included in the usage points and the key counts above it.
+The last line appears only when [wrapper](#wrappers) calls are found. They
+are included in the usage points but not in the `Keys:` line: the cache calls
+inside the wrapper already count its keys.
 
 A usage point is one call in the code. A `Cache::get()` in a loop is still
 one usage point; how often it runs is not something a scan can know.
@@ -177,7 +178,8 @@ as:
 
 - an instance created with `new`: `(new CacheProperties)->get()`, or a
   variable assigned one once: `$cache = new CacheProperties; $cache->get()`
-- a property or parameter typed as the wrapper, as for an injected repository
+- a property or parameter typed as the wrapper (also `?CacheProperties` or
+  `CacheProperties|null`), as for an injected repository
 - a static call: `CacheProperties::flushAll()`
 
 The key of a wrapper call is always `unresolved` with no expression: the

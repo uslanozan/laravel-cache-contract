@@ -232,6 +232,23 @@ it('puts every usage in the category of its style', function () {
         'rate-limiter' => 'indirect',
         'wrapper' => 'wrapper',
     ]);
+  });
+it('reads X|null as ?X, for cache types and wrappers', function () {
+    // Inline, not a fixture: Pint would rewrite X|null to ?X.
+    $code = <<<'PHP'
+        <?php
+        use Illuminate\Contracts\Cache\Repository;
+        function handle(Repository|null $cache, App\Wrapper|null $wrapper, App\Wrapper|App\Other $either): void
+        {
+            $cache?->get('a');
+            $wrapper?->get();
+            $either->get();
+        }
+        PHP;
+
+    $usages = (new Scanner(['App\Wrapper' => ['get' => Operation::Read]]))->scanCode($code);
+
+    expect(array_map(fn (CacheUsage $usage) => $usage->style->value, $usages))->toBe(['repository', 'wrapper']);
 });
 
 it('finds no wrapper calls when none are configured', function () {

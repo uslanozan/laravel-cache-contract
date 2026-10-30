@@ -6,6 +6,7 @@ namespace Uslanozan\CacheContract\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Scanner\CacheUsage;
 use Uslanozan\CacheContract\Scanner\Category;
@@ -30,7 +31,14 @@ final class ScanCommand extends Command
 
     public function handle(Repository $config): int
     {
-        $scanner = new Scanner($this->wrappers($config->get('cache-contract.scanner.wrappers', [])));
+        try {
+            $scanner = new Scanner($this->wrappers($config->get('cache-contract.scanner.wrappers', [])));
+        } catch (CacheContractException $e) {
+            $this->components->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $root = realpath($this->laravel->basePath()) ?: $this->laravel->basePath();
         $paths = $this->option('path') ?: $config->get('cache-contract.scanner.paths', []);
 
@@ -84,7 +92,12 @@ final class ScanCommand extends Command
                 ], $result->usages),
             );
 
-            $kinds = array_count_values(array_map(fn (CacheUsage $usage): string => $usage->keyKind->value, $result->usages));
+            // Wrapper calls are left out: the cache calls inside the wrapper already count its keys.
+            $kinds = array_count_values(array_map(
+                fn (CacheUsage $usage): string => $usage->keyKind->value,
+                array_filter($result->usages, fn (CacheUsage $usage): bool => $usage->wrapper === null),
+            ));
+          
             $categories = array_count_values(array_map(fn (CacheUsage $usage): string => $usage->category->value, $result->usages));
 
             $this->newLine();

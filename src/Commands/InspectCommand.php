@@ -57,6 +57,11 @@ final class InspectCommand extends Command
         try {
             $id = $this->definitionId();
 
+            // Checked first, before any prompt for a secret or the hint to pass --param.
+            if ($this->option('generation') !== [] && $this->option('live')) {
+                throw InvalidParameters::forDefinition($id, 'pass either --generation or --live, not both');
+            }
+
             if (! $registry->has($id)) {
                 $this->components->error(sprintf('Unknown cache definition "%s".', $id));
                 $this->suggest($id, $registry, $names);
@@ -186,22 +191,18 @@ final class InspectCommand extends Command
      */
     private function generations(Definition $definition): array|false|null
     {
-        $given = $this->pairs('generation');
-        $live = (bool) $this->option('live');
-
-        if ($given !== [] && $live) {
-            throw InvalidParameters::forDefinition($definition->id, 'pass either --generation or --live, not both');
-        }
-
-        if (! $live) {
+        if (! $this->option('live')) {
             $generations = [];
 
-            foreach ($given as $name => $value) {
-                if (preg_match('/^\d+$/', $value) !== 1) {
-                    throw InvalidParameters::forDefinition($definition->id, sprintf('generation "%s" must be int, "%s" given', $name, $value));
+            foreach ($this->pairs('generation') as $name => $value) {
+                // Not a cast: (int) would turn a value beyond PHP_INT_MAX into PHP_INT_MAX without a word.
+                $generation = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+
+                if ($generation === false) {
+                    throw InvalidParameters::forDefinition($definition->id, sprintf('generation "%s" must be a non-negative int, "%s" given', $name, $value));
                 }
 
-                $generations[$name] = (int) $value;
+                $generations[$name] = $generation;
             }
 
             return $generations;

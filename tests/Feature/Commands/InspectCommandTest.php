@@ -60,11 +60,34 @@ describe('generation counters', function () {
             ->assertFailed();
     })->with([
         'missing counter' => [['users=8123'], 'expected [def:user.profile, users], got [users]'],
-        'not an int' => [['users=abc', 'def:user.profile=1'], 'generation "users" must be int, "abc" given'],
+        'not an int' => [['users=abc', 'def:user.profile=1'], 'generation "users" must be a non-negative int, "abc" given'],
+        'negative' => [['users=-1', 'def:user.profile=1'], 'generation "users" must be a non-negative int, "-1" given'],
+        // Beyond PHP_INT_MAX: a cast would silently give 9223372036854775807.
+        'too large' => [['users=99999999999999999999', 'def:user.profile=1'], 'generation "users" must be a non-negative int, "99999999999999999999" given'],
     ]);
 
-    it('rejects --generation together with --live', function () {
-        $this->artisan('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--generation' => ['users=1'], '--live' => true])
+    it('rejects --generation together with --live before anything else', function (array $arguments) {
+        $exit = Artisan::call('cache-contract:inspect', $arguments + ['--generation' => ['users=1'], '--live' => true]);
+        $output = Artisan::output();
+
+        expect($exit)->toBe(1)
+            ->and($output)->toContain('pass either --generation or --live, not both')
+            ->and($output)->not->toContain('Pass --param');
+    })->with([
+        'with parameters' => [['id' => 'user.profile', '--param' => ['user_id=42']]],
+        // Without --param the command would otherwise stop at the "Pass --param" hint.
+        'without parameters' => [['id' => 'user.profile']],
+    ]);
+
+    it('rejects the conflict before asking for a secret', function () {
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+        config()->set('cache-contract.definitions.auth.session_owner', [
+            'purpose' => 'session_owner', 'type' => 'array', 'params' => ['api_token' => 'secret'],
+            'ttl' => 300, 'tags' => ['sessions'], 'description' => 'Owner of an API session.',
+        ]);
+
+        // No expectsQuestion(): the command must fail without prompting.
+        $this->artisan('cache-contract:inspect', ['id' => 'auth.session_owner', '--generation' => ['sessions=1'], '--live' => true])
             ->expectsOutputToContain('pass either --generation or --live, not both')
             ->assertFailed();
     });

@@ -98,3 +98,22 @@ public function cacheContext(): array
 
 It is an interface rather than a plain method, so the package can tell
 whether a model provides it and static analysis checks the signature.
+
+## Update 2026-10-30: no writes inside a transaction (LRVL-39)
+
+While a transaction is open on the model's connection, `find()` and
+`findMany()` read cached entries but write none. A row loaded inside a
+transaction may not be committed, and after a rollback a cached copy would
+serve a row that never existed; clearing after the commit cannot help,
+because a rollback clears nothing.
+
+- Reads stay: a cached entry holds the last committed values, which is what
+  every other request sees too.
+- The transaction `RefreshDatabase` and `DatabaseTransactions` wrap each test
+  in does not count, the same way Laravel's after-commit callbacks ignore it.
+  Otherwise nothing would be cached in the application's tests, and they
+  would no longer test the cache. Laravel's testing transactions manager
+  leaves those transactions out of `callbackApplicableTransactions()`, on
+  Laravel 11, 12 and 13.
+- `CacheContract::remember()` gets no such check: the facade does not know
+  which connection a loader reads. The guide warns about it instead.

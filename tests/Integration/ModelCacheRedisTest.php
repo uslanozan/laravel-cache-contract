@@ -98,3 +98,18 @@ it('loads from the database when Redis is unreachable', function () {
 
     Exceptions::assertReported(RedisException::class);
 });
+
+it('leaves no uncommitted row in Redis after a rollback', function () {
+    DB::beginTransaction();
+    Member::create([
+        'id' => 50, 'organization_id' => 1, 'name' => 'Uncommitted', 'password' => 'x', 'settings' => [],
+        'is_admin' => false, 'status' => MemberStatus::Active, 'last_login_at' => '2026-10-13 21:00:00',
+    ]);
+    expect(ModelCache::for(Member::class)->find(50)?->name)->toBe('Uncommitted')
+        ->and(ModelCache::for(Member::class)->findMany([1, 50]))->toHaveCount(2);
+    DB::rollBack();
+
+    expect(Cache::store('model_cache')->has(ModelCache::for(Member::class)->key(50)))->toBeFalse()
+        ->and(Cache::store('model_cache')->has(ModelCache::for(Member::class)->key(1)))->toBeFalse()
+        ->and(ModelCache::for(Member::class)->find(50))->toBeNull();
+});

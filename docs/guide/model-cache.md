@@ -134,6 +134,11 @@ a row that never existed.
   values, not the transaction's own changes. Read with Eloquent there if you
   need those.
 - A transaction on another connection changes nothing.
+- **A transaction around every request or job.** If your application opens
+  one in a middleware or a job wrapper, the model cache is never filled
+  there: every `find()` reads Redis and then the database, which is slower
+  than no cache. Open the transaction only around the code that changes
+  data.
 - **Tests are not affected.** The transaction that `RefreshDatabase` or
   `DatabaseTransactions` opens around each test does not count, so models are
   cached in your tests as in production. A transaction the test opens itself

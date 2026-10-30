@@ -81,6 +81,18 @@ it('forgets an entry', function () {
         ->and(CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'Barış']))->toBe(['name' => 'Barış']);
 });
 
+/**
+ * Puts a list under the definition's key, so Redis rejects GETDEL on it.
+ *
+ * @param  array<string, mixed>  $params
+ */
+function rejectGetdel(string $id, array $params): void
+{
+    /** @var RedisStore $store */
+    $store = Cache::store('contract')->getStore();
+    $store->connection()->rpush($store->getPrefix().CacheContract::key($id, $params), 'not a cache entry');
+}
+
 describe('add and pull', function () {
     it('adds in one command, with the TTL of the definition', function () {
         /** @var RedisStore $store */
@@ -131,6 +143,23 @@ describe('add and pull', function () {
     })->with([
         'mixed values' => [[['token' => 'abc'], 0, null, false, '', 7, 1.5]],
     ]);
+
+    // phpredis answers a command Redis rejects with false, as for a missing key.
+    // GETDEL on Redis before 6.2 is rejected like GETDEL on a list is here.
+    it('reports a command Redis rejects instead of taking it for a miss', function () {
+        rejectGetdel('user.profile', ['user_id' => 1]);
+        Exceptions::fake();
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default');
+        Exceptions::assertReported(fn (RedisException $e): bool => str_starts_with($e->getMessage(), 'WRONGTYPE'));
+    });
+
+    it('throws a command Redis rejects when the policy says so', function () {
+        config()->set('cache-contract.redis_errors.read', 'throw');
+        rejectGetdel('user.profile', ['user_id' => 1]);
+
+        expect(fn () => CacheContract::pull('user.profile', ['user_id' => 1]))->toThrow(RedisException::class, 'WRONGTYPE');
+    });
 
     it('returns the default when Redis is unreachable', function () {
         config()->set('cache-contract.store', 'unreachable');

@@ -8,6 +8,8 @@ use Closure;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Redis\Connections\PhpRedisConnection;
+use RedisException;
 use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
@@ -338,12 +340,26 @@ final readonly class CacheContractManager
      * exactly as RedisStore::get() does, so serializer and compression
      * settings and Laravel versions are handled the same way.
      *
+     * phpredis answers a command that Redis rejects, such as GETDEL on Redis
+     * before 6.2, with false, as for a missing key, and keeps the error aside.
+     * That error is thrown, so it follows the "read" policy instead of being
+     * taken for a miss.
+     *
      * @return array{0: mixed}|null the envelope, or null when there was none
+     *
+     * @throws RedisException when Redis rejects the command
      */
     private function takeFromRedis(RedisStore $store, string $key): ?array
     {
         $connection = $store->connection();
+        $client = $connection instanceof PhpRedisConnection ? $connection->client() : null;
+        $client?->clearLastError();
+
         $raw = $connection->command('getdel', [$store->getPrefix().$key]);
+
+        if ($raw === false && is_string($error = $client?->getLastError())) {
+            throw new RedisException($error);
+        }
 
         if ($raw === null || $raw === false) {
             return null;

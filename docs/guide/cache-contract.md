@@ -75,6 +75,12 @@ the default, and a new code written in between is never removed by mistake.
 Laravel's own `Cache::pull()` reads and deletes in two steps, so both requests
 would get the code. If Redis cannot be reached, `pull()` returns the default.
 
+Because `GETDEL` goes to the Redis connection directly, `pull()` on Redis
+fires none of Laravel's cache events (`CacheHit`, `CacheMissed`,
+`KeyForgotten`), so tools that listen to them, such as Telescope or Pulse,
+do not see it. The other methods, and `pull()` on other stores, fire them as
+usual.
+
 On other stores (`array`, `database`, `file`…) `pull()` reads, then deletes,
 and hands out the value only when its delete removed an entry. That is not
 atomic: use Redis when a value must be used once.

@@ -25,4 +25,7 @@ enum CallStyle: string
 
     /** Redis::get(...): direct Redis, not the cache API. */
     case Redis = 'redis';
+
+    /** A listed method of a wrapper class from scanner.wrappers; the cache call itself is inside the wrapper. */
+    case Wrapper = 'wrapper';
 }

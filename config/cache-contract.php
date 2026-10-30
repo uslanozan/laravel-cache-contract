@@ -147,12 +147,21 @@ return [
     |          template a second time. tests/ sets up and fakes the cache
     |          (Cache::shouldReceive, Cache::put in a setUp), which is not
     |          the application's usage; remove it to scan the tests too
+    | wrappers: your own classes that call the cache inside, with the methods
+    |          that touch it and what they do: read, write, remember, forget
+    |          or other. Every call to a listed method is reported where it
+    |          is made; other methods of the class are not
+    |
+    | 'wrappers' => [
+    |     App\Support\CacheProperties::class => ['has' => 'read', 'get' => 'read', 'store' => 'write'],
+    | ],
     |
     */
 
     'scanner' => [
         'paths' => ['.'],
         'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache', 'tests'],
+        'wrappers' => [],
     ],
 
 ];

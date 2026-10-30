@@ -9,12 +9,19 @@ php artisan cache-contract:scan --path=app/Billing --path=app/Reports
 php artisan cache-contract:scan --json
 ```
 
-The table has one row per call, followed by a summary:
+The table has one row per call, followed by a summary. Its first column is
+the location as `path:line` (`app/Billing/Invoice.php:11`), which VS Code and
+PhpStorm terminals open at the line on click.
 
 ```text
 17 usage points in 8 files. A usage point is a place in the source, not a runtime call count.
 Keys: 2 exact, 9 template, 1 opaque, 5 unresolved, 0 none
+Wrapper calls: 3 read, 1 write
 ```
+
+The last line appears only when [wrapper](#wrappers) calls are found. They
+are included in the usage points but not in the `Keys:` line: the cache calls
+inside the wrapper already count its keys.
 
 A usage point is one call in the code. A `Cache::get()` in a loop is still
 one usage point; how often it runs is not something a scan can know.
@@ -37,6 +44,7 @@ under the table, and the calls in every other file are still reported.
 | Injected repository | a property or parameter typed `Illuminate\Contracts\Cache\Repository`, `Factory`, `Illuminate\Cache\Repository` or `CacheManager` |
 | Container | `app('cache')`, `resolve('cache.store')`, `$this->app['cache']` |
 | Direct Redis | `Redis::get(…)`, `Redis::connection()->del(…)` |
+| Wrapper | a call to a listed method of one of your [wrapper classes](#wrappers) |
 
 Each call is reported with its file, line, class and method, and:
 
@@ -82,6 +90,7 @@ How keys are read:
             "class": "App\\Billing\\Invoice",
             "function": "total",
             "style": "facade",
+            "wrapper": null,
             "method": "remember",
             "operation": "remember",
             "key_kind": "template",
@@ -95,7 +104,8 @@ How keys are read:
 ```
 
 Files are relative to the project root. `class` and `function` are `null`
-outside a class or function.
+outside a class or function. `wrapper` is the wrapper class of a `wrapper`
+call and `null` for every other style.
 
 ## Configuration
 
@@ -104,6 +114,7 @@ outside a class or function.
 'scanner' => [
     'paths' => ['.'],
     'exclude' => ['vendor', 'node_modules', 'storage', 'bootstrap/cache', 'tests'],
+    'wrappers' => [],
 ],
 ```
 
@@ -119,10 +130,49 @@ inventory. Remove `tests` from the list to scan them too.
 
 A file that does not parse is listed as an error and the scan goes on.
 
+## Wrappers
+
+A class of your own that calls the cache inside hides its callers: they never
+mention `Cache::`, so the scan finds one file where the cache is used in
+fifty. Declare such a class with the methods that touch the cache and what
+each does (`read`, `write`, `remember`, `forget` or `other`):
+
+```php
+'scanner' => [
+    'wrappers' => [
+        App\Support\CacheProperties::class => ['has' => 'read', 'get' => 'read', 'store' => 'write'],
+    ],
+],
+```
+
+Every call to a listed method is then a usage point with the style `wrapper`,
+shown as `wrapper (CacheProperties)` in the table. Other methods, such as
+`addProperty()`, are not cache calls and are not listed. A wrapper is found
+as:
+
+- an instance created with `new`: `(new CacheProperties)->get()`, or a
+  variable assigned one once: `$cache = new CacheProperties; $cache->get()`
+- a property or parameter typed as the wrapper (also `?CacheProperties` or
+  `CacheProperties|null`), as for an injected repository
+- a static call: `CacheProperties::flushAll()`
+
+The key of a wrapper call is always `unresolved` with no expression: the
+wrapper builds it inside, and the scanner cannot tell which argument, if any,
+feeds it. The `Cache::` calls inside the wrapper are still listed with their
+own keys.
+
+Nothing is detected automatically, since not every class named `*Cache*` is a
+wrapper. An unknown operation stops the command with an error before anything is
+scanned. Wrapper calls are listed for sizing a migration, not for fixing one by
+one: moving the wrapper onto the contract moves every caller with it.
+
 ## Limits
 
-- Calls through your own wrapper classes are found inside the wrapper, not
-  where the wrapper is used.
+- Calls through a wrapper class are found where they are made only when the
+  class is listed in `wrappers`. A wrapper obtained from a factory method
+  (`CacheProperties::make()->get()`), held in a variable written more than
+  once, or typed only in a docblock is not found; its cache calls are still
+  found inside the wrapper.
 - Keys are followed through constants of the same class and variables
   assigned once, nothing further: a constant of another class, a property or
   a key-builder method stays `unresolved`.

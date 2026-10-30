@@ -16,6 +16,7 @@ final readonly class CacheUsage
      * @param  string|null  $function  the method or function the call is in; a closure reports the one around it
      * @param  string  $method  the called method, "cache" for the helper itself
      * @param  string|null  $key  the key for an exact key, "feed:{id}" for a template, the printed expression otherwise
+     * @param  string|null  $wrapper  the wrapper class of a CallStyle::Wrapper call, null for any other call
      */
     public function __construct(
         public string $file,
@@ -27,5 +28,6 @@ final readonly class CacheUsage
         public Operation $operation,
         public KeyKind $keyKind,
         public ?string $key,
+        public ?string $wrapper = null,
     ) {}
 }

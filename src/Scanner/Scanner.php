@@ -24,6 +24,11 @@ use SplFileInfo;
 final class Scanner
 {
     /**
+     * @param  array<string, array<string, Operation>>  $wrappers  wrapper class => method => what it does to the cache
+     */
+    public function __construct(private readonly array $wrappers = []) {}
+
+    /**
      * Scans every .php file under the given paths. A file that cannot be read
      * or parsed is listed in the errors and the scan goes on.
      *
@@ -102,7 +107,7 @@ final class Scanner
         // property and parameter types before the traverser reaches them.
         (new NodeTraverser(new NameResolver))->traverse($ast);
 
-        $visitor = new CacheCallVisitor($file);
+        $visitor = new CacheCallVisitor($file, $this->wrappers);
         (new NodeTraverser($visitor))->traverse($ast);
 
         return $visitor->usages;

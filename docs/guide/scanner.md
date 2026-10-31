@@ -15,6 +15,7 @@ PhpStorm terminals open at the line on click.
 
 ```text
 17 usage points in 8 files. A usage point is a place in the source, not a runtime call count.
+Categories: 9 cache, 2 redis, 2 indirect, 4 wrapper
 Keys: 2 exact, 9 template, 1 opaque, 5 unresolved, 0 none
 Wrapper calls: 3 read, 1 write
 ```
@@ -45,9 +46,13 @@ under the table, and the calls in every other file are still reported.
 | Container | `app('cache')`, `resolve('cache.store')`, `$this->app['cache']` |
 | Direct Redis | `Redis::get(…)`, `Redis::connection()->del(…)` |
 | Wrapper | a call to a listed method of one of your [wrapper classes](#wrappers) |
+| Rate limiter | `RateLimiter::hit('login:'.$id)`, `RateLimiter::attempt(…)`, `\RateLimiter::clear(…)` |
+| Throttle middleware | a `'throttle:…'` string with no spaces, anywhere: `->middleware('throttle:60,1')`, `['auth', 'throttle:api']`, a middleware group in `app/Http/Kernel.php` |
 
 Each call is reported with its file, line, class and method, and:
 
+- **category**, which decides what [lint](#categories) does with it:
+  `cache`, `redis`, `indirect` or `wrapper`
 - **operation:** `read`, `write`, `remember` (a read, plus a write on a miss),
   `forget`, or `other` (locks, Redis data structures)
 - **key**, as one of:
@@ -79,6 +84,28 @@ How keys are read:
   closure only those in its `use (…)` list; a parameter of the same name
   hides the outer variable.
 
+## Categories
+
+| Category | Styles | What it is | Lint |
+| :--- | :--- | :--- | :--- |
+| `cache` | facade, helper, repository, container | the cache API, which the contract replaces | an error outside the allowed paths |
+| `redis` | redis | Redis used directly, often for data structures rather than a cache | off unless turned on |
+| `indirect` | rate-limiter, throttle | the framework keeping its own keys in the cache store | never |
+| `wrapper` | wrapper | a call to one of your wrapper classes | never: the cache call inside the wrapper is flagged |
+
+`cache-contract:lint` is not released yet; the last column is how it will
+treat each category. Indirect usage is listed so you can see how much of the
+store the framework uses, but there is nothing to move into a definition. A
+`throttle:` string is reported with the key kind `unresolved`, since the
+limiter builds its key at runtime from the route and the user or IP; a
+`RateLimiter::` call has its key read like any other. `RateLimiter::for()` and
+`RateLimiter::limiter()` are not listed: they define or look up a limiter and
+touch no cache key.
+
+Session, queue and other drivers that can be set to `cache` or `redis` are
+not reported: whether they touch the cache store depends on your
+configuration, not on the code.
+
 ## JSON
 
 ```json
@@ -89,6 +116,7 @@ How keys are read:
             "line": 11,
             "class": "App\\Billing\\Invoice",
             "function": "total",
+            "category": "cache",
             "style": "facade",
             "wrapper": null,
             "method": "remember",
@@ -162,8 +190,8 @@ feeds it. The `Cache::` calls inside the wrapper are still listed with their
 own keys.
 
 Nothing is detected automatically, since not every class named `*Cache*` is a
-wrapper. An unknown operation stops the command with an error before anything is
-scanned. Wrapper calls are listed for sizing a migration, not for fixing one by
+wrapper. An unknown operation stops the command with an `InvalidConfiguration`
+error. Wrapper calls are listed for sizing a migration, not for fixing one by
 one: moving the wrapper onto the contract moves every caller with it.
 
 ## Limits
@@ -185,5 +213,12 @@ one: moving the wrapper onto the contract moves every caller with it.
 - `exclude` matches paths from the project root: `vendor` skips only the root
   `vendor/`. A nested one, such as `packages/acme/vendor`, is still scanned
   unless it is listed.
-- Facade aliases other than `Cache` and `Redis` from `config/app.php` are not
-  recognised.
+- Facade aliases other than `Cache`, `Redis` and `RateLimiter` from
+  `config/app.php` are not recognised.
+- The rate limiter is found through its facade only. An injected
+  `Illuminate\Cache\RateLimiter`, `ThrottleRequests::using(…)`, `->throttleApi()`
+  in `bootstrap/app.php`, a bare `'throttle'` and a built string such as
+  `'throttle:'.$limit` are not found.
+- A cache key that is a literal starting with `throttle:`, such as
+  `Cache::get('throttle:login')`, is counted twice: as the cache call and as
+  throttle middleware.

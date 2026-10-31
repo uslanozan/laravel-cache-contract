@@ -72,7 +72,10 @@ model cache and the first commands.
   and exits non-zero when a path cannot be scanned. Calls to the methods of
   your own wrapper classes, declared in `scanner.wrappers`, are listed where
   they are made, with a summary line of their own. The table shows each
-  location as one clickable `path:line`.
+  location as one clickable `path:line`. Every usage has a category (`cache`,
+  `redis`, `indirect` or `wrapper`) in the table, the JSON and the summary;
+  `RateLimiter::` calls and `throttle:` middleware strings are found as
+  `indirect`.
 
 ### Requirements
 

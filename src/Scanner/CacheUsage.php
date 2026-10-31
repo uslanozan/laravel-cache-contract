@@ -11,6 +11,9 @@ namespace Uslanozan\CacheContract\Scanner;
  */
 final readonly class CacheUsage
 {
+    /** Taken from the style, so the two never disagree. */
+    public Category $category;
+
     /**
      * @param  string|null  $class  the class the call is in, null outside a class or in an anonymous one
      * @param  string|null  $function  the method or function the call is in; a closure reports the one around it
@@ -29,5 +32,7 @@ final readonly class CacheUsage
         public KeyKind $keyKind,
         public ?string $key,
         public ?string $wrapper = null,
-    ) {}
+    ) {
+        $this->category = $style->category();
+    }
 }

@@ -45,7 +45,7 @@ $profile = CacheContract::remember('user.profile', ['user_id' => 42], fn () => $
 
 - PHP 8.3.36+, 8.4.27+ or 8.5.12+ (earlier releases have a known zero-day)
 - Laravel 11.44.2+, 12.0.1+ or 13 (on PHP 8.5: Laravel 12.40+ or 13)
-- Redis (phpredis) as the cache store
+- Redis 6.2+ (phpredis) as the cache store
 
 > **Laravel 11 is end of life** and every 11.x release has known, unpatched
 > security advisories. The package supports it because existing projects still

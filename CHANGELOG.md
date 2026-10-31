@@ -29,9 +29,12 @@ model cache and the first commands.
 - **Generated keys** from one configurable format,
   `{prefix}:{section}:{name}:v{version}:{params}`, with sorted, encoded
   parameters and context values (`@tenant_id=7`).
-- **`CacheContract` facade:** `remember`, `get`, `has`, `put`, `refresh`,
-  `forget`, `key` and `withContext`. A cached `null`, `false`, `0` or `''` is
-  a hit, and values come back with their type.
+- **`CacheContract` facade:** `remember`, `get`, `has`, `put`, `add`,
+  `pull`, `refresh`, `forget`, `key` and `withContext`. A cached `null`,
+  `false`, `0` or `''` is a hit, and values come back with their type.
+  `add` writes only when nothing is cached, atomically on Redis; `pull`
+  gives the value only to the call that removes it, so of two concurrent
+  pulls one gets it (one `GETDEL` on Redis, which needs Redis 6.2+).
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
   is down.

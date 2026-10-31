@@ -305,6 +305,7 @@ fails CI on a direct `Cache::put` in app code.
 | [0009](adr/0009-invalidation-with-generation-counters.md) | Invalidation strategy: tags vs generation counters | 3 | accepted |
 | 0010 | Duplicate detection layers (registry, create-time, CI, scanner) | 4 | backlog |
 | [0011](adr/0011-scanner-scope-and-limits.md) | Scanner scope and limits | 5 | accepted |
+| [0012](adr/0012-stampede-and-stale-writes.md) | Stale writes after a forget, and stampede locks | 3 | accepted |
 
 ## 8. GitHub setup checklist (one-time)
 

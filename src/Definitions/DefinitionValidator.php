@@ -36,15 +36,18 @@ final class DefinitionValidator
 
     /**
      * @param  mixed  $definitions  the value of config('cache-contract.definitions')
-     * @param  mixed  $tags  the value of config('cache-contract.tags'): tag name => description
+     * @param  mixed  $tags  the value of config('cache-contract.tags'): tag name => description;
+     *                       required, so a caller cannot leave it out and get every tag reported
      * @return list<ValidationError>
      */
-    public function validate(mixed $definitions, mixed $tags = []): array
+    public function validate(mixed $definitions, mixed $tags): array
     {
         $errors = $this->validateTags($tags);
-        // Every name in "tags" counts as declared, so a tag with a bad description
-        // is reported once, not again on every definition that uses it.
-        $declared = is_array($tags) ? array_map(strval(...), array_keys($tags)) : [];
+        // Every name in "tags" counts as declared, so a tag with a bad description is
+        // reported once, not again on every definition that uses it. A "tags" section
+        // of the wrong shape declares nothing usable: the definitions are not checked
+        // against it, since those errors would point the wrong way.
+        $declared = $this->isTagMap($tags) ? array_map(strval(...), array_keys($tags)) : null;
 
         if (! is_array($definitions)) {
             return [...$errors, new ValidationError(null, '"definitions" must be an array of sections')];
@@ -119,7 +122,7 @@ final class DefinitionValidator
      */
     public function validateTags(mixed $tags): array
     {
-        if (! is_array($tags) || ($tags !== [] && array_is_list($tags))) {
+        if (! $this->isTagMap($tags)) {
             return [new ValidationError(null, '"tags" must map each tag name to a description, e.g. \'users\' => \'Data shown about users.\'')];
         }
 
@@ -171,10 +174,10 @@ final class DefinitionValidator
 
     /**
      * @param  array<mixed>  $definition
-     * @param  list<string>  $tags  the declared tag names
+     * @param  list<string>|null  $tags  the declared tag names; null when the "tags" section is not usable
      * @return list<ValidationError>
      */
-    private function validateDefinition(string $id, array $definition, array $tags): array
+    private function validateDefinition(string $id, array $definition, ?array $tags): array
     {
         $errors = [];
         $known = [...self::REQUIRED_FIELDS, ...self::OPTIONAL_FIELDS];
@@ -229,7 +232,7 @@ final class DefinitionValidator
         if (array_key_exists('tags', $definition)) {
             if (! $this->isListOf($definition['tags'], fn (mixed $tag): bool => is_string($tag) && $tag !== '')) {
                 $errors[] = new ValidationError($id, '"tags" must be a list of non-empty strings');
-            } else {
+            } elseif ($tags !== null) {
                 /** @var list<string> $used */
                 $used = $definition['tags'];
 
@@ -282,6 +285,14 @@ final class DefinitionValidator
     private function isSnakeCase(string $value): bool
     {
         return preg_match(self::NAME_PATTERN, $value) === 1;
+    }
+
+    /**
+     * @phpstan-assert-if-true array<array-key, mixed> $tags
+     */
+    private function isTagMap(mixed $tags): bool
+    {
+        return is_array($tags) && ($tags === [] || ! array_is_list($tags));
     }
 
     private function isPositiveInt(mixed $value): bool

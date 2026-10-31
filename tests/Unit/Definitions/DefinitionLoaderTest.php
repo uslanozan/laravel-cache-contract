@@ -31,7 +31,7 @@ it('builds definitions with enums and defaults', function () {
         'external' => [
             'exchange_rates' => ['purpose' => 'exchange_rates', 'type' => 'array', 'ttl' => '10 minutes', 'description' => 'Rates.'],
         ],
-    ]);
+    ], []);
 
     expect($definitions)->toHaveCount(2)
         ->and($definitions[1]->ttl)->toBe(600);
@@ -56,7 +56,7 @@ it('builds definitions with enums and defaults', function () {
 it('throws one exception listing every problem', function () {
     $load = fn () => $this->loader->load(['user' => [
         'active_list' => ['purpose' => 'active_list', 'type' => 'collection', 'ttll' => 300, 'description' => 'x'],
-    ]]);
+    ]], []);
 
     expect($load)->toThrow(function (InvalidDefinitions $e) {
         expect($e)->toBeInstanceOf(CacheContractException::class)

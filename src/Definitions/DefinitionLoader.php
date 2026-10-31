@@ -17,12 +17,12 @@ final class DefinitionLoader
 
     /**
      * @param  mixed  $definitions  the value of config('cache-contract.definitions')
-     * @param  mixed  $tags  the value of config('cache-contract.tags')
+     * @param  mixed  $tags  the value of config('cache-contract.tags'); required, as for the validator
      * @return list<Definition> in config order
      *
      * @throws InvalidDefinitions listing every problem when the config breaks a rule
      */
-    public function load(mixed $definitions, mixed $tags = []): array
+    public function load(mixed $definitions, mixed $tags): array
     {
         $errors = $this->validator->validate($definitions, $tags);
 

@@ -161,6 +161,15 @@ describe('tags', function () {
         'description not a string' => [['users' => ['x']], ['tags.users: a tag needs a non-empty description of what it groups']],
     ]);
 
+    it('reports only the shape of a broken "tags" section, not every tag a definition uses', function (mixed $tags) {
+        expect(errorsFor(['user' => ['active_list' => validDefinition()]], $tags))->toBe([
+            '"tags" must map each tag name to a description, e.g. \'users\' => \'Data shown about users.\'',
+        ]);
+    })->with([
+        'a list of names' => [['users']],
+        'not an array' => ['users'],
+    ]);
+
     it('reports a tag with a bad description once, not again on the definitions that use it', function () {
         expect(errorsFor(['user' => ['active_list' => validDefinition()]], ['users' => ' ']))->toBe([
             'tags.users: a tag needs a non-empty description of what it groups',

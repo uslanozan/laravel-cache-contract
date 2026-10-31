@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Uslanozan\CacheContract\Commands;
 
 use Illuminate\Console\Command;
+use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
@@ -13,6 +14,7 @@ use Uslanozan\CacheContract\Definitions\Ttl;
 use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\KeyFormat;
+use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Similarity\NameSimilarity;
 
 /**
@@ -20,6 +22,13 @@ use Uslanozan\CacheContract\Similarity\NameSimilarity;
  *
  *     php artisan cache-contract:inspect user.profile
  *     php artisan cache-contract:inspect user.profile --param=user_id=42 --context=locale=tr
+ *     php artisan cache-contract:inspect user.profile --param=user_id=42 --generation=users=8123
+ *     php artisan cache-contract:inspect user.profile --param=user_id=42 --live
+ *
+ * A definition with tags or invalidated_by ends its key with "~g" and the
+ * values of its generation counters (ADR 0009). The command connects to Redis
+ * only with --live, and then only reads: a missing counter is reported, not
+ * created.
  *
  * Secret parameters are never taken from --param (shell history, ps, CI
  * logs): the command asks for them without echoing, and only the hash is
@@ -37,7 +46,9 @@ final class InspectCommand extends Command
     protected $signature = 'cache-contract:inspect
         {id : The definition ID, e.g. user.profile}
         {--param=* : A parameter value as name=value; arrays as JSON, e.g. ids=[1,2]}
-        {--context=* : A context value as name=value, e.g. locale=tr}';
+        {--context=* : A context value as name=value, e.g. locale=tr}
+        {--generation=* : A generation counter value as name=value, e.g. users=8123}
+        {--live : Read the generation counters from Redis (read only)}';
 
     protected $description = 'Show a cache definition and the key it generates';
 
@@ -45,6 +56,11 @@ final class InspectCommand extends Command
     {
         try {
             $id = $this->definitionId();
+
+            // Checked first, before any prompt for a secret or the hint to pass --param.
+            if ($this->option('generation') !== [] && $this->option('live')) {
+                throw InvalidParameters::forDefinition($id, 'pass either --generation or --live, not both');
+            }
 
             if (! $registry->has($id)) {
                 $this->components->error(sprintf('Unknown cache definition "%s".', $id));
@@ -90,12 +106,22 @@ final class InspectCommand extends Command
                 }
             }
 
-            $key = $keys->make($definition, $this->convert($definition, $params), $context);
-            $this->components->twoColumnDetail('Key', $key);
+            $params = $this->convert($definition, $params);
+            $generations = $this->generations($definition);
 
-            // The command never connects to Redis, so it cannot show the generations (ADR 0009).
-            if ($definition->generationCounters() !== []) {
-                $this->components->info('At runtime the key also ends with "~g" and the current value of each counter, read from Redis.');
+            // false: Redis could not be read; null: a counter does not exist yet. Both are printed.
+            if ($generations === false) {
+                return self::FAILURE;
+            }
+
+            if ($generations === null) {
+                return self::SUCCESS;
+            }
+
+            $this->components->twoColumnDetail('Key', $keys->make($definition, $params, $context, $generations));
+
+            if ($definition->generationCounters() !== [] && $generations === []) {
+                $this->components->info('At runtime the key also ends with "~g" and the value of each counter. Pass --generation=name=value for every counter, or --live to read them from Redis.');
             }
 
             return self::SUCCESS;
@@ -146,7 +172,71 @@ final class InspectCommand extends Command
             $params,
         );
 
+        // Counter values in name order, as the key factory writes them: ~g{admin}.{users}.
+        if (($counters = $definition->generationCounters()) !== []) {
+            $segments[] = '~g{'.implode('}.{', $counters).'}';
+        }
+
         return $segments === [] ? '-' : implode(':', $segments);
+    }
+
+    /**
+     * The generations for the key: from --generation, from Redis with --live,
+     * or none. With --live, false when Redis could not be read and null when a
+     * counter does not exist yet; the reason is printed.
+     *
+     * @return array<string, int>|false|null
+     *
+     * @throws InvalidParameters
+     */
+    private function generations(Definition $definition): array|false|null
+    {
+        if (! $this->option('live')) {
+            $generations = [];
+
+            foreach ($this->pairs('generation') as $name => $value) {
+                // Not a cast: (int) would turn a value beyond PHP_INT_MAX into PHP_INT_MAX without a word.
+                $generation = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+
+                if ($generation === false) {
+                    throw InvalidParameters::forDefinition($definition->id, sprintf('generation "%s" must be a non-negative int, "%s" given', $name, $value));
+                }
+
+                $generations[$name] = $generation;
+            }
+
+            return $generations;
+        }
+
+        $counters = $definition->generationCounters();
+
+        if ($counters === []) {
+            return [];
+        }
+
+        try {
+            $values = $this->laravel->make(GenerationCounters::class)->peek($counters);
+        } catch (CacheContractException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            $this->components->error('Could not read the generation counters from Redis: '.$e->getMessage());
+
+            return false;
+        }
+
+        $missing = array_keys(array_filter($values, fn (?int $value): bool => $value === null));
+
+        if ($missing !== []) {
+            $this->components->info(sprintf(
+                'Not in Redis yet: %s. The next cache call creates it with a new value, so no entry of this definition is cached right now.',
+                implode(', ', $missing),
+            ));
+
+            return null;
+        }
+
+        /** @var array<string, int> $values */
+        return $values;
     }
 
     /**

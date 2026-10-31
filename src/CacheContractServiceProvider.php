@@ -14,6 +14,7 @@ use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Contracts\SimilarityEngine;
 use Uslanozan\CacheContract\Definitions\ConfigDefinitionRegistry;
+use Uslanozan\CacheContract\Definitions\TagRegistry;
 use Uslanozan\CacheContract\Eloquent\ModelCacheConfig;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Invalidation\InvalidatedBy;
@@ -41,8 +42,9 @@ class CacheContractServiceProvider extends ServiceProvider
         // the application does not define fall back to the package defaults.
         $this->mergeConfigFrom(__DIR__.'/../config/cache-contract.php', 'cache-contract');
 
-        // Definitions are the same for every request: safe to share.
+        // Definitions and tags are the same for every request: safe to share.
         $this->app->singleton(DefinitionRegistry::class, ConfigDefinitionRegistry::class);
+        $this->app->singleton(TagRegistry::class);
 
         // The key format is read from config once; an invalid format fails on
         // first use with InvalidKeyFormat.
@@ -83,6 +85,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $app->make(KeyFactory::class),
             $app->make(RedisErrorPolicy::class),
             $app->make(GenerationCounters::class),
+            $app->make(TagRegistry::class),
             $this->store($app),
         ));
 

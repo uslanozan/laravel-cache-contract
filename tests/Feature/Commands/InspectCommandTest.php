@@ -7,6 +7,11 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\User;
 
 beforeEach(function () {
+    config()->set('cache-contract.tags', [
+        'users' => 'Data shown about users.',
+        'flags' => 'Feature flags.',
+        'sessions' => 'API sessions.',
+    ]);
     config()->set('cache-contract.definitions', [
         'user' => [
             'profile' => [

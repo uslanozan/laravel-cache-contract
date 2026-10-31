@@ -23,6 +23,7 @@ use Uslanozan\CacheContract\Runtime\CacheContractManager;
  * @method static mixed remember(string $id, array<string, mixed> $params, \Closure $loader)
  * @method static mixed refresh(string $id, array<string, mixed> $params, \Closure $loader)
  * @method static bool forget(string $id, array<string, mixed> $params = [])
+ * @method static bool flushTag(string $tag)
  *
  * @see CacheContractManager
  */

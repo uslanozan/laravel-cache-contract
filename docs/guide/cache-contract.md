@@ -28,6 +28,7 @@ typed parameter throws `InvalidParameters`, before Redis is touched. See
 | `refresh($id, $params, $loader)` | the value | Runs `$loader` and caches its result, even when a value is cached. |
 | `forget($id, $params = [])` | `bool` | Removes the entry; `false` if there was nothing to remove or Redis could not be reached. |
 | `key($id, $params = [])` | `string` | The key the other methods would use. For a definition with `tags` or `invalidated_by` it reads the generation counters from Redis, and a Redis error is thrown. |
+| `flushTag($tag)` | `bool` | Invalidates every entry of every definition with this [tag](definitions.md#tags), for every parameter and context; `false` if Redis could not be reached. |
 | `withContext($context)` | a new instance | Adds context values to every key (see below). |
 
 ```php
@@ -165,6 +166,7 @@ This is set per operation with `redis_errors`; see
 | Exception | When |
 | :--- | :--- |
 | `UnknownDefinition` | The ID is not in `config/cache-contract.php`. |
+| `UnknownTag` | `flushTag()` got a tag that is not declared under `tags`. |
 | `InvalidParameters` | A parameter is missing, unexpected or of the wrong type, or a context value is invalid. |
 | `InvalidDefinitions` | The config has errors; thrown on the first call, with every problem listed. |
 | `InvalidConfiguration` | A setting such as `redis_errors` has an invalid value. |

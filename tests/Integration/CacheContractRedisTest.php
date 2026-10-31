@@ -6,6 +6,7 @@ use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\CacheContract;
+use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
  * The facade against real Redis (phpredis). The `array` store keeps integers
@@ -78,6 +79,97 @@ it('forgets an entry', function () {
     expect(CacheContract::forget('user.profile', ['user_id' => 1]))->toBeTrue()
         ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse()
         ->and(CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'Barış']))->toBe(['name' => 'Barış']);
+});
+
+/**
+ * Puts a list under the definition's key, so Redis rejects GETDEL on it.
+ *
+ * @param  array<string, mixed>  $params
+ */
+function rejectGetdel(string $id, array $params): void
+{
+    /** @var RedisStore $store */
+    $store = Cache::store('contract')->getStore();
+    $store->connection()->rpush($store->getPrefix().CacheContract::key($id, $params), 'not a cache entry');
+}
+
+describe('add and pull', function () {
+    it('adds in one command, with the TTL of the definition', function () {
+        /** @var RedisStore $store */
+        $store = Cache::store('contract')->getStore();
+        $results = [];
+
+        // One command (Laravel's SET NX EX script): nothing can run between the check and the write.
+        $commands = RedisCommandCounter::count($store->connection(), function () use (&$results) {
+            $results[] = CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'a']);
+        });
+
+        $results[] = CacheContract::add('user.profile', ['user_id' => 1], ['lock' => 'b']);
+        $ttl = $store->connection()->ttl($store->getPrefix().CacheContract::key('user.profile', ['user_id' => 1]));
+
+        expect($commands)->toBe(['eval' => 1])
+            ->and($results)->toBe([true, false])
+            ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['lock' => 'a'])
+            ->and($ttl)->toBeGreaterThan(290)->toBeLessThanOrEqual(300);
+    });
+
+    it('reads and removes in one command, so nothing can change the entry in between', function () {
+        /** @var RedisStore $store */
+        $store = Cache::store('contract')->getStore();
+        CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
+        $pulled = null;
+
+        $commands = RedisCommandCounter::count($store->connection(), function () use (&$pulled) {
+            $pulled = CacheContract::pull('user.profile', ['user_id' => 1], 'taken');
+        });
+
+        expect($commands)->toBe(['getdel' => 1])
+            ->and($pulled)->toBe(['token' => 'abc'])
+            ->and(CacheContract::pull('user.profile', ['user_id' => 1], 'taken'))->toBe('taken')
+            ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
+    });
+
+    it('decodes a pulled value like a read, also with a phpredis serializer', function (array $values) {
+        config()->set('database.redis.contract.options', ['serializer' => Redis::SERIALIZER_PHP]);
+        app('redis')->purge('contract');
+        Cache::forgetDriver('contract');
+
+        foreach ($values as $i => $value) {
+            CacheContract::put('user.profile', ['user_id' => $i], $value);
+        }
+
+        expect(array_map(fn (int $i): mixed => CacheContract::pull('user.profile', ['user_id' => $i], 'missing'), array_keys($values)))
+            ->toBe($values);
+    })->with([
+        'mixed values' => [[['token' => 'abc'], 0, null, false, '', 7, 1.5]],
+    ]);
+
+    // phpredis answers a command Redis rejects with false, as for a missing key.
+    // GETDEL on Redis before 6.2 is rejected like GETDEL on a list is here.
+    it('reports a command Redis rejects instead of taking it for a miss', function () {
+        rejectGetdel('user.profile', ['user_id' => 1]);
+        Exceptions::fake();
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default');
+        Exceptions::assertReported(fn (RedisException $e): bool => str_starts_with($e->getMessage(), 'WRONGTYPE'));
+    });
+
+    it('throws a command Redis rejects when the policy says so', function () {
+        config()->set('cache-contract.redis_errors.read', 'throw');
+        rejectGetdel('user.profile', ['user_id' => 1]);
+
+        expect(fn () => CacheContract::pull('user.profile', ['user_id' => 1]))->toThrow(RedisException::class, 'WRONGTYPE');
+    });
+
+    it('returns the default when Redis is unreachable', function () {
+        config()->set('cache-contract.store', 'unreachable');
+        Exceptions::fake();
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default')
+            ->and(CacheContract::add('user.profile', ['user_id' => 1], 'x'))->toBeFalse();
+
+        Exceptions::assertReported(RedisException::class);
+    });
 });
 
 it('keeps tenants apart in Redis', function () {

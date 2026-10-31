@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Cache\Repository;
+use Illuminate\Events\Dispatcher;
 use Illuminate\Redis\RedisManager;
 
 /*
@@ -156,5 +158,27 @@ describe('unreachable Redis', function () {
             return 1;
         }))->toThrow(RedisException::class)
             ->and($ran)->toBeFalse();
+    });
+});
+
+describe('pull', function () {
+    // CacheContract::pull() reads and deletes in one GETDEL because of this (LRVL-63).
+    // If this test fails, Laravel's pull() became atomic.
+    it('reads and deletes in two steps, so two interleaved pulls both get the value', function () {
+        $cache = semanticsCache();
+        $cache->setEventDispatcher(new Dispatcher);
+        $key = semanticsKey();
+        $cache->put($key, 'abc', 60);
+        $other = null;
+
+        // Request B pulls the same key right after request A has read it.
+        $cache->getEventDispatcher()->listen(CacheHit::class, function () use (&$other, $cache, $key) {
+            if ($other === null) {
+                $other = 'running';
+                $other = $cache->pull($key);
+            }
+        });
+
+        expect([$cache->pull($key), $other])->toBe(['abc', 'abc']);
     });
 });

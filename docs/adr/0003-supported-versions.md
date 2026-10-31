@@ -126,3 +126,17 @@ that is still vulnerable.
 The Laravel constraints and the "minus Laravel 11 on PHP 8.5" rule do not
 change. Company projects on PHP 8.3 have to be on 8.3.36 or later to install
 the package.
+
+## Update 2026-10-31: Redis 6.2 floor
+
+`CacheContract::pull()` reads and removes an entry with one `GETDEL`, so two
+concurrent pulls can never both get the value (LRVL-63). `GETDEL` was added
+in **Redis 6.2** (2021).
+
+**Decision:** the package requires Redis 6.2 or later. CI and local
+development stay on Redis 7.x. On an older Redis, phpredis answers `GETDEL`
+with `false`, like a missing key; the package checks phpredis' last error and
+throws it as a `RedisException`, so `pull()` follows the `read` policy and
+the problem is reported instead of passing silently. The open question above
+about the Redis version in company production now has a floor to check
+against.

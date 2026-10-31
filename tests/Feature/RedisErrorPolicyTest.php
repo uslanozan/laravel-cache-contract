@@ -62,6 +62,54 @@ describe('report (default)', function () {
     });
 });
 
+describe('add and pull', function () {
+    it('checks the parameters before touching the store', function (Closure $call) {
+        expect($call)->toThrow(InvalidParameters::class)
+            ->and($this->store->calls)->toBe([]);
+    })->with([
+        'add' => [fn () => CacheContract::add('external.exchange_rates', ['region' => 'eu'], 'x')],
+        'pull' => [fn () => CacheContract::pull('external.exchange_rates', ['region' => 'eu'])],
+    ]);
+
+    it('treats a failed add as not written', function () {
+        // The array store has no atomic add, so Laravel reads, then writes.
+        $this->store->fail('put');
+
+        expect(CacheContract::add('external.exchange_rates', [], ['usd' => 1]))->toBeFalse();
+        Exceptions::assertReported(RedisException::class);
+    });
+
+    it('treats a failed read in pull as a miss', function () {
+        $this->store->fail('get');
+
+        expect(CacheContract::pull('external.exchange_rates', [], 'default'))->toBe('default');
+        Exceptions::assertReported(RedisException::class);
+    });
+
+    it('does not hand out a value it could not remove', function () {
+        CacheContract::put('external.exchange_rates', [], ['usd' => 1]);
+        $this->store->fail('forget');
+
+        expect(CacheContract::pull('external.exchange_rates', [], 'default'))->toBe('default');
+        Exceptions::assertReported(RedisException::class);
+    });
+
+    it('rethrows a failed add when write is set to throw', function () {
+        redisErrors(['read' => 'report', 'write' => 'throw', 'invalidate' => 'report']);
+        $this->store->fail('put');
+
+        expect(fn () => CacheContract::add('external.exchange_rates', [], ['usd' => 1]))->toThrow(RedisException::class);
+    });
+
+    it('rethrows a failed delete in pull when invalidate is set to throw', function () {
+        redisErrors(['read' => 'report', 'write' => 'report', 'invalidate' => 'throw']);
+        CacheContract::put('external.exchange_rates', [], ['usd' => 1]);
+        $this->store->fail('forget');
+
+        expect(fn () => CacheContract::pull('external.exchange_rates'))->toThrow(RedisException::class);
+    });
+});
+
 describe('throw', function () {
     it('rethrows for the operations set to throw', function (string $method, Closure $call) {
         redisErrors(['read' => 'throw', 'write' => 'throw', 'invalidate' => 'throw']);

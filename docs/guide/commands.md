@@ -70,17 +70,49 @@ php artisan cache-contract:inspect user.profile --param=user_id=42 --context=loc
 | :--- | :--- |
 | `--param=name=value` | A parameter value; repeat it for each parameter. Arrays as JSON: `--param=ids=[1,2]`. |
 | `--context=name=value` | A context value, e.g. `--context=tenant_id=7`; repeatable. |
+| `--generation=name=value` | A generation counter value, e.g. `--generation=users=8123`; repeat it for each counter. |
+| `--live` | Read the generation counters from Redis. It only reads: nothing is written. |
 
 Terminal input is always text, so `inspect` converts `--param` values to the
 declared type (`42` for an `int` parameter). Application code gets no such
 conversion; see [strict parameters](definitions.md#parameters).
 
+### Generation counters
+
 `Counters` lists the definition's generation counters: one per tag, and
-`def:<id>` for a definition with `invalidated_by`. `inspect` does not connect
-to Redis, so for such a definition the key it prints leaves out the last
-segment, `~g` followed by the counters' current values (see
-[invalidated_by](definitions.md#invalidated_by)).
-`CacheContract::key()` in `php artisan tinker` shows the full key.
+`def:<id>` for a definition with `invalidated_by`. Their values end the key,
+after `~g`, so a change can invalidate every entry at once (see
+[invalidated_by](definitions.md#invalidated_by)). The key pattern shows them as
+placeholders, in name order: `~g{admin}.{users}`.
+
+By default `inspect` does not connect to Redis, so for such a definition it
+prints the key without that last segment:
+
+```
+  Counters ............................................ def:member.active_list
+  Key pattern  cc:member:active_list:v1:organization_id={int}:~g{def:member.active_list}
+  Key ............................. cc:member:active_list:v1:organization_id=1
+
+   INFO  At runtime the key also ends with "~g" and the value of each counter. Pass --generation=name=value for every counter, or --live to read them from Redis.
+```
+
+Give the counter values yourself to build the full key:
+
+```bash
+php artisan cache-contract:inspect member.active_list --param=organization_id=1 --generation=def:member.active_list=8123
+```
+
+```
+  Key ...................... cc:member:active_list:v1:organization_id=1:~g8123
+```
+
+Or pass `--live` to read the current values from Redis and see the key the
+application uses right now, the one to look for with `redis-cli`. `--live`
+only reads. A counter that does not exist yet is reported and not created:
+the next cache call creates it, so no entry of the definition is cached at
+that moment. When Redis cannot be reached, `inspect` prints one error line
+and exits with a non-zero code. `--generation` and `--live` cannot be used
+together.
 
 A secret parameter is never accepted with `--param`: `inspect` asks for it
 without showing what you type, and prints only its hash. See

@@ -18,6 +18,8 @@ use Uslanozan\CacheContract\Runtime\CacheContractManager;
  * @method static mixed get(string $id, array<string, mixed> $params = [], mixed $default = null)
  * @method static bool has(string $id, array<string, mixed> $params = [])
  * @method static bool put(string $id, array<string, mixed> $params, mixed $value)
+ * @method static bool add(string $id, array<string, mixed> $params, mixed $value)
+ * @method static mixed pull(string $id, array<string, mixed> $params = [], mixed $default = null)
  * @method static mixed remember(string $id, array<string, mixed> $params, \Closure $loader)
  * @method static mixed refresh(string $id, array<string, mixed> $params, \Closure $loader)
  * @method static bool forget(string $id, array<string, mixed> $params = [])

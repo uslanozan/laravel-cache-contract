@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
 use Uslanozan\CacheContract\Facades\CacheContract;
@@ -56,6 +58,63 @@ it('puts, reads and forgets a value', function () {
         ->and(CacheContract::get('user.profile', ['user_id' => 2]))->toBeNull()
         ->and(CacheContract::forget('user.profile', ['user_id' => 1]))->toBeTrue()
         ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
+});
+
+describe('add', function () {
+    it('writes only when nothing is cached yet', function () {
+        expect(CacheContract::add('user.profile', ['user_id' => 1], ['name' => 'first']))->toBeTrue()
+            ->and(CacheContract::add('user.profile', ['user_id' => 1], ['name' => 'second']))->toBeFalse()
+            ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['name' => 'first']);
+    });
+
+    it('counts a cached null as cached', function () {
+        CacheContract::put('user.profile', ['user_id' => 1], null);
+
+        expect(CacheContract::add('user.profile', ['user_id' => 1], ['name' => 'late']))->toBeFalse()
+            ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeTrue()
+            ->and(CacheContract::get('user.profile', ['user_id' => 1], 'default'))->toBeNull();
+    });
+
+    it('writes for the TTL of the definition', function () {
+        CacheContract::add('user.active_list', ['role' => 'admin'], ['ada']);
+
+        $this->travel(61)->seconds();
+
+        expect(CacheContract::has('user.active_list', ['role' => 'admin']))->toBeFalse()
+            ->and(CacheContract::add('user.active_list', ['role' => 'admin'], ['grace']))->toBeTrue();
+    });
+});
+
+describe('pull', function () {
+    it('returns the cached value and removes it', function () {
+        CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1]))->toBe(['token' => 'abc'])
+            ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse()
+            ->and(CacheContract::pull('user.profile', ['user_id' => 1], 'used'))->toBe('used');
+    });
+
+    it('returns the default on a miss, also from a closure', function () {
+        expect(CacheContract::pull('external.exchange_rates', [], 'none'))->toBe('none')
+            ->and(CacheContract::pull('external.exchange_rates', [], fn () => 'computed'))->toBe('computed');
+    });
+
+    it('returns a cached null as null and removes it', function () {
+        CacheContract::put('user.profile', ['user_id' => 1], null);
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBeNull()
+            ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
+    });
+
+    // Stores without GETDEL; on Redis the read and the delete are one command.
+    it('gives the value only to the call that removes it on other stores', function () {
+        CacheContract::put('user.profile', ['user_id' => 1], ['token' => 'abc']);
+
+        // Another request removes the entry between this pull's read and its delete.
+        Event::listen(CacheHit::class, fn () => Cache::forget(CacheContract::key('user.profile', ['user_id' => 1])));
+
+        expect(CacheContract::pull('user.profile', ['user_id' => 1], 'taken'))->toBe('taken');
+    });
 });
 
 it('returns the default on a miss, also from a closure', function () {

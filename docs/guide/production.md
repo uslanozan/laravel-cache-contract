@@ -17,9 +17,9 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 
 | Operation | With `report` | With `throw` |
 | :--- | :--- | :--- |
-| `read`: `get`, `has`, `remember`, model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` returns the default, the model cache loads from the database. Nothing is written while Redis is down. | The `RedisException` is thrown. |
-| `write`: `put`, `remember`, `refresh`, model cache writes | The value is returned but not cached; `put()` returns `false`, and the model cache returns the loaded models without caching them. | Thrown. |
-| `invalidate`: `forget`, `flushTag`, model `forgetCache` and `flushCache`, and the clearing after a model change, `invalidated_by` included | `false` is returned; the old entry stays until its TTL ends. | Thrown. |
+| `read`: `get`, `has`, `remember`, `pull` (on Redis, its single read-and-remove command), model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` and `pull()` return the default, the model cache loads from the database. Nothing is written while Redis is down. | The `RedisException` is thrown. |
+| `write`: `put`, `add` (on stores without a native `add`, also the read it does first), `remember`, `refresh`, model cache writes | The value is returned but not cached; `put()` and `add()` return `false`, and the model cache returns the loaded models without caching them. | Thrown. |
+| `invalidate`: `forget`, `flushTag`, the delete in `pull` on stores other than Redis, model `forgetCache` and `flushCache`, and the clearing after a model change, `invalidated_by` included | `false` is returned and the old entry stays until its TTL ends; `pull()` returns the default instead of a value it could not remove. | Thrown. |
 
 - Only Redis connection errors follow this setting. Any other exception, such
   as one thrown by your loader, always propagates.

@@ -23,6 +23,8 @@ typed parameter throws `InvalidParameters`, before Redis is touched. See
 | `get($id, $params = [], $default = null)` | the value or `$default` | The cached value, or `$default` (a value or a closure) on a miss. |
 | `has($id, $params = [])` | `bool` | Whether a value is cached. |
 | `put($id, $params, $value)` | `bool` | Caches the value for the definition's TTL; `false` if it could not be written. |
+| `add($id, $params, $value)` | `bool` | Caches the value only when nothing is cached yet; `true` when this call wrote it. Atomic on Redis. |
+| `pull($id, $params = [], $default = null)` | the value or `$default` | The cached value, removed in the same call; `$default` on a miss. On Redis, of two concurrent calls only one gets the value. |
 | `refresh($id, $params, $loader)` | the value | Runs `$loader` and caches its result, even when a value is cached. |
 | `forget($id, $params = [])` | `bool` | Removes the entry; `false` if there was nothing to remove or Redis could not be reached. |
 | `key($id, $params = [])` | `string` | The key the other methods would use. For a definition with `tags` or `invalidated_by` it reads the generation counters from Redis, and a Redis error is thrown. |
@@ -41,6 +43,48 @@ CacheContract::forget('user.profile', ['user_id' => 42]);
 CacheContract::key('user.profile', ['user_id' => 42]);
 // "cc:user:profile:v1:user_id=42"
 ```
+
+### `add` and `pull`
+
+`add()` writes only when the entry does not exist, which makes it a simple
+"run once" guard:
+
+```php
+if (CacheContract::add('report.export_lock', ['report_id' => 9], true)) {
+    // only one worker gets here until the entry expires (the definition's TTL)
+}
+```
+
+On Redis it is a single atomic command, so of two concurrent calls exactly
+one returns `true`. A cached `null` counts as cached.
+
+Use a definition **without** `tags` or `invalidated_by` for such a guard. With
+them, the generation counters are read before the write, and a change in
+between gives two workers different keys, so both can get `true`. A guard
+that a model change resets is rarely what you want anyway.
+
+`pull()` returns the entry and removes it, for values that may be used only
+once, such as a login code:
+
+```php
+$code = CacheContract::pull('auth.login_code', ['user_id' => 42]);
+```
+
+On Redis, reading and removing are one command (`GETDEL`, Redis 6.2+). If two
+requests pull the same code at the same moment, one gets it and the other gets
+the default, and a new code written in between is never removed by mistake.
+Laravel's own `Cache::pull()` reads and deletes in two steps, so both requests
+would get the code. If Redis cannot be reached, `pull()` returns the default.
+
+Because `GETDEL` goes to the Redis connection directly, `pull()` on Redis
+fires none of Laravel's cache events (`CacheHit`, `CacheMissed`,
+`KeyForgotten`), so tools that listen to them, such as Telescope or Pulse,
+do not see it. The other methods, and `pull()` on other stores, fire them as
+usual.
+
+On other stores (`array`, `database`, `file`…) `pull()` reads, then deletes,
+and hands out the value only when its delete removed an entry. That is not
+atomic: use Redis when a value must be used once.
 
 A definition with [`invalidated_by`](definitions.md#invalidated_by) or
 `tags` has keys that end with the current value of its generation counters,

@@ -70,6 +70,31 @@ final readonly class GenerationCounters
     }
 
     /**
+     * The current value of each counter, without creating the missing ones:
+     * null for a counter that does not exist (or holds no counter). Writes
+     * nothing, and every error propagates. For tools that only look, such as
+     * cache-contract:inspect --live.
+     *
+     * @param  list<string>  $names
+     * @return array<string, int|null>
+     */
+    public function peek(array $names): array
+    {
+        if ($names === []) {
+            return [];
+        }
+
+        $entries = $this->repository()->many(array_map($this->key(...), $names));
+        $values = [];
+
+        foreach ($names as $name) {
+            $values[$name] = $this->valueOf($entries[$this->key($name)] ?? null);
+        }
+
+        return $values;
+    }
+
+    /**
      * Gives each counter a new random value, invalidating every entry that
      * depends on it. A failure follows the "invalidate" policy (ADR 0007).
      *

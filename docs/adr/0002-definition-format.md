@@ -154,3 +154,28 @@ passed as seconds) and many bare numbers.
   rejected. The loader turns every TTL into seconds, so `Definition::$ttl`
   stays an integer. `models.ttl` and the model overrides accept the same
   forms.
+
+## Update 2026-10-30: tags are declared under `tags` (LRVL-40)
+
+"Declared centrally" now has a shape: a `tags` section next to
+`definitions`, mapping each tag name to a description.
+
+```php
+'tags' => [
+    'users' => 'Data shown about users.',
+],
+```
+
+- **A description is required**, as for a definition: the list is where a
+  team reads what each tag groups before it flushes one.
+- **Names are snake_case.** A tag's name is also its generation counter's
+  name (ADR 0009), next to the package's `model:{connection}:{database}:{table}`
+  and `def:{id}` counters. snake_case has no `:`, so a tag can never take one
+  of those names; a name starting with `model:` or `def:` gets an error that
+  says so.
+- **A definition may only carry declared tags.** An undeclared one is a
+  definition error, reported with the others and with a suggestion for a
+  typo. `CacheContract::flushTag()` throws `UnknownTag` for an undeclared
+  tag, because a typo there would otherwise clear nothing, unnoticed.
+- The tag list is read by a plain `TagRegistry` class, not a contract: no
+  application needs to replace it, and `DefinitionRegistry` stays unchanged.

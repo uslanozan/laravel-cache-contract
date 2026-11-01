@@ -28,6 +28,7 @@ beforeEach(function () {
     config()->set('cache-contract.store', 'inspect_live');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.
     config()->set('cache-contract.prefix', 'cc_test_'.bin2hex(random_bytes(6)));
+    config()->set('cache-contract.tags', ['users' => 'Data shown about users.', 'admin' => 'Admin screens.']);
     config()->set('cache-contract.definitions', [
         'user' => [
             'profile' => [

@@ -96,7 +96,13 @@ final class ConfigDefinitionRegistry implements DefinitionRegistry
         if ($this->definitions === null) {
             $definitions = [];
 
-            foreach ($this->loader->load($this->config->get('cache-contract.definitions', [])) as $definition) {
+            // The tags are passed along so a definition with an undeclared tag fails here too.
+            $loaded = $this->loader->load(
+                $this->config->get('cache-contract.definitions', []),
+                $this->config->get('cache-contract.tags', []),
+            );
+
+            foreach ($loaded as $definition) {
                 $definitions[$definition->id] = $definition;
             }
 

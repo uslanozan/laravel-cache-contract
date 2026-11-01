@@ -14,7 +14,7 @@ reviewable contract, on top of Laravel's own cache and Redis.
 | **Model cache** | `ModelCache::for(User::class)->find(5)` and `findMany()` without per-model classes. Models with global scopes (e.g. a tenant) need the tenant in the context; see [Model cache](docs/guide/model-cache.md#tenants-and-global-scopes). | ✅ |
 | **Discovery** | `cache-contract:list` and `cache-contract:inspect`, with "did you mean" suggestions for a mistyped ID. | ✅ (warnings for similar definitions: planned) |
 | **Scanner** | `cache-contract:scan` lists every cache call in a codebase with its file, line and how much of its key can be read. | ✅ |
-| **Invalidation** | Models with `HasCache` clear their entries after a change is committed, and a definition's `invalidated_by` clears all its entries when a listed model changes, both with generation counters; see [Model cache](docs/guide/model-cache.md#automatic-invalidation) and [Definitions](docs/guide/definitions.md#invalidated_by). | ✅ (by tag: planned) |
+| **Invalidation** | Models with `HasCache` clear their entries after a change is committed, a definition's `invalidated_by` clears all its entries when a listed model changes, and `CacheContract::flushTag()` clears every definition with a tag, all with generation counters; see [Model cache](docs/guide/model-cache.md#automatic-invalidation) and [Definitions](docs/guide/definitions.md#invalidated_by). | ✅ |
 | **Enforcement** | Lint and PHPStan rules for CI. | 🗓️ planned |
 
 ## Quick example

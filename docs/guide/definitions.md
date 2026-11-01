@@ -38,7 +38,7 @@ The section `model` is reserved for the [model cache](model-cache.md).
 | `subject` | no | The Eloquent model the data is about, e.g. `App\Models\User::class`. |
 | `params` | no | The values that pick one entry out of many; see [Parameters](#parameters). |
 | `version` | no | A positive integer, default `1`; see [Versions](#versions). |
-| `tags` | no | A list of tag names. Each tag has a generation counter in the key; clearing by tag comes in a later release. |
+| `tags` | no | A list of tag names declared under `tags`; see [Tags](#tags). |
 | `invalidated_by` | no | A list of model classes whose changes clear every entry of this definition; see [invalidated_by](#invalidated_by). |
 
 Two definitions with the same `subject` and `purpose` are rejected: that is
@@ -111,10 +111,61 @@ the first cache call and in `cache-contract:list`. After changing
 `invalidated_by`, restart long-running workers (`php artisan octane:reload`,
 `queue:restart`), as for any other config change.
 
+## Tags
+
+A tag groups definitions that change together, so they can be invalidated
+at once. Declare every tag under `tags` in `config/cache-contract.php`, next
+to `definitions`, with a sentence on what it groups:
+
+```php
+'tags' => [
+    'users'   => 'Data shown about users.',
+    'billing' => 'Invoices and payments.',
+],
+
+'definitions' => [
+    'user' => [
+        'profile'  => [..., 'tags' => ['users']],
+        'invoices' => [..., 'tags' => ['users', 'billing']],
+    ],
+],
+```
+
+Then invalidate every entry of every definition with the tag:
+
+```php
+CacheContract::flushTag('users');   // user.profile and user.invoices, for every parameter and context
+```
+
+Use it after changes that fire no model events, such as a mass update
+(`User::query()->update([...])`) or an import, where
+[`invalidated_by`](#invalidated_by) cannot see the change.
+
+- **Declared once.** A definition with a tag that is not under `tags` fails
+  validation, with a suggestion for a typo (`"usres"` → `"users"`), and so
+  does `flushTag()` with an unknown tag (`UnknownTag`), instead of quietly
+  clearing nothing.
+- **Names are snake_case**, like sections. Names starting with `model:` or
+  `def:` are reserved for the package's own counters.
+- **Every entry with the tag.** An entry with several tags is invalidated
+  when any one of them is flushed. Tags are not per record: there is no
+  `user:5` tag; use [`invalidated_by`](#invalidated_by) or `forget()` for one
+  entry.
+- **One Redis write**, whatever the number of entries. Each tag has a
+  generation counter (ADR 0009) that is part of every key it carries;
+  `flushTag()` gives it a new value, so the old entries are never read again
+  and expire through their TTL. Reading a tagged entry costs one extra Redis
+  command for its counters.
+- `flushTag()` runs at once, even inside a transaction. Call it after the
+  commit, or the old data can be cached again before the change is visible.
+- A Redis error follows the `invalidate` setting of
+  [Redis errors](production.md#when-redis-is-down): with the default
+  `report`, `flushTag()` returns `false`.
+
 ## Validation
 
 The definitions are validated on the first cache call (and by the commands).
-Every problem is reported at once, with the definition it belongs to:
+Every problem is reported at once, with the definition or tag it belongs to:
 
 ```
 Uslanozan\CacheContract\Exceptions\InvalidDefinitions

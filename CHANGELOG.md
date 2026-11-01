@@ -53,6 +53,12 @@ model cache and the first commands.
   the model cache reads cached entries but writes none, so a row that is
   rolled back is never cached. The transaction `RefreshDatabase` and
   `DatabaseTransactions` open around each test does not count.
+- **Tags:** declared once under `tags` in the config, with a description;
+  a definition with an undeclared tag fails validation. Names are
+  snake_case, and `model:` and `def:` are reserved.
+  `CacheContract::flushTag('users')` invalidates every entry of every
+  definition with the tag in one Redis write, and throws `UnknownTag` for a
+  tag that is not declared.
 - **`invalidated_by`:** saving, deleting or restoring a listed model
   invalidates every entry of the definition after the commit, with the
   definition's generation counter; the model needs no `HasCache`. Keys of

@@ -232,6 +232,7 @@ describe('context', function () {
 
 describe('generation counters', function () {
     beforeEach(function () {
+        config()->set('cache-contract.tags', ['billing' => 'Invoices and payments.', 'companies' => 'Data about companies.']);
         config()->set('cache-contract.definitions.company', [
             'summary' => [
                 'purpose' => 'summary', 'type' => 'array', 'params' => ['company_id' => 'int'], 'ttl' => 300,

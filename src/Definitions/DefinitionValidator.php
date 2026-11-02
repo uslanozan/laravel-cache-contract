@@ -7,7 +7,8 @@ namespace Uslanozan\CacheContract\Definitions;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Checks the raw "definitions" config against the rules of ADR 0002.
+ * Checks the raw "definitions" and "tags" config against the rules of
+ * ADR 0002.
  *
  * Returns every problem instead of throwing, so the same rules serve both the
  * runtime loader (which throws) and the lint command (which reports).
@@ -20,6 +21,12 @@ final class DefinitionValidator
     /** Section names the package uses itself; definitions may not. */
     public const RESERVED_SECTIONS = [self::MODEL_SECTION];
 
+    /**
+     * Prefixes of the generation counters the package names itself
+     * (ADR 0009); a tag is a counter name too, so it may not start with one.
+     */
+    public const RESERVED_TAG_PREFIXES = ['model:', 'def:'];
+
     private const REQUIRED_FIELDS = ['purpose', 'type', 'ttl', 'description'];
 
     private const OPTIONAL_FIELDS = ['subject', 'params', 'version', 'tags', 'invalidated_by'];
@@ -29,15 +36,22 @@ final class DefinitionValidator
 
     /**
      * @param  mixed  $definitions  the value of config('cache-contract.definitions')
+     * @param  mixed  $tags  the value of config('cache-contract.tags'): tag name => description;
+     *                       required, so a caller cannot leave it out and get every tag reported
      * @return list<ValidationError>
      */
-    public function validate(mixed $definitions): array
+    public function validate(mixed $definitions, mixed $tags): array
     {
-        if (! is_array($definitions)) {
-            return [new ValidationError(null, '"definitions" must be an array of sections')];
-        }
+        $errors = $this->validateTags($tags);
+        // Every name in "tags" counts as declared, so a tag with a bad description is
+        // reported once, not again on every definition that uses it. A "tags" section
+        // of the wrong shape declares nothing usable: the definitions are not checked
+        // against it, since those errors would point the wrong way.
+        $declared = $this->isTagMap($tags) ? array_map(strval(...), array_keys($tags)) : null;
 
-        $errors = [];
+        if (! is_array($definitions)) {
+            return [...$errors, new ValidationError(null, '"definitions" must be an array of sections')];
+        }
 
         /** @var array<string, string> $seenPurposes "subject|purpose" => first definition id */
         $seenPurposes = [];
@@ -75,7 +89,7 @@ final class DefinitionValidator
                     continue;
                 }
 
-                array_push($errors, ...$this->validateDefinition($id, $definition));
+                array_push($errors, ...$this->validateDefinition($id, $definition, $declared));
 
                 $subject = $definition['subject'] ?? null;
                 $purpose = $definition['purpose'] ?? null;
@@ -101,10 +115,69 @@ final class DefinitionValidator
     }
 
     /**
-     * @param  array<mixed>  $definition
+     * The "tags" config: snake_case tag names, each with a description.
+     *
+     * @param  mixed  $tags  the value of config('cache-contract.tags')
      * @return list<ValidationError>
      */
-    private function validateDefinition(string $id, array $definition): array
+    public function validateTags(mixed $tags): array
+    {
+        if (! $this->isTagMap($tags)) {
+            return [new ValidationError(null, '"tags" must map each tag name to a description, e.g. \'users\' => \'Data shown about users.\'')];
+        }
+
+        $errors = [];
+
+        foreach ($tags as $name => $description) {
+            $name = (string) $name;
+            $id = 'tags.'.$name;
+            $reserved = array_filter(self::RESERVED_TAG_PREFIXES, fn (string $prefix): bool => str_starts_with($name, $prefix));
+
+            if ($reserved !== []) {
+                $errors[] = new ValidationError($id, sprintf(
+                    'tags starting with "%s" are reserved for the package\'s own counters (ADR 0009); choose another name',
+                    reset($reserved),
+                ));
+            } elseif (! $this->isSnakeCase($name)) {
+                $errors[] = new ValidationError($id, 'tag name must be snake_case');
+            }
+
+            if (! (is_string($description) && trim($description) !== '')) {
+                $errors[] = new ValidationError($id, 'a tag needs a non-empty description of what it groups');
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Closest option within two edits, for "did you mean" hints.
+     *
+     * @param  list<string>  $options
+     */
+    public function closest(string $given, array $options): ?string
+    {
+        $best = null;
+        $bestDistance = 3;
+
+        foreach ($options as $option) {
+            $distance = levenshtein($given, $option);
+
+            if ($distance < $bestDistance) {
+                $best = $option;
+                $bestDistance = $distance;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @param  array<mixed>  $definition
+     * @param  list<string>|null  $tags  the declared tag names; null when the "tags" section is not usable
+     * @return list<ValidationError>
+     */
+    private function validateDefinition(string $id, array $definition, ?array $tags): array
     {
         $errors = [];
         $known = [...self::REQUIRED_FIELDS, ...self::OPTIONAL_FIELDS];
@@ -156,8 +229,22 @@ final class DefinitionValidator
             $errors[] = new ValidationError($id, '"version" must be a positive integer');
         }
 
-        if (array_key_exists('tags', $definition) && ! $this->isListOf($definition['tags'], fn (mixed $tag): bool => is_string($tag) && $tag !== '')) {
-            $errors[] = new ValidationError($id, '"tags" must be a list of non-empty strings');
+        if (array_key_exists('tags', $definition)) {
+            if (! $this->isListOf($definition['tags'], fn (mixed $tag): bool => is_string($tag) && $tag !== '')) {
+                $errors[] = new ValidationError($id, '"tags" must be a list of non-empty strings');
+            } elseif ($tags !== null) {
+                /** @var list<string> $used */
+                $used = $definition['tags'];
+
+                foreach (array_diff($used, $tags) as $tag) {
+                    $suggestion = $this->closest($tag, $tags);
+                    $errors[] = new ValidationError($id, sprintf(
+                        'tag "%s" is not declared under "tags"%s',
+                        $tag,
+                        $suggestion === null ? '' : sprintf(' (did you mean "%s"?)', $suggestion),
+                    ));
+                }
+            }
         }
 
         if (array_key_exists('invalidated_by', $definition) && ! $this->isListOf($definition['invalidated_by'], $this->isModelClass(...))) {
@@ -200,6 +287,14 @@ final class DefinitionValidator
         return preg_match(self::NAME_PATTERN, $value) === 1;
     }
 
+    /**
+     * @phpstan-assert-if-true array<array-key, mixed> $tags
+     */
+    private function isTagMap(mixed $tags): bool
+    {
+        return is_array($tags) && ($tags === [] || ! array_is_list($tags));
+    }
+
     private function isPositiveInt(mixed $value): bool
     {
         return is_int($value) && $value > 0;
@@ -226,28 +321,6 @@ final class DefinitionValidator
         }
 
         return true;
-    }
-
-    /**
-     * Closest known field within two edits, for "did you mean" hints.
-     *
-     * @param  list<string>  $options
-     */
-    private function closest(string $given, array $options): ?string
-    {
-        $best = null;
-        $bestDistance = 3;
-
-        foreach ($options as $option) {
-            $distance = levenshtein($given, $option);
-
-            if ($distance < $bestDistance) {
-                $best = $option;
-                $bestDistance = $distance;
-            }
-        }
-
-        return $best;
     }
 
     /**

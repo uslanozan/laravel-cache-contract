@@ -14,9 +14,12 @@ use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Definitions\TagRegistry;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
+use Uslanozan\CacheContract\Exceptions\InvalidDefinitions;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\UnknownDefinition;
+use Uslanozan\CacheContract\Exceptions\UnknownTag;
 
 /**
  * Reads and writes cache entries through their definitions: the service
@@ -47,6 +50,7 @@ final readonly class CacheContractManager
         private KeyFactory $keys,
         private RedisErrorPolicy $errors,
         private GenerationCounters $counters,
+        private TagRegistry $tags,
         private ?string $store = null,
         private array $context = [],
     ) {}
@@ -59,7 +63,7 @@ final readonly class CacheContractManager
      */
     public function withContext(array $context): self
     {
-        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->counters, $this->store, array_merge($this->context, $context));
+        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->counters, $this->tags, $this->store, array_merge($this->context, $context));
     }
 
     /**
@@ -260,6 +264,27 @@ final readonly class CacheContractManager
         $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->invalidate);
 
         return $key !== false && $this->remove($key);
+    }
+
+    /**
+     * Invalidates every entry of every definition with this tag, for every
+     * parameter and context, by giving the tag's generation counter a new
+     * value (ADR 0009): one Redis write, whatever the number of entries. Old
+     * entries are no longer read and expire through their TTL. The context of
+     * this instance plays no part.
+     *
+     * @return bool false when Redis could not be reached (the "invalidate" policy, ADR 0007)
+     *
+     * @throws UnknownTag when the tag is not declared under "tags"
+     * @throws InvalidDefinitions when the "tags" config breaks a rule
+     */
+    public function flushTag(string $tag): bool
+    {
+        if (! $this->tags->has($tag)) {
+            throw UnknownTag::withName($tag, $this->tags->closest($tag));
+        }
+
+        return $this->counters->bump([$tag]);
     }
 
     /**

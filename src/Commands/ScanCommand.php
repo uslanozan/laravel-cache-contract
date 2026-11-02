@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Scanner\CacheUsage;
+use Uslanozan\CacheContract\Scanner\Category;
 use Uslanozan\CacheContract\Scanner\KeyKind;
 use Uslanozan\CacheContract\Scanner\Operation;
 use Uslanozan\CacheContract\Scanner\Scanner;
@@ -59,6 +60,7 @@ final class ScanCommand extends Command
                     'line' => $usage->line,
                     'class' => $usage->class,
                     'function' => $usage->function,
+                    'category' => $usage->category->value,
                     'style' => $usage->style->value,
                     'wrapper' => $usage->wrapper,
                     'method' => $usage->method,
@@ -77,11 +79,12 @@ final class ScanCommand extends Command
             $this->components->info('No cache calls found.');
         } else {
             $this->table(
-                ['Location', 'In', 'Style', 'Operation', 'Key kind', 'Key'],
+                ['Location', 'In', 'Category', 'Style', 'Operation', 'Key kind', 'Key'],
                 array_map(fn (CacheUsage $usage): array => [
                     // One path:line cell, so IDE terminals open the line on click.
                     $relative($usage->file).':'.$usage->line,
                     implode('::', array_filter([$usage->class === null ? null : class_basename($usage->class), $usage->function])) ?: '-',
+                    $usage->category->value,
                     $usage->wrapper === null ? $usage->style->value : "{$usage->style->value} (".class_basename($usage->wrapper).')',
                     $usage->operation->value,
                     $usage->keyKind->value,
@@ -95,12 +98,18 @@ final class ScanCommand extends Command
                 array_filter($result->usages, fn (CacheUsage $usage): bool => $usage->wrapper === null),
             ));
 
+            $categories = array_count_values(array_map(fn (CacheUsage $usage): string => $usage->category->value, $result->usages));
+
             $this->newLine();
             $this->line(sprintf(
                 '%d usage points in %d files. A usage point is a place in the source, not a runtime call count.',
                 count($result->usages),
                 count(array_unique(array_map(fn (CacheUsage $usage): string => $usage->file, $result->usages))),
             ));
+            $this->line('Categories: '.implode(', ', array_map(
+                fn (Category $category): string => ($categories[$category->value] ?? 0).' '.$category->value,
+                Category::cases(),
+            )));
             $this->line('Keys: '.implode(', ', array_map(
                 fn (KeyKind $kind): string => ($kinds[$kind->value] ?? 0).' '.$kind->value,
                 KeyKind::cases(),

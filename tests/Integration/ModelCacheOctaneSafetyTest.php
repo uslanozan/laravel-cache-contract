@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Uslanozan\CacheContract\Eloquent\ModelCacheFactory;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
 use Uslanozan\CacheContract\Tests\Fixtures\Jobs\FindTenantProject;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 /*
  * Model-side safety for long-running processes (LRVL-38), against real Redis.
@@ -36,21 +36,6 @@ beforeEach(function () {
     ModelCacheDatabase::create(); // the current tenant is 7
 });
 
-/** Number of database queries $operation runs. */
-function octaneSafetyQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-
-    try {
-        $operation();
-    } finally {
-        DB::disableQueryLog();
-    }
-
-    return count(DB::getQueryLog());
-}
-
 /** What Octane does between two requests: scoped instances are dropped, singletons stay. */
 function octaneSafetyNextRequest(int $tenant): void
 {
@@ -72,7 +57,7 @@ it('never serves a tenant\'s cached model to the next request\'s tenant', functi
 
     // Request 3, tenant 7 again: still its own entry, read from Redis.
     octaneSafetyNextRequest(7);
-    expect(octaneSafetyQueries(fn () => expect(Project::modelCache()->withContext(['tenant_id' => 7])->find(5)?->name)->toBe('Apollo')))
+    expect(QueryCounter::count(fn () => expect(Project::modelCache()->withContext(['tenant_id' => 7])->find(5)?->name)->toBe('Apollo')))
         ->toBe(0);
 
     // Two entries in Redis: tenant 7's row, and tenant 8's "no such row".
@@ -84,5 +69,5 @@ it('never serves a tenant\'s cached model to the next request\'s tenant', functi
 it('keeps tenants apart between jobs on the same worker', function () {
     expect(Bus::dispatchSync(new FindTenantProject(7)))->toBe('Apollo')
         ->and(Bus::dispatchSync(new FindTenantProject(8)))->toBeNull()
-        ->and(octaneSafetyQueries(fn () => expect(Bus::dispatchSync(new FindTenantProject(7)))->toBe('Apollo')))->toBe(0);
+        ->and(QueryCounter::count(fn () => expect(Bus::dispatchSync(new FindTenantProject(7)))->toBe('Apollo')))->toBe(0);
 });

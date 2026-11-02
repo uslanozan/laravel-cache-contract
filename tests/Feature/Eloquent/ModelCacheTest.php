@@ -26,17 +26,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Scopes\LatestFirstScope;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Scopes\TenantScope;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Token;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
-
-/** Number of database queries $operation runs. */
-function modelCacheQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-    $operation();
-    DB::disableQueryLog();
-
-    return count(DB::getQueryLog());
-}
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 /** Points the "tenant" connection at this SQLite file, as a tenancy package would. */
 function modelCacheUseTenantDatabase(string $path): void
@@ -55,10 +45,10 @@ describe('find', function () {
         $first = null;
         $second = null;
 
-        expect(modelCacheQueries(function () use (&$first) {
+        expect(QueryCounter::count(function () use (&$first) {
             $first = ModelCache::for(Member::class)->find(1);
         }))->toBe(1)
-            ->and(modelCacheQueries(function () use (&$second) {
+            ->and(QueryCounter::count(function () use (&$second) {
                 $second = ModelCache::for(Member::class)->find(1);
             }))->toBe(0);
 
@@ -74,7 +64,7 @@ describe('find', function () {
 
     it('caches an ID with no row as null', function () {
         expect(ModelCache::for(Member::class)->find(999))->toBeNull()
-            ->and(modelCacheQueries(fn () => expect(ModelCache::for(Member::class)->find(999))->toBeNull()))->toBe(0);
+            ->and(QueryCounter::count(fn () => expect(ModelCache::for(Member::class)->find(999))->toBeNull()))->toBe(0);
     });
 
     it('builds the key from the table, the version, the ID, the connection and its database', function () {
@@ -112,7 +102,7 @@ describe('configuration', function () {
         ModelCache::for(Member::class)->find(1);
         $this->travel(3601)->seconds();
 
-        expect(modelCacheQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
+        expect(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
     });
 
     it('accepts TTLs with units', function () {
@@ -121,7 +111,7 @@ describe('configuration', function () {
         ModelCache::for(Member::class)->find(1);
         $this->travel(61)->seconds();
 
-        expect(modelCacheQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
+        expect(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
     });
 
     it('uses the TTL and version of a model override', function () {
@@ -131,7 +121,7 @@ describe('configuration', function () {
         $this->travel(61)->seconds();
 
         expect(ModelCache::for(Member::class)->key(1))->toMatch('/^cc:model:members:v2:id=1:@connection=testing:@database=%3Amemory%3A:~g\d+$/')
-            ->and(modelCacheQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
+            ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(1)))->toBe(1);
     });
 
     it('rejects invalid model settings', function (array $models, string $message) {
@@ -212,7 +202,7 @@ describe('global scopes', function () {
         expect(ModelCache::for(Project::class)->withContext(['tenant_id' => 8])->find(5))->toBeNull();
 
         app()->instance('fixture.tenant', 7);
-        expect(modelCacheQueries(fn () => expect(
+        expect(QueryCounter::count(fn () => expect(
             ModelCache::for(Project::class)->withContext(['tenant_id' => 7])->find(5)?->name,
         )->toBe('Apollo')))->toBe(0);
     });

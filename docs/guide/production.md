@@ -25,10 +25,46 @@ cache. This is set per kind of operation in `config/cache-contract.php`
   as one thrown by your loader, always propagates.
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
-- With `report`, every failing call reports an error, so a Redis outage
-  produces many reports. Make sure your error tracker can take the volume.
+- With `report`, an outage is reported once per minute per process, not once
+  per call: see [Reports during an outage](#reports-during-an-outage).
 - An invalid value (anything other than `report` or `throw`) throws
   `InvalidConfiguration` on the first call.
+
+## Reports during an outage
+
+When Redis is down, every cache call fails. To keep the log and the error
+tracker readable, each PHP process reports the first connection error, then
+at most one per `report_interval` seconds:
+
+```php
+'redis_errors' => [
+    // ...
+    'report_interval' => 60, // seconds; 0 reports every error
+],
+```
+
+The errors in between are counted, per operation. The first error reported
+after the interval comes with a second report, `RedisErrorsNotReported`:
+
+```
+9 more Redis connection errors in the last 61 seconds were not reported (read: 6, write: 1, invalidate: 2).
+```
+
+Its log context has the same counts (`not_reported`, `seconds`). `invalidate`
+errors matter most: each one may have left a stale entry until its TTL ends.
+
+- The limit is per process. With 20 PHP-FPM workers, Octane workers or queue
+  workers, an outage gives up to 20 reports per interval.
+- One interval covers reads, writes and invalidations together; only the
+  counts are kept apart.
+- The counts of the last interval can be lost: when Redis comes back, no
+  error follows to carry them.
+- Only `report` is limited. With `throw`, every error is thrown.
+- The value must be a whole number of seconds, 0 or more. Anything else
+  throws `InvalidConfiguration` on the first call.
+- Laravel's own `throttle()` for reported exceptions keeps its counter in the
+  cache, usually Redis, so it cannot limit these reports while Redis is
+  down. The package keeps its counter in memory instead.
 
 ## Redis timeouts
 

@@ -144,3 +144,44 @@ default.** Config (final key names are fixed with the facade):
   phase 3 backlog).
 - Revisit this ADR if a Laravel release changes any behaviour pinned by the
   characterization tests.
+
+## Update 2026-11-04: reports during an outage
+
+With `report`, every failing call passed its error to `report()`. During an
+outage every cache call fails, so a busy application flooded its log and
+error tracker with the same `RedisException` (LRVL-52, raised in the review
+of #18). Laravel's `throttle()` for reported exceptions does not help: its
+`RateLimiter` keeps the count in the cache, usually the same Redis, and when
+that fails Laravel reports the exception anyway.
+
+**Decision:** each process reports the first connection error, then at most
+one per `redis_errors.report_interval`, **60 seconds** by default; `0`
+reports every error, as before.
+
+- One interval for reads, writes and invalidations: an outage hits all three
+  at once, and three intervals would triple the reports.
+- The errors left out are counted per operation. The first error reported
+  after the interval is followed by a `RedisErrorsNotReported` report with
+  the counts (`read: 2000, invalidate: 41`): invalidate errors mean stale
+  entries may be cached. The original `RedisException` is reported
+  unchanged, so error trackers keep grouping it as before.
+- The state (when the last error was reported, three counts) belongs to the
+  process, not to a request: it has a fixed size and lives in a
+  `RedisErrorReporter` singleton, resolved at boot so that every Octane
+  request of a worker shares it. The policy itself stays immutable. Time
+  comes from `Date`, so tests can move the clock.
+- `throw` is not limited: every error is thrown.
+
+**Consequences:**
+
+- The limit is per process: 20 workers give up to 20 reports per interval.
+  The guide says so.
+- The counts of the last interval are lost when no error follows it, for
+  example when Redis comes back. Accepted, and in the guide.
+- Any `RedisException` counts, also one that is not about the connection
+  (`WRONGTYPE`): after an outage report, such an error is counted, not
+  reported, until the interval ends.
+- **Still no circuit breaker.** This changes only how errors are reported;
+  every call still tries Redis and pays the connection timeout. Skipping
+  Redis for a while after errors changes how the package behaves, so it
+  stays a separate decision.

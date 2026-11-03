@@ -191,6 +191,19 @@ it('keeps the application working when Redis is unreachable', function () {
     Exceptions::assertReported(RedisException::class);
 });
 
+it('reports an outage once per interval, however many calls fail', function () {
+    config()->set('cache-contract.store', 'unreachable');
+    Exceptions::fake();
+
+    for ($i = 0; $i < 50; $i++) {
+        CacheContract::remember('external.exchange_rates', [], fn () => ['usd' => 1]);
+        CacheContract::forget('external.exchange_rates');
+    }
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(RedisException::class);
+});
+
 it('throws when Redis is unreachable and the policy says so', function () {
     config()->set('cache-contract.store', 'unreachable');
     config()->set('cache-contract.redis_errors.read', 'throw');

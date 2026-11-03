@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorMode;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
+use Uslanozan\CacheContract\Runtime\RedisOperation;
 
 /*
  * Generation counters (ADR 0009) against real Redis: values are random ints
@@ -32,9 +33,9 @@ beforeEach(function () {
     $this->prefix = 'cc_test_'.bin2hex(random_bytes(6));
 });
 
-function countersFor(string $store, string $prefix): GenerationCounters
+function countersFor(string $store, string $prefix, RedisErrorPolicy $errors = new RedisErrorPolicy): GenerationCounters
 {
-    return new GenerationCounters(app('cache'), new RedisErrorPolicy, $prefix, $store);
+    return new GenerationCounters(app('cache'), $errors, $prefix, $store);
 }
 
 it('creates a counter once, as an int, and keeps it until it is bumped', function () {
@@ -76,10 +77,11 @@ it('replaces an entry that is not a counter', function () {
 it('follows the Redis error policy when Redis is unreachable', function () {
     Exceptions::fake();
     $counters = countersFor('unreachable', $this->prefix);
+    $throwing = countersFor('unreachable', $this->prefix, new RedisErrorPolicy(read: RedisErrorMode::Throw));
 
-    expect($counters->current(['users'], RedisErrorMode::Report))->toBeFalse()
+    expect($counters->current(['users'], RedisOperation::Read))->toBeFalse()
         ->and($counters->bump(['users']))->toBeFalse()
-        ->and(fn () => $counters->current(['users'], RedisErrorMode::Throw))->toThrow(RedisException::class)
+        ->and(fn () => $throwing->current(['users'], RedisOperation::Read))->toThrow(RedisException::class)
         ->and(fn () => $counters->currentOrFail(['users']))->toThrow(RedisException::class);
 
     Exceptions::assertReported(RedisException::class);

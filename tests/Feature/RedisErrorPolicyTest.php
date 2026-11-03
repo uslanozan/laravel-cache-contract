@@ -6,8 +6,12 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
+use Uslanozan\CacheContract\Exceptions\RedisErrorsNotReported;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
+use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
+use Uslanozan\CacheContract\Runtime\RedisErrorReporter;
+use Uslanozan\CacheContract\Runtime\RedisOperation;
 use Uslanozan\CacheContract\Tests\Fakes\FailingStore;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 
@@ -25,7 +29,7 @@ beforeEach(function () {
     Exceptions::fake();
 });
 
-/** @param array<string, string> $modes */
+/** @param array<string, mixed> $modes */
 function redisErrors(array $modes): void
 {
     config()->set('cache-contract.redis_errors', $modes);
@@ -198,3 +202,118 @@ it('rejects an unknown mode', function () {
     expect(fn () => app(CacheContractManager::class))
         ->toThrow(InvalidConfiguration::class, '"cache-contract.redis_errors.read": expected "throw" or "report", got "ignore"');
 });
+
+describe('reports during an outage', function () {
+    beforeEach(function () {
+        $this->store->fail('get')->fail('put')->fail('forget');
+    });
+
+    it('reports the first error and only counts the others for a minute', function () {
+        for ($i = 0; $i < 1000; $i++) {
+            CacheContract::get('external.exchange_rates');
+        }
+
+        Exceptions::assertReportedCount(1);
+        Exceptions::assertReported(RedisException::class);
+    });
+
+    it('shares one interval between reads, writes and invalidations', function () {
+        CacheContract::get('external.exchange_rates');
+        CacheContract::put('external.exchange_rates', [], 1);
+        CacheContract::forget('external.exchange_rates');
+
+        Exceptions::assertReportedCount(1);
+    });
+
+    it('reports again after the interval, with the errors it left out per operation', function () {
+        CacheContract::get('external.exchange_rates');
+
+        for ($i = 0; $i < 5; $i++) {
+            CacheContract::get('external.exchange_rates');
+        }
+
+        CacheContract::put('external.exchange_rates', [], 1);
+        CacheContract::forget('external.exchange_rates');
+        CacheContract::forget('external.exchange_rates');
+
+        $this->travel(59)->seconds();
+        CacheContract::get('external.exchange_rates');
+        Exceptions::assertReportedCount(1);
+
+        $this->travel(2)->seconds();
+        CacheContract::get('external.exchange_rates');
+
+        Exceptions::assertReportedCount(3);
+        Exceptions::assertReported(fn (RedisErrorsNotReported $e): bool => $e->getMessage() === '9 more Redis connection errors in the last 61 seconds were not reported (read: 6, write: 1, invalidate: 2).'
+            && $e->context() === ['not_reported' => ['read' => 6, 'write' => 1, 'invalidate' => 2], 'seconds' => 61]);
+    });
+
+    it('adds no summary when nothing was left out', function () {
+        CacheContract::get('external.exchange_rates');
+        $this->travel(61)->seconds();
+        CacheContract::get('external.exchange_rates');
+
+        Exceptions::assertReportedCount(2);
+        Exceptions::assertNotReported(RedisErrorsNotReported::class);
+    });
+
+    it('uses report_interval from the config', function () {
+        redisErrors(['report_interval' => 10]);
+
+        CacheContract::get('external.exchange_rates');
+        $this->travel(9)->seconds();
+        CacheContract::get('external.exchange_rates');
+        Exceptions::assertReportedCount(1);
+
+        $this->travel(1)->seconds();
+        CacheContract::get('external.exchange_rates');
+
+        Exceptions::assertReportedCount(3); // two errors and the summary of the one left out
+    });
+
+    it('reports every error with report_interval 0', function () {
+        redisErrors(['report_interval' => 0]);
+
+        for ($i = 0; $i < 5; $i++) {
+            CacheContract::get('external.exchange_rates');
+        }
+
+        Exceptions::assertReportedCount(5);
+        Exceptions::assertNotReported(RedisErrorsNotReported::class);
+    });
+
+    it('never holds back an error the policy throws', function () {
+        redisErrors(['read' => 'throw']);
+
+        CacheContract::put('external.exchange_rates', [], 1);
+
+        expect(fn () => CacheContract::get('external.exchange_rates'))->toThrow(RedisException::class)
+            ->and(fn () => CacheContract::get('external.exchange_rates'))->toThrow(RedisException::class);
+        Exceptions::assertReportedCount(1);
+    });
+
+    it('keeps the interval of the process when the policy is built again', function () {
+        // On Octane, the policy can be built again in every request; the reporter,
+        // resolved at boot, is the same for all of them.
+        expect(app()->resolved(RedisErrorReporter::class))->toBeTrue();
+
+        $error = new RedisException('Connection refused');
+        app(RedisErrorPolicy::class)->handle($error, RedisOperation::Read);
+        app()->forgetInstance(RedisErrorPolicy::class);
+        app(RedisErrorPolicy::class)->handle($error, RedisOperation::Read);
+
+        Exceptions::assertReportedCount(1);
+    });
+});
+
+it('rejects a report_interval that is not a whole number of seconds, 0 or more', function (mixed $value, string $got) {
+    redisErrors(['report_interval' => $value]);
+
+    expect(fn () => app(CacheContractManager::class))
+        ->toThrow(InvalidConfiguration::class, '"cache-contract.redis_errors.report_interval": expected a whole number of seconds, 0 or more, got '.$got);
+})->with([
+    'negative' => [-1, '-1'],
+    'numeric string' => ['60', '"60"'],
+    'float' => [1.5, 'float'],
+    'text' => ['one minute', '"one minute"'],
+]);

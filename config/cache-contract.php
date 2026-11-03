@@ -59,12 +59,17 @@ return [
     |
     | Consider "throw" for all three in your test suite, so failures show.
     |
+    | report_interval: during an outage every call fails, so each process
+    | reports the first error, then at most one per this many seconds, with
+    | a count of the errors it left out. 0 reports every error.
+    |
     */
 
     'redis_errors' => [
         'read' => 'report',
         'write' => 'report',
         'invalidate' => 'report',
+        'report_interval' => 60,
     ],
 
     /*

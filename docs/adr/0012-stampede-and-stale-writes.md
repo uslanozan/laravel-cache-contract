@@ -132,11 +132,23 @@ and in `CacheContract`, in the shared remove and write paths.
   `saved` event, `wasRecentlyCreated && ! wasChanged()`, so a later update of
   the same instance writes a tombstone. A save that changed nothing clears
   nothing, as for `invalidated_by`.
+- **A gap for created rows, accepted:** a read that runs its query before the
+  insert commits finds no row, and if its "no such row" lands in the cache
+  after the plain delete, it stays until its TTL ends. A write that lands
+  before the delete is removed by it. Auto-increment IDs make this rare,
+  since nobody asks for an ID before the insert; with IDs the application
+  generates (UUIDs, ULIDs), a job dispatched early or a polling client can.
+  The model cache behaves like this today, so it is a gap, not a regression.
 - **The tombstone** is a fixed string followed by a random token, new for
   every removal. It is not null and not an envelope, so every read treats it
   as a miss, and the `Repository::add()` fallback of stores without a native
   `add()` does not mistake it for an empty key. It lives for
-  `tombstone_ttl`, **10 seconds** by default, configurable.
+  `tombstone_ttl`, **10 seconds** by default, configurable. A loader that
+  started after the removal replaces it at once, so a longer lifetime would
+  only cost memory, and in a mass change the number of tombstones alive at
+  once grows with it: 60 seconds keeps six times as many keys in a shared
+  Redis as 10. Loaders slower than 10 seconds are rare, and an application
+  that has them can raise the setting.
 - **Loader writes** (a `remember()` miss, `find()`, `findMany()`) are a
   compare-and-set, one key at a time: one Lua script writes the entry only if
   the key still holds what the loader's read found.
@@ -157,8 +169,9 @@ and in `CacheContract`, in the shared remove and write paths.
     the connection's serializer and compression options.
 - **Explicit writes:** `put()` and `refresh()` still use `put()`: the caller
   asked for that value, after any removal. `add()` caches when nothing or a
-  tombstone is cached, as `has()` reports it: it reads, then writes with the
-  same compare-and-set, so of two concurrent `add()` calls one wins.
+  tombstone is cached; a foreign value counts as cached. It reads, then
+  writes with the same compare-and-set, so of two concurrent `add()` calls
+  one wins.
 - **`pull()`** replaces the value with a new tombstone instead of deleting it:
   on Redis one Lua script returns the value and writes the tombstone in its
   place, in place of `GETDEL`. A loader that read before the pull cannot
@@ -175,7 +188,9 @@ and in `CacheContract`, in the shared remove and write paths.
 - **The guarantee is for Redis**, where the scripts are atomic; the race tests
   run against real Redis. On other stores loader writes and `add()` fall back
   to `add()`, as in option A: a tombstone blocks writes until it expires. On
-  the array store that fallback is not atomic.
+  the array store that fallback is not atomic. `pull()` keeps its read and
+  delete there, and writes no tombstone: only the delete tells which of two
+  concurrent pulls removed the entry, so only that one gets the value.
 - No pipeline in this change: the measurements above show that one script per
   key costs about what `putMany()` costs today. Pipelining both is a separate
   optimization.
@@ -227,6 +242,9 @@ decision.
   `tombstone_ttl`, in the model cache and in `CacheContract`, for `forget()`
   and `pull()`. A test against real Redis reproduces it with the same
   `DB::listen()` interleaving and checks the stale value is not written.
+- **Two gaps remain, both accepted:** a "no such row" read just before an
+  insert can outlive the plain delete (more likely with UUIDs or ULIDs), and
+  the foreign-value repair can overwrite a removal. Neither is new.
 - **Fresh data is cached right after a change:** only a loader that read
   before the removal is blocked. On stores other than Redis, a tombstone
   blocks every write to its key until it expires, so reads of that entry go

@@ -172,6 +172,14 @@ and in `CacheContract`, in the shared remove and write paths.
   tombstone is cached; a foreign value counts as cached. It reads, then
   writes with the same compare-and-set, so of two concurrent `add()` calls
   one wins.
+- **A gap for `refresh()`, accepted:** unlike `put()`, its value comes from a
+  loader, so it has the race of `remember()`: a removal while the loader runs
+  is overwritten by the `put()` with old data. A compare-and-set against a
+  read made before the loader would rarely help: `refresh()` usually runs
+  while an entry is cached, so that read finds an envelope, and a decoded
+  envelope need not pack back to the same bytes, as for the repair rule.
+  Reading the raw bytes and comparing a hash in the script (`redis.sha1hex`)
+  would close both gaps; the implementation PR can weigh it.
 - **`pull()`** replaces the value with a new tombstone instead of deleting it:
   on Redis one Lua script returns the value and writes the tombstone in its
   place, in place of `GETDEL`. A loader that read before the pull cannot
@@ -239,12 +247,14 @@ decision.
 ## Consequences
 
 - **The race from #43 is closed** on Redis for loaders faster than
-  `tombstone_ttl`, in the model cache and in `CacheContract`, for `forget()`
-  and `pull()`. A test against real Redis reproduces it with the same
-  `DB::listen()` interleaving and checks the stale value is not written.
-- **Two gaps remain, both accepted:** a "no such row" read just before an
-  insert can outlive the plain delete (more likely with UUIDs or ULIDs), and
-  the foreign-value repair can overwrite a removal. Neither is new.
+  `tombstone_ttl`, in the model cache and in `CacheContract::remember()`,
+  after `forget()` and `pull()`. A test against real Redis reproduces it with
+  the same `DB::listen()` interleaving and checks the stale value is not
+  written.
+- **Three gaps remain, all accepted:** a "no such row" read just before an
+  insert can outlive the plain delete (more likely with UUIDs or ULIDs), the
+  foreign-value repair can overwrite a removal, and so can `refresh()`. None
+  is new.
 - **Fresh data is cached right after a change:** only a loader that read
   before the removal is blocked. On stores other than Redis, a tombstone
   blocks every write to its key until it expires, so reads of that entry go

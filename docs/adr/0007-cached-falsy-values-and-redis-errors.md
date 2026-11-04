@@ -155,6 +155,19 @@ default every time, never remove the entry and report nothing.
 
 **Decision:** `pull()` checks phpredis' last error and throws it as a
 `RedisException`, so a command Redis rejects follows the `read` policy like a
-connection error. Any other exception still propagates. A command the package
-sends itself, such as the Lua scripts planned in ADR 0012, needs the same
-check.
+connection error. Any other exception still propagates.
+
+**Still open:** the same phpredis behaviour affects other commands, which
+still turn a rejection (`NOPERM` from an ACL, `OOM`, `LOADING`) into a wrong
+answer without a report. Checked against Redis 7.4 with phpredis 6.3:
+
+- The `MGET` of the generation counters (`GenerationCounters::current()` and
+  `peek()`). On Laravel 11 and 12, `PhpRedisConnection::mget()` maps over
+  `false` and throws a `TypeError`, which no policy handles. On Laravel 13 it
+  returns nulls: every counter looks missing, `current()` gives a new value
+  on every call, so every entry of the definition misses, and
+  `inspect --live` reports the counters as "not in Redis yet". LRVL-79.
+- Laravel's `RedisStore::add()`, a Lua script: a rejected script returns
+  `false`, so `CacheContract::add()` answers "already cached". ADR 0012
+  replaces it with the package's own compare-and-set script, which must check
+  the last error too; so must every script the package sends.

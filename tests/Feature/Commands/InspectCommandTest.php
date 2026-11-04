@@ -35,6 +35,15 @@ beforeEach(function () {
     ]);
 });
 
+/** Routes the package's cache through a store whose reads throw $error. */
+function inspectFailingStore(Throwable $error): void
+{
+    $store = (new FailingStore)->fail('get', $error);
+    Cache::extend('failing', fn () => Cache::repository($store));
+    config()->set('cache.stores.failing', ['driver' => 'failing']);
+    config()->set('cache-contract.store', 'failing');
+}
+
 describe('generation counters', function () {
     it('ends the key pattern with the counters, in name order', function () {
         $exit = Artisan::call('cache-contract:inspect', ['id' => 'user.profile']);
@@ -99,15 +108,38 @@ describe('generation counters', function () {
             ->assertFailed();
     });
 
-    it('lets an error that is not a connection error out of --live', function () {
-        // Cache::extend() rebinds $this inside the closure, so capture the store.
-        $store = (new FailingStore)->fail('get', new RuntimeException('Unreadable counter'));
-        Cache::extend('failing', fn () => Cache::repository($store));
-        config()->set('cache.stores.failing', ['driver' => 'failing']);
-        config()->set('cache-contract.store', 'failing');
+    // Not only connection errors: a read Redis rejects ends in a TypeError on Laravel 11/12
+    // (PhpRedisConnection::mget() maps over false), and a cluster or Predis connection error
+    // is not a RedisException. Each is one line, not a stack trace.
+    it('prints one line naming the exception when --live cannot read the counters', function (Throwable $error) {
+        inspectFailingStore($error);
 
-        expect(fn () => Artisan::call('cache-contract:inspect', ['id' => 'external.flags', '--live' => true]))
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'external.flags', '--live' => true]);
+        $output = Artisan::output();
+
+        expect($exit)->toBe(1)
+            ->and($output)->toContain('Could not read the generation counters ('.$error::class.': '.$error->getMessage().')')
+            ->and($output)->toContain('Run with -v for the trace');
+    })->with([
+        'a connection error' => [new RedisException('Connection refused')],
+        'a rejected read on Laravel 11/12' => [new TypeError('array_map(): Argument #2 ($array) must be of type array, bool given')],
+        'any other error' => [new RuntimeException('Unreadable counter')],
+    ]);
+
+    it('throws the error with -v, for the trace', function () {
+        inspectFailingStore(new RuntimeException('Unreadable counter'));
+
+        expect(fn () => Artisan::call('cache-contract:inspect', ['id' => 'external.flags', '--live' => true, '-v' => true]))
             ->toThrow(RuntimeException::class, 'Unreadable counter');
+    });
+
+    it('prints one line for a store that is not configured', function () {
+        config()->set('cache-contract.store', 'no_such_store');
+
+        $exit = Artisan::call('cache-contract:inspect', ['id' => 'external.flags', '--live' => true]);
+
+        expect($exit)->toBe(1)
+            ->and(Artisan::output())->toContain('Could not read the generation counters (InvalidArgumentException: Cache store [no_such_store] is not defined.)');
     });
 
     it('needs no Redis with --live for a definition without counters', function () {

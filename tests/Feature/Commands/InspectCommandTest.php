@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Uslanozan\CacheContract\Tests\Fakes\FailingStore;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Company;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\User;
 
@@ -95,6 +97,17 @@ describe('generation counters', function () {
         $this->artisan('cache-contract:inspect', ['id' => 'auth.session_owner', '--generation' => ['sessions=1'], '--live' => true])
             ->expectsOutputToContain('pass either --generation or --live, not both')
             ->assertFailed();
+    });
+
+    it('lets an error that is not a connection error out of --live', function () {
+        // Cache::extend() rebinds $this inside the closure, so capture the store.
+        $store = (new FailingStore)->fail('get', new RuntimeException('Unreadable counter'));
+        Cache::extend('failing', fn () => Cache::repository($store));
+        config()->set('cache.stores.failing', ['driver' => 'failing']);
+        config()->set('cache-contract.store', 'failing');
+
+        expect(fn () => Artisan::call('cache-contract:inspect', ['id' => 'external.flags', '--live' => true]))
+            ->toThrow(RuntimeException::class, 'Unreadable counter');
     });
 
     it('needs no Redis with --live for a definition without counters', function () {

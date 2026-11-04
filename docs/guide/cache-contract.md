@@ -56,7 +56,10 @@ if (CacheContract::add('report.export_lock', ['report_id' => 9], true)) {
 ```
 
 On Redis it is a single atomic command, so of two concurrent calls exactly
-one returns `true`. A cached `null` counts as cached.
+one returns `true`. A cached `null` counts as cached, and so does a value
+another part of your code wrote under the same key: `add()` returns `false`
+until it expires, although `get()` treats it as a miss and `put()` or
+`remember()` would overwrite it.
 
 Use a definition **without** `tags` or `invalidated_by` for such a guard. With
 them, the generation counters are read before the write, and a change in

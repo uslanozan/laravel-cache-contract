@@ -15,6 +15,7 @@ use Uslanozan\CacheContract\Exceptions\CacheContractException;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
+use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Similarity\NameSimilarity;
 
 /**
@@ -216,9 +217,13 @@ final class InspectCommand extends Command
 
         try {
             $values = $this->laravel->make(GenerationCounters::class)->peek($counters);
-        } catch (CacheContractException $e) {
-            throw $e;
         } catch (Throwable $e) {
+            // Only a connection error is Redis being unreachable (ADR 0007); anything
+            // else, a package exception included, is a bug and must show as one.
+            if (! RedisErrorPolicy::isConnectionError($e)) {
+                throw $e;
+            }
+
             $this->components->error('Could not read the generation counters from Redis: '.$e->getMessage());
 
             return false;

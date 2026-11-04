@@ -111,7 +111,7 @@ application uses right now, the one to look for with `redis-cli`. `--live`
 only reads. A counter that does not exist yet is reported and not created:
 the next cache call creates it, so no entry of the definition is cached at
 that moment. When Redis cannot be reached, `inspect` prints one error line
-and exits with a non-zero code. `--generation` and `--live` cannot be used
+and exits with a non-zero code; any other error is thrown as it is. `--generation` and `--live` cannot be used
 together.
 
 A secret parameter is never accepted with `--param`: `inspect` asks for it

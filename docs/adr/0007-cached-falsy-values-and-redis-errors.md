@@ -144,3 +144,17 @@ default.** Config (final key names are fixed with the facade):
   phase 3 backlog).
 - Revisit this ADR if a Laravel release changes any behaviour pinned by the
   characterization tests.
+
+## Update 2026-11-04: commands Redis rejects in `pull()`
+
+The policy covered connection errors only. Since #51, `pull()` on Redis reads
+and removes in one command (`GETDEL`, Redis 6.2+), and phpredis answers a
+command that Redis rejects with `false`, as for a missing key, keeping the
+error aside. Taken for a miss, `pull()` on an older Redis would return the
+default every time, never remove the entry and report nothing.
+
+**Decision:** `pull()` checks phpredis' last error and throws it as a
+`RedisException`, so a command Redis rejects follows the `read` policy like a
+connection error. Any other exception still propagates. A command the package
+sends itself, such as the Lua scripts planned in ADR 0012, needs the same
+check.

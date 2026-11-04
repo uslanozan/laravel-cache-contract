@@ -91,6 +91,18 @@ A definition with [`invalidated_by`](definitions.md#invalidated_by) or
 such as `cc:member:active_list:v1:organization_id=1:~g8123`. Every method
 reads them first, in one Redis command.
 
+### No counters
+
+There is no `increment()` or `decrement()`. A counter is the data itself, not
+a copy that can be loaded again, so it does not fit the mandatory TTL, the
+envelope or the "carry on without Redis" default (ADR 0013). Keep counted
+data where it belongs:
+
+- rate limits and attempt counts: Laravel's `RateLimiter`
+  (`RateLimiter::hit()`, `tooManyAttempts()`);
+- counts that must not be lost: the database (`$post->increment('views')`);
+- high-volume counters: Redis directly.
+
 ## Cached `null`, `false` and `0`
 
 Laravel's cache cannot tell a cached `null` from a miss, so `Cache::remember()`

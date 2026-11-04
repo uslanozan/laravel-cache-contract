@@ -128,7 +128,8 @@ default.** Config (final key names are fixed with the facade):
   **created**. `HasCache` invalidates on save (ADR 0006), and Eloquent fires
   `saved` for new records too, so it must not listen to `updated` only.
 - Package values cannot use `Cache::increment()` / `decrement()`. If counters
-  are needed, they get their own definition type and ADR.
+  are needed, they get their own definition type and ADR. ADR 0013 decided:
+  no counters in v1.
 - Changing the envelope later turns every existing entry into a miss, like a
   key format change (ADR 0004); upgrade notes must say so.
 - The docs must tell users to set `timeout` and `read_timeout` on the cache's

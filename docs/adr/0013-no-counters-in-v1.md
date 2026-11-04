@@ -1,12 +1,12 @@
 # 0013. No counters in v1
 
-- **Status:** accepted
+- **Status:** proposed
 - **Date:** 2026-11-04
 
 ## Context
 
 Laravel's cache has `increment()` and `decrement()`. The public scan
-(`docs/research/cache-usage-in-the-wild.md`) found them in one of the scanned
+([cache-usage-in-the-wild.md](../research/cache-usage-in-the-wild.md)) found them in one of the scanned
 projects, Pixelfed: 6 `increment` and 3 `decrement` calls, next to a
 hand-written rate limiter in an API controller. LRVL-63 added `pull()` and
 `add()` to the facade (#51) and left counters to this ADR.
@@ -25,6 +25,8 @@ Counters do not fit the package as it is:
   without the cache (ADR 0007). That is safe for a copy that can be loaded
   again. A counter is the data itself: a lost view count is acceptable, a
   lost failed-login count is not, and the package cannot tell them apart.
+  A failed increment would be reported and skipped, and the caller would
+  never know the count is off.
 - **Invalidation.** `forget()`, `flushTag()` and `invalidated_by` throw entries
   away because they can be rebuilt. For a counter, the same calls reset data
   that cannot be rebuilt.
@@ -32,12 +34,22 @@ Counters do not fit the package as it is:
 Laravel already offers better homes for counted data:
 
 - **Rate limits and attempt counts:** `RateLimiter` (`hit()`, `attempts()`,
-  `tooManyAttempts()`) keeps its own keys and windows. The scanner lists it
-  as `indirect`, and lint never flags it (ADR 0011).
+  `tooManyAttempts()`) keeps its own keys and windows. It stores its counts
+  in the same cache store, so eviction, `cache:clear` or a Redis restart
+  without persistence loses them too. The difference is the error behaviour:
+  when Redis fails, `RateLimiter` throws instead of carrying on, so a
+  failure is never silent. The scanner lists it as `indirect`, and lint never
+  flags it (ADR 0011).
 - **Counts that must not be lost:** the database (`increment()` on a model or
   a query), where the count is durable and transactional.
 - **High-volume counters and data structures:** Redis directly, which the
-  scanner lists as `redis`, off for lint unless turned on (ADR 0011).
+  scanner lists as `redis`, off for lint unless turned on (ADR 0011). `INCR`
+  creates a missing key without a TTL, so the caller sets the expiry, as
+  ADR 0002's rule against entries that never expire asks.
+
+An `increment()` on an Eloquent model fires `updated` but not `saved`, so
+`HasCache` and `invalidated_by` do not see it today (LRVL-78). The guide
+warns about it until that is fixed.
 
 ## Options
 
@@ -81,8 +93,7 @@ The questions on LRVL-63 are answered by that, not by a design:
 
 ## Consequences
 
-- The facade's operation set stays the same: `remember`, `get`, `has`, `put`,
-  `add`, `pull`, `refresh`, `forget`, `flushTag`.
+- The facade gets no `increment()` or `decrement()`.
 - The guide says counters are not supported and where to keep them instead.
 - Moving a project that counts in the cache means moving those calls to
   `RateLimiter`, the database or Redis, not into a definition. The scanner

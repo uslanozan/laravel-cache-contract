@@ -37,9 +37,11 @@ model cache and the first commands.
   pulls one gets it (one `GETDEL` on Redis, which needs Redis 6.2+).
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
-  is down. During an outage each process reports the first error, then at
-  most one per `report_interval` (60 seconds), with a
-  `RedisErrorsNotReported` count of the errors left out per operation.
+  is down. It covers connection errors and a command Redis rejects in
+  `pull()`; any other exception propagates. During an outage each process
+  reports the first error, then at most one per `report_interval`
+  (60 seconds), with a `RedisErrorsNotReported` count of the errors left out
+  per operation.
 - **Model cache:** `ModelCache::for(User::class)->find()` and `findMany()`
   without a definition. Keys include the connection and its database;
   `withContext()` and `withTrashed()`; models with global scopes need a
@@ -107,3 +109,4 @@ The architecture decisions accepted for this release, in
 - [0008](docs/adr/0008-model-cache-stores-attributes.md) The model cache stores attributes, not serialized models
 - [0009](docs/adr/0009-invalidation-with-generation-counters.md) Group invalidation with generation counters, not cache tags
 - [0011](docs/adr/0011-scanner-scope-and-limits.md) Scanner scope and limits
+- [0012](docs/adr/0012-stampede-and-stale-writes.md) Stale writes after a forget, and stampede locks

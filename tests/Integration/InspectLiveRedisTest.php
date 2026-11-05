@@ -68,5 +68,5 @@ it('fails with one line when Redis cannot be reached', function () {
     $exit = Artisan::call('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--live' => true]);
 
     expect($exit)->toBe(1)
-        ->and(Artisan::output())->toContain('Could not read the generation counters from Redis');
+        ->and(Artisan::output())->toContain('Could not read the generation counters (RedisException: ');
 });

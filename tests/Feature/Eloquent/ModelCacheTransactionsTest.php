@@ -10,27 +10,13 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Ledger;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 /*
  * While a transaction is open on the model's connection, the model cache
  * reads entries but writes none (LRVL-39): the rows it loads may not be
  * committed, and a rollback would leave them in the cache.
  */
-
-/** Number of database queries $operation runs. */
-function transactionQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-
-    try {
-        $operation();
-    } finally {
-        DB::disableQueryLog();
-    }
-
-    return count(DB::getQueryLog());
-}
 
 /**
  * What RefreshDatabase and DatabaseTransactions do before each test
@@ -70,8 +56,8 @@ describe('inside a transaction on the model\'s connection', function () {
         ModelCache::for(Member::class)->findMany([1, 2]);
 
         DB::transaction(function () {
-            expect(transactionQueries(fn () => ModelCache::for(Member::class)->find(1)))->toBe(0)
-                ->and(transactionQueries(fn () => ModelCache::for(Member::class)->findMany([1, 2])))->toBe(0);
+            expect(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(1)))->toBe(0)
+                ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->findMany([1, 2])))->toBe(0);
         });
     });
 
@@ -116,7 +102,7 @@ describe('in tests that use RefreshDatabase or DatabaseTransactions', function (
         ModelCache::for(Member::class)->findMany([2]);
 
         expect(Cache::has(ModelCache::for(Member::class)->key(1)))->toBeTrue()
-            ->and(transactionQueries(fn () => ModelCache::for(Member::class)->findMany([1, 2])))->toBe(0);
+            ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->findMany([1, 2])))->toBe(0);
     });
 
     it('writes nothing inside a transaction the test opens itself', function () {

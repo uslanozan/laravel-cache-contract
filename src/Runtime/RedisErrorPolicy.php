@@ -12,8 +12,12 @@ use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
  * The "redis_errors" setting: throw or report, per kind of operation
  * (ADR 0007), and how often errors are reported.
  *
- * Only connection errors follow the policy. Any other exception, such as a
- * bug in a loader or an unknown store, always propagates.
+ * Only connection errors follow the policy, and a command Redis rejects
+ * where the package checks for it (pull(), ADR 0007 update 2026-11-04): phpredis
+ * answers a rejected command with false and keeps the error aside, and the
+ * package throws that error as a RedisException, so it follows the policy like
+ * an outage. Any other exception, such as a bug in a loader or an unknown
+ * store, always propagates.
  */
 final readonly class RedisErrorPolicy
 {
@@ -58,8 +62,10 @@ final readonly class RedisErrorPolicy
 
     public static function isConnectionError(Throwable $e): bool
     {
-        // phpredis. Predis' connection exception joins here if Predis is
-        // supported later (D13).
+        // phpredis, including a rejected command the package rethrows as a
+        // RedisException (see the class docblock), so not only an outage.
+        // Predis' connection exception joins here if Predis is supported
+        // later (D13).
         return $e instanceof RedisException;
     }
 

@@ -182,12 +182,14 @@ final class InspectCommand extends Command
 
     /**
      * The generations for the key: from --generation, from Redis with --live,
-     * or none. With --live, false when Redis could not be read and null when a
-     * counter does not exist yet; the reason is printed.
+     * or none. With --live, false when the counters could not be read and null
+     * when a counter does not exist yet; the reason is printed.
      *
      * @return array<string, int>|false|null
      *
      * @throws InvalidParameters
+     * @throws CacheContractException when the package's configuration is invalid
+     * @throws Throwable with -v, when the counters could not be read
      */
     private function generations(Definition $definition): array|false|null
     {
@@ -217,9 +219,20 @@ final class InspectCommand extends Command
         try {
             $values = $this->laravel->make(GenerationCounters::class)->peek($counters);
         } catch (CacheContractException $e) {
-            throw $e;
+            throw $e; // a configuration error, printed by handle()
         } catch (Throwable $e) {
-            $this->components->error('Could not read the generation counters from Redis: '.$e->getMessage());
+            // Most failures here are operational, not bugs: Redis down or rejecting the
+            // read, a cluster or Predis connection error, a misconfigured store. One line
+            // names the exception; -v shows the trace for the rest.
+            if ($this->output->isVerbose()) {
+                throw $e;
+            }
+
+            $this->components->error(sprintf(
+                'Could not read the generation counters (%s: %s). Run with -v for the trace.',
+                $e::class,
+                $e->getMessage(),
+            ));
 
             return false;
         }

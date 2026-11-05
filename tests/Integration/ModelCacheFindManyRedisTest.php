@@ -59,16 +59,16 @@ function findManyRedisCost(Closure $operation): array
     return ['queries' => $queries, 'redis' => $redis];
 }
 
-it('loads 100 models with one counter read, one MGET, one query and one bulk write', function () {
+it('loads 100 models with one counter read, one MGET, one query and one write per model', function () {
     $ids = [1, ...ModelCacheDatabase::addMembers(99)];
 
     $first = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(100));
     $second = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(100));
 
     // One MGET reads the generation counter (ADR 0009), created once with an
-    // atomic EVAL; one MGET reads the entries; the bulk write is one
-    // MULTI … EXEC transaction of 100 SETEX.
-    expect($first)->toBe(['queries' => 1, 'redis' => ['eval' => 1, 'exec' => 1, 'mget' => 2, 'multi' => 1, 'setex' => 100]])
+    // atomic EVAL; one MGET reads the entries; each model is written with its
+    // own compare-and-set EVAL (ADR 0012): 1 + 100.
+    expect($first)->toBe(['queries' => 1, 'redis' => ['eval' => 101, 'mget' => 2]])
         ->and($second)->toBe(['queries' => 0, 'redis' => ['mget' => 2]]);
 });
 
@@ -78,11 +78,10 @@ it('splits large lists into chunks', function () {
 
     $cost = findManyRedisCost(fn () => expect(ModelCache::for(Member::class)->findMany($ids))->toHaveCount(5));
 
-    // Three chunks of entries, plus one read of the generation counter.
+    // Three chunks of entries, plus one read of the generation counter; one
+    // compare-and-set per model, plus the EVAL that creates the counter.
     expect($cost['queries'])->toBe(3)
-        ->and($cost['redis']['mget'])->toBe(4)
-        ->and($cost['redis']['exec'])->toBe(3)
-        ->and($cost['redis']['setex'])->toBe(5);
+        ->and($cost['redis'])->toBe(['eval' => 6, 'mget' => 4]);
 });
 
 it('loads from the database when Redis is unreachable', function () {

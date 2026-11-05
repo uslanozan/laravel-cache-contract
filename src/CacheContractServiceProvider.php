@@ -126,6 +126,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $app->make(GenerationCounters::class),
             $app->make(ModelCacheConfig::class),
             $this->store($app),
+            $app->make(EntryStore::class),
         ));
     }
 

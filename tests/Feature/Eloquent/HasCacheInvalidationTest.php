@@ -18,21 +18,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\ReservedContextNote;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\ThrowingContextNote;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
-
-/** Number of database queries $operation runs. */
-function invalidationQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-
-    try {
-        $operation();
-    } finally {
-        DB::disableQueryLog();
-    }
-
-    return count(DB::getQueryLog());
-}
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 function renameMember(int $id, string $name): void
 {
@@ -109,7 +95,7 @@ describe('model events', function () {
         renameMember(1, 'Grace');
         DB::rollBack();
 
-        expect(invalidationQueries(fn () => expect(Member::cached(1)?->name)->toBe('Ada')))->toBe(0);
+        expect(QueryCounter::count(fn () => expect(Member::cached(1)?->name)->toBe('Ada')))->toBe(0);
     });
 
     it('clears the previous tenant\'s entry when a model moves to another tenant', function () {
@@ -140,8 +126,8 @@ describe('forgetCache() and flushCache()', function () {
         Member::cachedMany([1, 2]);
 
         expect(Member::query()->findOrFail(1)->forgetCache())->toBeTrue()
-            ->and(invalidationQueries(fn () => Member::cached(1)))->toBe(1)
-            ->and(invalidationQueries(fn () => Member::cached(2)))->toBe(0);
+            ->and(QueryCounter::count(fn () => Member::cached(1)))->toBe(1)
+            ->and(QueryCounter::count(fn () => Member::cached(2)))->toBe(0);
     });
 
     it('invalidates every entry of the model at once', function () {
@@ -150,7 +136,7 @@ describe('forgetCache() and flushCache()', function () {
 
         expect(Member::flushCache())->toBeTrue()
             ->and(ModelCache::for(Member::class)->key(1))->not->toBe($key)
-            ->and(invalidationQueries(fn () => Member::cachedMany([1, 2])))->toBe(1);
+            ->and(QueryCounter::count(fn () => Member::cachedMany([1, 2])))->toBe(1);
     });
 });
 

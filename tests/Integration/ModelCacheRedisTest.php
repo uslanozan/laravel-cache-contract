@@ -11,6 +11,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 /*
  * The model cache against real Redis (phpredis): the envelope and the
@@ -40,22 +41,11 @@ beforeEach(function () {
     ModelCacheDatabase::create();
 });
 
-/** Number of database queries $operation runs. */
-function modelCacheRedisQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-    $operation();
-    DB::disableQueryLog();
-
-    return count(DB::getQueryLog());
-}
-
 it('round-trips a model with its casts through Redis', function () {
     $loaded = ModelCache::for(Member::class)->find(1);
     $cached = null;
 
-    expect(modelCacheRedisQueries(function () use (&$cached) {
+    expect(QueryCounter::count(function () use (&$cached) {
         $cached = ModelCache::for(Member::class)->find(1);
     }))->toBe(0)
         ->and($cached->getAttributes())->toBe($loaded->getAttributes())
@@ -79,7 +69,7 @@ it('caches an ID with no row as null', function () {
     ModelCache::for(Member::class)->find(999);
 
     expect(Cache::store('model_cache')->get(ModelCache::for(Member::class)->key(999)))->toBe([null])
-        ->and(modelCacheRedisQueries(fn () => ModelCache::for(Member::class)->find(999)))->toBe(0);
+        ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(999)))->toBe(0);
 });
 
 it('keeps tenants apart in Redis', function () {

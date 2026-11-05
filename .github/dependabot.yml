@@ -16,6 +16,14 @@ updates:
       dev-tooling:
         dependency-type: development
         update-types: [minor, patch]
+    ignore:
+      # Pest 5 needs PHP 8.4+ and symfony/process 8 (Laravel 13 only), so it
+      # cannot run on PHP 8.3.36 or Laravel 11/12. Upgrade by hand once those
+      # are dropped (LRVL-76).
+      # A version range, not update-types: we commit no composer.lock, so
+      # Dependabot does not know the current version and skips update-types.
+      - dependency-name: pestphp/pest
+        versions: [">=5.0"]
 
   - package-ecosystem: github-actions
     directory: "/"

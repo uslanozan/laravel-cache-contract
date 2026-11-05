@@ -37,7 +37,8 @@ model cache and the first commands.
   pulls one gets it (one `GETDEL` on Redis, which needs Redis 6.2+).
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
-  is down.
+  is down. It covers connection errors and a command Redis rejects in
+  `pull()`; any other exception propagates.
 - **Model cache:** `ModelCache::for(User::class)->find()` and `findMany()`
   without a definition. Keys include the connection and its database;
   `withContext()` and `withTrashed()`; models with global scopes need a

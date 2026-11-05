@@ -110,9 +110,11 @@ Or pass `--live` to read the current values from Redis and see the key the
 application uses right now, the one to look for with `redis-cli`. `--live`
 only reads. A counter that does not exist yet is reported and not created:
 the next cache call creates it, so no entry of the definition is cached at
-that moment. When Redis cannot be reached, `inspect` prints one error line
-and exits with a non-zero code. `--generation` and `--live` cannot be used
-together.
+that moment. When the counters cannot be read (Redis is down or rejects the
+read, or the store is misconfigured), `inspect` prints one error line with
+the exception's class and message and exits with a non-zero code; run it
+with `-v` to see the stack trace instead. `--generation` and `--live` cannot
+be used together.
 
 A secret parameter is never accepted with `--param`: `inspect` asks for it
 without showing what you type, and prints only its hash. See

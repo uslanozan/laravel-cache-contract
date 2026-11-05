@@ -114,8 +114,10 @@ definition's [`invalidated_by`](definitions.md#invalidated_by); that needs no
 **Not seen by model events**, as in Eloquent itself: mass updates and deletes
 (`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL
 and changes from other applications. `increment()` and `decrement()` on a
-model are not seen either: they fire `updated` but not `saved` (LRVL-78). Call `User::flushCache()` after those, or
-keep the TTL short enough.
+model are not seen either: they fire `updated` but not `saved` (LRVL-78).
+Call `User::flushCache()` after a mass change and `$user->forgetCache()`
+after an `increment()` on one model, or keep the TTL short enough.
+`flushCache()` also avoids the gap below.
 
 **A read during a change:** a read that loads a row just before a change can
 write the old row back after the change clears it; it then stays until its

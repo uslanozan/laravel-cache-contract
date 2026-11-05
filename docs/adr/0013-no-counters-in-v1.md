@@ -1,6 +1,6 @@
 # 0013. No counters in v1
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-04
 
 ## Context
@@ -63,8 +63,11 @@ error rule.
   like every other cache value.
 - Cons: an exception to ADR 0007's envelope and error policy, and to how
   ADR 0009's invalidation treats entries; a TTL rule to choose and document;
-  a second write path to test against real Redis. Every user then has to
-  decide whether losing counts is acceptable, which the package cannot check.
+  a second write path to test against real Redis. ADR 0012 makes `forget()`
+  write a tombstone, so an `INCR` after a `forget()` fails with "value is
+  not an integer": a counter would also need its own removal path. Every
+  user then has to decide whether losing counts is acceptable, which the
+  package cannot check.
 
 ### B. No counters in v1
 

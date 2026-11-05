@@ -38,7 +38,10 @@ model cache and the first commands.
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
   is down. It covers connection errors and a command Redis rejects in
-  `pull()`; any other exception propagates.
+  `pull()`; any other exception propagates. During an outage the first error
+  is reported, then at most one per `report_interval` (60 seconds) in each
+  Octane or queue worker, or one per request under PHP-FPM, with a
+  `RedisErrorsNotReported` count of the errors left out per operation.
 - **Model cache:** `ModelCache::for(User::class)->find()` and `findMany()`
   without a definition. Keys include the connection and its database;
   `withContext()` and `withTrashed()`; models with global scopes need a

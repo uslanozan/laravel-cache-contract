@@ -21,8 +21,8 @@ use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
 use Uslanozan\CacheContract\Invalidation\AfterCommit;
 use Uslanozan\CacheContract\Runtime\Envelope;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
-use Uslanozan\CacheContract\Runtime\RedisErrorMode;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
+use Uslanozan\CacheContract\Runtime\RedisOperation;
 
 /**
  * Caches one model class by primary key, without a definition in the config
@@ -166,7 +166,7 @@ final readonly class ModelCache
         $id = $this->normalizeId($id);
         $this->makeKey($model, $id, 0); // checks the ID before any I/O
 
-        $generation = $this->generation($model, $this->errors->invalidate);
+        $generation = $this->generation($model, RedisOperation::Invalidate);
 
         if ($generation === false) {
             return false;
@@ -182,7 +182,7 @@ final readonly class ModelCache
                 $this->repository()->forget($this->makeKey($model, $id, $generation, $trashed));
             }
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->invalidate);
+            $this->errors->handle($e, RedisOperation::Invalidate);
 
             return false;
         }
@@ -219,7 +219,7 @@ final readonly class ModelCache
         $id = $this->normalizeId($id);
         $this->makeKey($model, $id, 0); // checks the ID before any I/O
 
-        $generation = $this->generation($model, $this->errors->read);
+        $generation = $this->generation($model, RedisOperation::Read);
 
         // Redis is down: answer from the database and write nothing (ADR 0007).
         if ($generation === false) {
@@ -294,7 +294,7 @@ final readonly class ModelCache
         }
 
         $connection = $this->connectionName($model);
-        $generation = $this->generation($model, $this->errors->read);
+        $generation = $this->generation($model, RedisOperation::Read);
         $readFailed = $generation === false;
 
         /** @var array<array-key, array{id: int|string, key: string}> $requested ID => its key */
@@ -399,12 +399,12 @@ final readonly class ModelCache
 
     /**
      * The model's generation counter, created if missing; false when Redis
-     * could not be reached (handled with $mode, ADR 0007).
+     * could not be reached (handled as $operation, ADR 0007).
      */
-    private function generation(Model $model, RedisErrorMode $mode): int|false
+    private function generation(Model $model, RedisOperation $operation): int|false
     {
         $counter = $this->counterName($model);
-        $values = $this->counters->current([$counter], $mode);
+        $values = $this->counters->current([$counter], $operation);
 
         return $values === false ? false : $values[$counter];
     }
@@ -501,7 +501,7 @@ final readonly class ModelCache
 
             return Envelope::isHit($entry) ? $entry : null;
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->read);
+            $this->errors->handle($e, RedisOperation::Read);
 
             return false;
         }
@@ -512,7 +512,7 @@ final readonly class ModelCache
         try {
             $this->repository()->put($key, Envelope::wrap($value), $this->definition->ttl);
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->write);
+            $this->errors->handle($e, RedisOperation::Write);
         }
     }
 
@@ -526,7 +526,7 @@ final readonly class ModelCache
             /** @var array<string, mixed> */
             return $this->repository()->many($keys);
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->read);
+            $this->errors->handle($e, RedisOperation::Read);
 
             return false;
         }
@@ -544,7 +544,7 @@ final readonly class ModelCache
             try {
                 $this->repository()->putMany($chunk, $this->definition->ttl);
             } catch (Throwable $e) {
-                $this->errors->handle($e, $this->errors->write);
+                $this->errors->handle($e, RedisOperation::Write);
 
                 return;
             }

@@ -24,6 +24,7 @@ use Uslanozan\CacheContract\Keys\ParameterEncoder;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
+use Uslanozan\CacheContract\Runtime\RedisErrorReporter;
 use Uslanozan\CacheContract\Similarity\DefaultSimilarityEngine;
 
 /**
@@ -71,10 +72,15 @@ class CacheContractServiceProvider extends ServiceProvider
         // Stateless and deterministic: safe to share.
         $this->app->singleton(SimilarityEngine::class, DefaultSimilarityEngine::class);
 
+        // Process state, not request state: when the last Redis error was reported
+        // and how many were left out since. Fixed size; resolved in boot().
+        $this->app->singleton(RedisErrorReporter::class);
+
         // One policy for every cache operation of the package (ADR 0007), so the
         // facade and the model cache follow the same "redis_errors" setting.
         $this->app->singleton(RedisErrorPolicy::class, fn (Application $app): RedisErrorPolicy => RedisErrorPolicy::fromConfig(
             (array) $this->config($app)->get('cache-contract.redis_errors', []),
+            $app->make(RedisErrorReporter::class),
         ));
 
         // Immutable and without context: withContext() returns a copy, so the
@@ -117,6 +123,12 @@ class CacheContractServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Octane serves each request from a copy of the booted application, and a
+        // singleton first resolved during a request is dropped with that copy.
+        // Resolved here, the reporter is shared by every request of the worker,
+        // so an outage is reported once per interval, not once per request.
+        $this->app->make(RedisErrorReporter::class);
+
         // Only the invalidated_by lists are read, without validating the definitions:
         // boot runs on every request, and a broken config must not stop the application.
         InvalidatedBy::listen($this->app->make('events'), $this->config($this->app)->get('cache-contract.definitions'));

@@ -44,14 +44,14 @@ final readonly class GenerationCounters
      *
      * @param  list<string>  $names
      * @return array<string, int>|false by name, or false when Redis could not be reached
-     *                                  (handled with $mode, ADR 0007)
+     *                                  (handled as $operation, ADR 0007)
      */
-    public function current(array $names, RedisErrorMode $mode): array|false
+    public function current(array $names, RedisOperation $operation): array|false
     {
         try {
             return $this->read($names);
         } catch (Throwable $e) {
-            $this->errors->handle($e, $mode);
+            $this->errors->handle($e, $operation);
 
             return false;
         }
@@ -110,7 +110,7 @@ final readonly class GenerationCounters
 
             return true;
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->invalidate);
+            $this->errors->handle($e, RedisOperation::Invalidate);
 
             return false;
         }

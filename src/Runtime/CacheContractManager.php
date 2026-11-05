@@ -104,7 +104,7 @@ final readonly class CacheContractManager
      */
     public function get(string $id, array $params = [], mixed $default = null): mixed
     {
-        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+        $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Read);
         $entry = $key === false ? false : $this->read($key);
 
         return Envelope::isHit($entry) ? Envelope::unwrap($entry) : value($default);
@@ -117,7 +117,7 @@ final readonly class CacheContractManager
      */
     public function has(string $id, array $params = []): bool
     {
-        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+        $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Read);
 
         return $key !== false && Envelope::isHit($this->read($key));
     }
@@ -131,7 +131,7 @@ final readonly class CacheContractManager
     public function put(string $id, array $params, mixed $value): bool
     {
         $definition = $this->definitions->get($id);
-        $key = $this->keyFor($definition, $params, $this->errors->write);
+        $key = $this->keyFor($definition, $params, RedisOperation::Write);
 
         return $key !== false && $this->write($definition, $key, $value);
     }
@@ -151,7 +151,7 @@ final readonly class CacheContractManager
     public function add(string $id, array $params, mixed $value): bool
     {
         $definition = $this->definitions->get($id);
-        $key = $this->keyFor($definition, $params, $this->errors->write);
+        $key = $this->keyFor($definition, $params, RedisOperation::Write);
 
         return $key !== false && $this->write($definition, $key, $value, onlyIfMissing: true);
     }
@@ -173,7 +173,7 @@ final readonly class CacheContractManager
      */
     public function pull(string $id, array $params = [], mixed $default = null): mixed
     {
-        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->read);
+        $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Read);
 
         if ($key === false) {
             return value($default);
@@ -185,7 +185,7 @@ final readonly class CacheContractManager
             try {
                 $entry = $this->takeFromRedis($store, $key);
             } catch (Throwable $e) {
-                $this->errors->handle($e, $this->errors->read);
+                $this->errors->handle($e, RedisOperation::Read);
 
                 return value($default);
             }
@@ -213,7 +213,7 @@ final readonly class CacheContractManager
         $definition = $this->definitions->get($id);
         // Read before the loader runs, so a value loaded across an invalidation
         // is written under the old generation and never read (ADR 0009).
-        $key = $this->keyFor($definition, $params, $this->errors->read);
+        $key = $this->keyFor($definition, $params, RedisOperation::Read);
         $entry = $key === false ? false : $this->read($key);
 
         if (Envelope::isHit($entry)) {
@@ -242,7 +242,7 @@ final readonly class CacheContractManager
     public function refresh(string $id, array $params, Closure $loader): mixed
     {
         $definition = $this->definitions->get($id);
-        $key = $this->keyFor($definition, $params, $this->errors->write);
+        $key = $this->keyFor($definition, $params, RedisOperation::Write);
 
         $value = $loader();
 
@@ -261,7 +261,7 @@ final readonly class CacheContractManager
      */
     public function forget(string $id, array $params = []): bool
     {
-        $key = $this->keyFor($this->definitions->get($id), $params, $this->errors->invalidate);
+        $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Invalidate);
 
         return $key !== false && $this->remove($key);
     }
@@ -289,12 +289,12 @@ final readonly class CacheContractManager
 
     /**
      * The key, with the generations of the definition's counters read in one
-     * call; false when Redis could not be reached (handled with $mode,
+     * call; false when Redis could not be reached (handled as $operation,
      * ADR 0007). A definition without counters needs no Redis here.
      *
      * @param  array<string, mixed>  $params
      */
-    private function keyFor(Definition $definition, array $params, RedisErrorMode $mode): string|false
+    private function keyFor(Definition $definition, array $params, RedisOperation $operation): string|false
     {
         $key = $this->keys->make($definition, $params, $this->context); // checks the parameters before any I/O
         $counters = $definition->generationCounters();
@@ -303,7 +303,7 @@ final readonly class CacheContractManager
             return $key;
         }
 
-        $generations = $this->counters->current($counters, $mode);
+        $generations = $this->counters->current($counters, $operation);
 
         return $generations === false ? false : $this->keys->make($definition, $params, $this->context, $generations);
     }
@@ -319,7 +319,7 @@ final readonly class CacheContractManager
 
             return Envelope::isHit($entry) ? $entry : null;
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->read);
+            $this->errors->handle($e, RedisOperation::Read);
 
             return false;
         }
@@ -338,7 +338,7 @@ final readonly class CacheContractManager
                 ? $this->repository()->add($key, Envelope::wrap($value), $definition->ttl)
                 : $this->repository()->put($key, Envelope::wrap($value), $definition->ttl);
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->write);
+            $this->errors->handle($e, RedisOperation::Write);
 
             return false;
         }
@@ -353,7 +353,7 @@ final readonly class CacheContractManager
         try {
             return $this->repository()->forget($key);
         } catch (Throwable $e) {
-            $this->errors->handle($e, $this->errors->invalidate);
+            $this->errors->handle($e, RedisOperation::Invalidate);
 
             return false;
         }

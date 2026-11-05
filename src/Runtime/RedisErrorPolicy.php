@@ -10,7 +10,7 @@ use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
 /**
  * The "redis_errors" setting: throw or report, per kind of operation
- * (ADR 0007).
+ * (ADR 0007), and how often errors are reported.
  *
  * Only connection errors follow the policy, and a command Redis rejects
  * where the package checks for it (pull(), ADR 0007 update 2026-11-04): phpredis
@@ -21,10 +21,18 @@ use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
  */
 final readonly class RedisErrorPolicy
 {
+    public const DEFAULT_REPORT_INTERVAL = 60;
+
+    /**
+     * @param  int  $reportInterval  seconds between two reported errors; 0 reports every one
+     * @param  RedisErrorReporter  $reporter  holds the state of the process: share one instance
+     */
     public function __construct(
         public RedisErrorMode $read = RedisErrorMode::Report,
         public RedisErrorMode $write = RedisErrorMode::Report,
         public RedisErrorMode $invalidate = RedisErrorMode::Report,
+        public int $reportInterval = self::DEFAULT_REPORT_INTERVAL,
+        private RedisErrorReporter $reporter = new RedisErrorReporter,
     ) {}
 
     /**
@@ -32,13 +40,24 @@ final readonly class RedisErrorPolicy
      *
      * @throws InvalidConfiguration
      */
-    public static function fromConfig(array $config): self
+    public static function fromConfig(array $config, RedisErrorReporter $reporter = new RedisErrorReporter): self
     {
         return new self(
-            self::mode($config, 'read'),
-            self::mode($config, 'write'),
-            self::mode($config, 'invalidate'),
+            self::modeFrom($config, RedisOperation::Read),
+            self::modeFrom($config, RedisOperation::Write),
+            self::modeFrom($config, RedisOperation::Invalidate),
+            self::interval($config),
+            $reporter,
         );
+    }
+
+    public function mode(RedisOperation $operation): RedisErrorMode
+    {
+        return match ($operation) {
+            RedisOperation::Read => $this->read,
+            RedisOperation::Write => $this->write,
+            RedisOperation::Invalidate => $this->invalidate,
+        };
     }
 
     public static function isConnectionError(Throwable $e): bool
@@ -51,18 +70,19 @@ final readonly class RedisErrorPolicy
     }
 
     /**
-     * Rethrows $e unless it is a connection error and $mode is Report; then
-     * reports it, and the caller continues without the cache.
+     * Rethrows $e unless it is a connection error and the mode of $operation
+     * is Report; then reports it, at most once per report interval, and the
+     * caller continues without the cache.
      *
      * @throws Throwable
      */
-    public function handle(Throwable $e, RedisErrorMode $mode): void
+    public function handle(Throwable $e, RedisOperation $operation): void
     {
-        if ($mode === RedisErrorMode::Throw || ! self::isConnectionError($e)) {
+        if ($this->mode($operation) === RedisErrorMode::Throw || ! self::isConnectionError($e)) {
             throw $e;
         }
 
-        report($e);
+        $this->reporter->report($e, $operation, $this->reportInterval);
     }
 
     /**
@@ -70,14 +90,37 @@ final readonly class RedisErrorPolicy
      *
      * @throws InvalidConfiguration
      */
-    private static function mode(array $config, string $operation): RedisErrorMode
+    private static function modeFrom(array $config, RedisOperation $operation): RedisErrorMode
     {
-        $value = $config[$operation] ?? RedisErrorMode::Report->value;
+        $value = $config[$operation->value] ?? RedisErrorMode::Report->value;
         $mode = is_string($value) ? RedisErrorMode::tryFrom($value) : null;
 
         return $mode ?? throw InvalidConfiguration::forKey(
-            "redis_errors.{$operation}",
+            "redis_errors.{$operation->value}",
             sprintf('expected "throw" or "report", got %s', is_string($value) ? '"'.$value.'"' : get_debug_type($value)),
+        );
+    }
+
+    /**
+     * @param  array<mixed>  $config
+     *
+     * @throws InvalidConfiguration
+     */
+    private static function interval(array $config): int
+    {
+        $value = $config['report_interval'] ?? self::DEFAULT_REPORT_INTERVAL;
+
+        if (is_int($value) && $value >= 0) {
+            return $value;
+        }
+
+        throw InvalidConfiguration::forKey(
+            'redis_errors.report_interval',
+            sprintf(
+                'expected a whole number of seconds, 0 or more, got %s%s',
+                is_string($value) ? '"'.$value.'"' : (is_int($value) ? (string) $value : get_debug_type($value)),
+                is_string($value) && is_numeric($value) ? '; a numeric string from env() must be cast: (int) env(...)' : '',
+            ),
         );
     }
 }

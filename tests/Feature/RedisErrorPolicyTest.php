@@ -271,6 +271,24 @@ describe('reports during an outage', function () {
         Exceptions::assertReportedCount(3); // two errors and the summary of the one left out
     });
 
+    it('does not hold reports back when the clock steps back', function () {
+        CacheContract::get('external.exchange_rates');
+        CacheContract::get('external.exchange_rates');
+        Exceptions::assertReportedCount(1);
+
+        // NTP moves the clock back: the error is reported at once, not 30 seconds later.
+        $this->travelTo(now()->subSeconds(30));
+        CacheContract::get('external.exchange_rates');
+
+        Exceptions::assertReportedCount(3); // the error and the summary of the one left out
+        Exceptions::assertReported(fn (RedisErrorsNotReported $e): bool => $e->context() === ['not_reported' => ['read' => 1], 'seconds' => 0]);
+
+        // A new interval starts from the new time.
+        $this->travel(59)->seconds();
+        CacheContract::get('external.exchange_rates');
+        Exceptions::assertReportedCount(3);
+    });
+
     it('reports every error with report_interval 0', function () {
         redisErrors(['report_interval' => 0]);
 
@@ -313,7 +331,18 @@ it('rejects a report_interval that is not a whole number of seconds, 0 or more',
         ->toThrow(InvalidConfiguration::class, '"cache-contract.redis_errors.report_interval": expected a whole number of seconds, 0 or more, got '.$got);
 })->with([
     'negative' => [-1, '-1'],
-    'numeric string' => ['60', '"60"'],
+    'numeric string, with a hint for env()' => ['60', '"60"; a numeric string from env() must be cast: (int) env(...)'],
     'float' => [1.5, 'float'],
     'text' => ['one minute', '"one minute"'],
 ]);
+
+it('gives the env() hint only for a numeric string', function () {
+    redisErrors(['report_interval' => 'one minute']);
+
+    try {
+        app(CacheContractManager::class);
+        $this->fail('Expected InvalidConfiguration.');
+    } catch (InvalidConfiguration $e) {
+        expect($e->getMessage())->not->toContain('env()');
+    }
+});

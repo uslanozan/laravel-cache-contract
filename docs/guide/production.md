@@ -26,16 +26,17 @@ cache. This is set per kind of operation in `config/cache-contract.php`
   exception, such as one thrown by your loader, always propagates.
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
-- With `report`, an outage is reported once per minute per process, not once
-  per call: see [Reports during an outage](#reports-during-an-outage).
+- With `report`, an outage is not reported once per call: once per minute in
+  each Octane or queue worker, once per request under PHP-FPM. See
+  [Reports during an outage](#reports-during-an-outage).
 - An invalid value (anything other than `report` or `throw`) throws
   `InvalidConfiguration` on the first call.
 
 ## Reports during an outage
 
 When Redis is down, every cache call fails. To keep the log and the error
-tracker readable, each PHP process reports the first connection error, then
-at most one per `report_interval` seconds:
+tracker readable, the package reports the first connection error, then at
+most one per `report_interval` seconds:
 
 ```php
 'redis_errors' => [
@@ -54,8 +55,17 @@ after the interval comes with a second report, `RedisErrorsNotReported`:
 Its log context has the same counts (`not_reported`, `seconds`). `invalidate`
 errors matter most: each one may have left a stale entry until its TTL ends.
 
-- The limit is per process. With 20 PHP-FPM workers, Octane workers or queue
-  workers, an outage gives up to 20 reports per interval.
+- **The interval holds in long-running processes**, which keep the
+  package's state between requests and jobs: Octane workers, queue workers,
+  `schedule:work`. Each worker has its own interval.
+- **Under PHP-FPM**, the application is built again for every request and
+  nothing in memory survives it, so every request starts with no interval:
+  its first error is reported, and the others in the same request are only
+  counted. A page with 30 failing cache calls gives 1 report instead of 30,
+  but 1,000 requests a minute still give about 1,000 reports a minute; rely
+  on your error tracker's grouping or rate limits for those. The counts of a
+  request are lost when it ends, unless an error after the interval carries
+  them.
 - One interval covers reads, writes and invalidations together; only the
   counts are kept apart.
 - The counts of the last interval can be lost: when Redis comes back, no

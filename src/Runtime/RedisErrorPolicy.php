@@ -117,8 +117,9 @@ final readonly class RedisErrorPolicy
         throw InvalidConfiguration::forKey(
             'redis_errors.report_interval',
             sprintf(
-                'expected a whole number of seconds, 0 or more, got %s',
+                'expected a whole number of seconds, 0 or more, got %s%s',
                 is_string($value) ? '"'.$value.'"' : (is_int($value) ? (string) $value : get_debug_type($value)),
+                is_string($value) && is_numeric($value) ? '; a numeric string from env() must be cast: (int) env(...)' : '',
             ),
         );
     }

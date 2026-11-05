@@ -59,9 +59,11 @@ return [
     |
     | Consider "throw" for all three in your test suite, so failures show.
     |
-    | report_interval: during an outage every call fails, so each process
+    | report_interval: during an outage every call fails, so the package
     | reports the first error, then at most one per this many seconds, with
-    | a count of the errors it left out. 0 reports every error.
+    | a count of the errors it left out. 0 reports every error. The interval
+    | holds in each Octane or queue worker; under PHP-FPM, where nothing
+    | outlives a request, it is one report per request.
     |
     */
 

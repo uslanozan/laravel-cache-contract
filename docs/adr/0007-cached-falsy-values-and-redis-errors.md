@@ -181,7 +181,7 @@ of #18). Laravel's `throttle()` for reported exceptions does not help: its
 `RateLimiter` keeps the count in the cache, usually the same Redis, and when
 that fails Laravel reports the exception anyway.
 
-**Decision:** each process reports the first connection error, then at most
+**Decision:** the package reports the first connection error, then at most
 one per `redis_errors.report_interval`, **60 seconds** by default; `0`
 reports every error, as before.
 
@@ -196,18 +196,26 @@ reports every error, as before.
   process, not to a request: it has a fixed size and lives in a
   `RedisErrorReporter` singleton, resolved at boot so that every Octane
   request of a worker shares it. The policy itself stays immutable. Time
-  comes from `Date`, so tests can move the clock.
+  comes from `Date`, so tests can move the clock. A clock that steps back
+  (NTP) counts as an elapsed interval, so reports are not held back until
+  it catches up.
 - `throw` is not limited: every error is thrown.
 
 **Consequences:**
 
-- The limit is per process: 20 workers give up to 20 reports per interval.
-  The guide says so.
+- **The interval holds only in long-running processes** (Octane, queue
+  workers, `schedule:work`), each with its own. Under PHP-FPM the
+  application is built again for every request, so the reporter starts
+  empty each time and the limit is one report per request: a page with 30
+  failing calls gives 1 report instead of 30, but 1,000 requests a minute
+  still give about 1,000 reports a minute. A limit across FPM processes
+  needs state they share without Redis (APCu, where it is installed); that
+  is a separate decision. The guide says so.
 - The counts of the last interval are lost when no error follows it, for
   example when Redis comes back. Accepted, and in the guide.
 - Any `RedisException` counts, also one that is not about the connection
-  (`WRONGTYPE`): after an outage report, such an error is counted, not
-  reported, until the interval ends.
+  (`WRONGTYPE`, or a command Redis rejects in `pull()`): after an outage
+  report, such an error is counted, not reported, until the interval ends.
 - **Still no circuit breaker.** This changes only how errors are reported;
   every call still tries Redis and pays the connection timeout. Skipping
   Redis for a while after errors changes how the package behaves, so it

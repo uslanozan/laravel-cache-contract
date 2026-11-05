@@ -17,7 +17,8 @@ use Uslanozan\CacheContract\Exceptions\RedisErrorsNotReported;
  * counted, and the first one after it is reported with those counts. The
  * state belongs to the process, not to a request: it has a fixed size (a
  * timestamp and three counts), and on Octane and queue workers it is meant to
- * outlive the request or job.
+ * outlive the request or job. Under PHP-FPM nothing outlives the request, so
+ * the limit is one report per request there.
  */
 final class RedisErrorReporter
 {
@@ -33,22 +34,25 @@ final class RedisErrorReporter
     public function report(Throwable $e, RedisOperation $operation, int $interval): void
     {
         $now = Date::now()->getTimestamp();
+        $elapsed = $this->reportedAt === null ? null : $now - $this->reportedAt;
 
-        if ($interval > 0 && $this->reportedAt !== null && $now - $this->reportedAt < $interval) {
+        // A negative difference means the clock stepped back (NTP). It counts as
+        // an elapsed interval, so reports are not held back until the clock
+        // catches up.
+        if ($interval > 0 && $elapsed !== null && $elapsed >= 0 && $elapsed < $interval) {
             $this->notReported[$operation->value] = ($this->notReported[$operation->value] ?? 0) + 1;
 
             return;
         }
 
         $counts = $this->counts();
-        $since = $this->reportedAt;
         $this->reportedAt = $now;
         $this->notReported = [];
 
         report($e);
 
-        if ($counts !== [] && $since !== null) {
-            report(RedisErrorsNotReported::since($counts, $now - $since));
+        if ($counts !== [] && $elapsed !== null) {
+            report(RedisErrorsNotReported::since($counts, max(0, $elapsed)));
         }
     }
 

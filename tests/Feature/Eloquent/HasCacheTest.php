@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
 use Uslanozan\CacheContract\Eloquent\ModelCache as ModelCacheService;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
@@ -11,21 +10,7 @@ use Uslanozan\CacheContract\Facades\ModelCache;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
-
-/** Number of database queries $operation runs. */
-function hasCacheQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-
-    try {
-        $operation();
-    } finally {
-        DB::disableQueryLog();
-    }
-
-    return count(DB::getQueryLog());
-}
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 beforeEach(function () {
     ModelCacheDatabase::create();
@@ -34,7 +19,7 @@ beforeEach(function () {
 
 it('caches a model with cached() under the same entry as ModelCache', function () {
     expect(Member::cached(1)?->name)->toBe('Ada')
-        ->and(hasCacheQueries(fn () => expect(ModelCache::for(Member::class)->find(1)?->name)->toBe('Ada')))->toBe(0)
+        ->and(QueryCounter::count(fn () => expect(ModelCache::for(Member::class)->find(1)?->name)->toBe('Ada')))->toBe(0)
         ->and(Member::cached(999))->toBeNull();
 });
 
@@ -42,7 +27,7 @@ it('loads many models with cachedMany(), in the order asked for', function () {
     ModelCache::for(Member::class)->find(3);
     $members = null;
 
-    expect(hasCacheQueries(function () use (&$members) {
+    expect(QueryCounter::count(function () use (&$members) {
         $members = Member::cachedMany([3, 1, 2]);
     }))->toBe(1)
         ->and($members)->toBeInstanceOf(Collection::class)

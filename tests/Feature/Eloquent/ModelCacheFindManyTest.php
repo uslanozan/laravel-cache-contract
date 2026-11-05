@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
@@ -15,17 +14,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Article;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
-
-/** Number of database queries $operation runs. */
-function findManyQueries(Closure $operation): int
-{
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-    $operation();
-    DB::disableQueryLog();
-
-    return count(DB::getQueryLog());
-}
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 
 /** Routes the package's cache through a FailingStore and returns it. */
 function findManyFailingStore(): FailingStore
@@ -57,7 +46,7 @@ it('returns the models in the order asked for, loading only the misses with one 
     ModelCache::for(Member::class)->find(4);
     $members = null;
 
-    expect(findManyQueries(function () use (&$members) {
+    expect(QueryCounter::count(function () use (&$members) {
         $members = ModelCache::for(Member::class)->findMany([4, 1, 3, 2]);
     }))->toBe(1)
         ->and(findManyNames($members))->toBe(['Member 4', 'Ada', 'Member 3', 'Member 2']);
@@ -66,13 +55,13 @@ it('returns the models in the order asked for, loading only the misses with one 
 it('serves every model from the cache the second time', function () {
     ModelCache::for(Member::class)->findMany([1, 2, 3]);
 
-    expect(findManyQueries(fn () => expect(findManyNames(ModelCache::for(Member::class)->findMany([3, 2, 1])))
+    expect(QueryCounter::count(fn () => expect(findManyNames(ModelCache::for(Member::class)->findMany([3, 2, 1])))
         ->toBe(['Member 3', 'Member 2', 'Ada'])))->toBe(0);
 });
 
 it('leaves out an ID with no row and caches it as null', function () {
     expect(findManyNames(ModelCache::for(Member::class)->findMany([1, 999, 2])))->toBe(['Ada', 'Member 2'])
-        ->and(findManyQueries(fn () => ModelCache::for(Member::class)->findMany([999])))->toBe(0)
+        ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->findMany([999])))->toBe(0)
         ->and(ModelCache::for(Member::class)->find(999))->toBeNull();
 });
 
@@ -83,7 +72,7 @@ it('returns a repeated ID once and treats "1" as 1', function () {
 it('does no I/O for an empty list', function () {
     $store = findManyFailingStore();
 
-    expect(findManyQueries(fn () => expect(ModelCache::for(Member::class)->findMany([]))->toBeEmpty()))->toBe(0)
+    expect(QueryCounter::count(fn () => expect(ModelCache::for(Member::class)->findMany([]))->toBeEmpty()))->toBe(0)
         ->and($store->calls)->toBe([]);
 });
 
@@ -92,14 +81,14 @@ it('returns an Eloquent collection, so relations load for all models in one quer
     $members = ModelCache::for(Member::class)->findMany([1, 2, 3]);
 
     expect($members)->toBeInstanceOf(Collection::class)
-        ->and(findManyQueries(fn () => $members->load('organization')))->toBe(1)
+        ->and(QueryCounter::count(fn () => $members->load('organization')))->toBe(1)
         ->and($members->every(fn (Member $member) => $member->relationLoaded('organization')))->toBeTrue();
 });
 
 it('checks every ID before any I/O and stops at an invalid one', function () {
     $store = findManyFailingStore();
 
-    expect(findManyQueries(fn () => expect(fn () => ModelCache::for(Member::class)->findMany([1, 'abc', 3]))
+    expect(QueryCounter::count(fn () => expect(fn () => ModelCache::for(Member::class)->findMany([1, 'abc', 3]))
         ->toThrow(InvalidParameters::class)))->toBe(0)
         ->and(fn () => ModelCache::for(Member::class)->findMany([1, ' 2']))->toThrow(InvalidParameters::class)
         ->and($store->calls)->toBe([]);
@@ -109,9 +98,9 @@ it('splits large lists into chunks for the reads and the query', function () {
     config()->set('cache-contract.models.chunk_size', 2);
     ModelCacheDatabase::addMembers(1); // member 5
 
-    expect(findManyQueries(fn () => expect(ModelCache::for(Member::class)->findMany([5, 4, 3, 2, 1]))->toHaveCount(5)))
+    expect(QueryCounter::count(fn () => expect(ModelCache::for(Member::class)->findMany([5, 4, 3, 2, 1]))->toHaveCount(5)))
         ->toBe(3)
-        ->and(findManyQueries(fn () => ModelCache::for(Member::class)->findMany([1, 2, 3, 4, 5])))->toBe(0);
+        ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->findMany([1, 2, 3, 4, 5])))->toBe(0);
 });
 
 it('rejects a chunk size that is not a positive integer', function () {

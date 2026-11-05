@@ -110,3 +110,4 @@ The architecture decisions accepted for this release, in
 - [0009](docs/adr/0009-invalidation-with-generation-counters.md) Group invalidation with generation counters, not cache tags
 - [0011](docs/adr/0011-scanner-scope-and-limits.md) Scanner scope and limits
 - [0012](docs/adr/0012-stampede-and-stale-writes.md) Stale writes after a forget, and stampede locks
+- [0013](docs/adr/0013-no-counters-in-v1.md) No counters in v1

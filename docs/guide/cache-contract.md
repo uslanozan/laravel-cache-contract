@@ -164,6 +164,27 @@ without the cache: `remember()` runs the loader, `put()` returns `false`.
 This is set per operation with `redis_errors`; see
 [Production](production.md#when-redis-is-down).
 
+## No counters
+
+There is no `increment()` or `decrement()`. A counter is the data itself, not
+a copy that can be loaded again, so it does not fit the mandatory TTL, the
+[envelope](#cached-null-false-and-0) or the
+["carry on without Redis"](production.md#when-redis-is-down) default
+(ADR 0013). Keep counted data where it belongs:
+
+- **Rate limits and attempt counts:** Laravel's `RateLimiter`
+  (`RateLimiter::hit()`, `tooManyAttempts()`). It throws when Redis fails, so
+  a failure does not go unnoticed.
+- **Counts that must not be lost:** the database (`$post->increment('views')`).
+  An `increment()` or `decrement()` on a model fires no `saved` event, so it
+  clears neither that model's [cache](model-cache.md) nor definitions with
+  the model in `invalidated_by`. Call `$post->forgetCache()` after it for the
+  model cache; for those definitions, call `flushTag()` if they have a tag,
+  or keep their TTL short.
+- **High-volume counters:** Redis directly. `INCR` creates a missing key
+  without a TTL, so set the expiry yourself, for example with `EXPIRE` in the
+  same `MULTI`; otherwise the keys never expire in a shared Redis.
+
 ## Errors
 
 | Exception | When |

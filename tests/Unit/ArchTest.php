@@ -26,6 +26,7 @@ arch('value objects are immutable')
         'Uslanozan\CacheContract\Similarity\TokenizedName',
         'Uslanozan\CacheContract\Scanner\CacheUsage',
         'Uslanozan\CacheContract\Scanner\ScanResult',
+        'Uslanozan\CacheContract\Runtime\StoredEntry',
     ])
     ->toBeReadonly()
     ->toBeFinal();
@@ -36,6 +37,7 @@ arch('the cache manager is immutable')
     ->expect([
         'Uslanozan\CacheContract\Runtime\CacheContractManager',
         'Uslanozan\CacheContract\Runtime\GenerationCounters',
+        'Uslanozan\CacheContract\Runtime\EntryStore',
     ])
     ->toBeReadonly()
     ->toBeFinal();

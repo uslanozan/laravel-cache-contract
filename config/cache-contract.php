@@ -76,6 +76,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tombstone TTL
+    |--------------------------------------------------------------------------
+    |
+    | forget() and pull() leave a short-lived tombstone instead of deleting
+    | the entry, so a remember() whose loader started before the removal does
+    | not write its old value back (ADR 0012). Seconds a tombstone lives: it
+    | should outlast your slowest loader. A loader that starts after the
+    | removal replaces the tombstone at once, so a longer value only costs
+    | memory.
+    |
+    */
+
+    'tombstone_ttl' => 10,
+
+    /*
+    |--------------------------------------------------------------------------
     | Model cache
     |--------------------------------------------------------------------------
     |

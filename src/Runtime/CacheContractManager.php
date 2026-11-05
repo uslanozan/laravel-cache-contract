@@ -8,8 +8,6 @@ use Closure;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository;
-use Illuminate\Redis\Connections\PhpRedisConnection;
-use RedisException;
 use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
@@ -34,6 +32,10 @@ use Uslanozan\CacheContract\Exceptions\UnknownTag;
  * A definition with tags or invalidated_by reads its generation counters
  * first, in one call, and their values end the key (ADR 0009).
  *
+ * A removal leaves a tombstone, and a loader writes only if the key still
+ * holds what its read found, so a value loaded before forget() or pull() is
+ * not written back after it (ADR 0012).
+ *
  * Immutable: withContext() returns a new instance and never changes this one,
  * so the shared instance carries no tenant or locale from one request or job
  * to the next (Octane, queue workers).
@@ -51,6 +53,7 @@ final readonly class CacheContractManager
         private RedisErrorPolicy $errors,
         private GenerationCounters $counters,
         private TagRegistry $tags,
+        private EntryStore $entries = new EntryStore,
         private ?string $store = null,
         private array $context = [],
     ) {}
@@ -63,7 +66,7 @@ final readonly class CacheContractManager
      */
     public function withContext(array $context): self
     {
-        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->counters, $this->tags, $this->store, array_merge($this->context, $context));
+        return new self($this->cache, $this->definitions, $this->keys, $this->errors, $this->counters, $this->tags, $this->entries, $this->store, array_merge($this->context, $context));
     }
 
     /**
@@ -107,7 +110,7 @@ final readonly class CacheContractManager
         $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Read);
         $entry = $key === false ? false : $this->read($key);
 
-        return Envelope::isHit($entry) ? Envelope::unwrap($entry) : value($default);
+        return $entry !== false && $entry->isHit() ? $entry->value() : value($default);
     }
 
     /**
@@ -119,7 +122,13 @@ final readonly class CacheContractManager
     {
         $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Read);
 
-        return $key !== false && Envelope::isHit($this->read($key));
+        if ($key === false) {
+            return false;
+        }
+
+        $entry = $this->read($key);
+
+        return $entry !== false && $entry->isHit();
     }
 
     /**
@@ -138,8 +147,10 @@ final readonly class CacheContractManager
 
     /**
      * Caches a value only when none is cached yet, for the definition's TTL.
-     * On Redis it is one atomic command: of two concurrent calls, one writes.
-     * A cached null counts as cached.
+     * On Redis the check and the write are one script: of two concurrent
+     * calls, one writes. A cached null counts as cached, and so does a value
+     * other code wrote under the key; a tombstone left by forget() or pull()
+     * does not (ADR 0012).
      *
      * Not a "run once" guarantee for a definition with tags or invalidated_by:
      * its generation counters are read first, and a change in between gives
@@ -153,17 +164,29 @@ final readonly class CacheContractManager
         $definition = $this->definitions->get($id);
         $key = $this->keyFor($definition, $params, RedisOperation::Write);
 
-        return $key !== false && $this->write($definition, $key, $value, onlyIfMissing: true);
+        if ($key === false) {
+            return false;
+        }
+
+        try {
+            return $this->entries->add($this->repository(), $key, Envelope::wrap($value), $definition->ttl);
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Write);
+
+            return false;
+        }
     }
 
     /**
      * The cached value, removed in the same call, or $default when nothing is
-     * cached. On Redis, reading and removing are one command (GETDEL), so of
-     * two concurrent pulls exactly one gets the value, and a value written in
-     * between is never removed by mistake. Laravel's Cache::pull() reads and
-     * deletes in two steps, so both would get it. Other stores read, then
-     * delete, and hand the value only to the call whose delete removed an
-     * entry; that is not atomic.
+     * cached. On Redis, one script reads the value and leaves a tombstone in
+     * its place (ADR 0012), so of two concurrent pulls exactly one gets the
+     * value, a value written in between is never removed by mistake, and a
+     * loader that read before the pull cannot write the value back. Laravel's
+     * Cache::pull() reads and deletes in two steps, so both would get it.
+     * Other stores read, then delete, and hand the value only to the call
+     * whose delete removed an entry; that is not atomic, and leaves no
+     * tombstone.
      *
      * When the cache cannot be reached, $default is returned: a value that
      * may not have been removed is not handed out.
@@ -183,24 +206,28 @@ final readonly class CacheContractManager
 
         if ($store instanceof RedisStore) {
             try {
-                $entry = $this->takeFromRedis($store, $key);
+                $entry = $this->entries->take($store, $key);
             } catch (Throwable $e) {
                 $this->errors->handle($e, RedisOperation::Read);
 
                 return value($default);
             }
 
-            return Envelope::isHit($entry) ? Envelope::unwrap($entry) : value($default);
+            return $entry->isHit() ? $entry->value() : value($default);
         }
 
         $entry = $this->read($key);
 
-        return Envelope::isHit($entry) && $this->remove($key) ? Envelope::unwrap($entry) : value($default);
+        return $entry !== false && $entry->isHit() && $this->remove($key) ? $entry->value() : value($default);
     }
 
     /**
      * The cached value; on a miss, runs $loader, caches its result and
      * returns it. A null result is cached too.
+     *
+     * The result is written only if the key still holds what the read found
+     * (ADR 0012): after a forget() or pull() while the loader ran, the loaded
+     * value may be old, so it is returned but not cached.
      *
      * @template TValue
      *
@@ -216,15 +243,15 @@ final readonly class CacheContractManager
         $key = $this->keyFor($definition, $params, RedisOperation::Read);
         $entry = $key === false ? false : $this->read($key);
 
-        if (Envelope::isHit($entry)) {
-            return Envelope::unwrap($entry);
+        if ($entry !== false && $entry->isHit()) {
+            return $entry->value();
         }
 
         $value = $loader();
 
         // When the read failed, Redis is down: skip the write that would fail too.
         if ($key !== false && $entry !== false) {
-            $this->write($definition, $key, $value);
+            $this->writeLoaded($definition, $key, $entry, $value);
         }
 
         return $value;
@@ -254,16 +281,19 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Removes the cached value.
+     * Removes the cached value by leaving a tombstone in its place for
+     * "tombstone_ttl" seconds, so a loader that read before this call does
+     * not write its old value back (ADR 0012).
      *
      * @param  array<string, mixed>  $params
-     * @return bool false when nothing was removed or Redis could not be reached
+     * @return bool true when the tombstone was written, whether or not a value
+     *              was cached; false only when Redis could not be reached
      */
     public function forget(string $id, array $params = []): bool
     {
         $key = $this->keyFor($this->definitions->get($id), $params, RedisOperation::Invalidate);
 
-        return $key !== false && $this->remove($key);
+        return $key !== false && $this->bury($key);
     }
 
     /**
@@ -309,15 +339,12 @@ final readonly class CacheContractManager
     }
 
     /**
-     * @return array{0: mixed}|false|null the envelope on a hit, null on a miss,
-     *                                    false when Redis could not be reached
+     * What the key holds; false when Redis could not be reached.
      */
-    private function read(string $key): array|false|null
+    private function read(string $key): StoredEntry|false
     {
         try {
-            $entry = $this->repository()->get($key);
-
-            return Envelope::isHit($entry) ? $entry : null;
+            return $this->entries->read($this->repository(), $key);
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Read);
 
@@ -326,17 +353,13 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Writes the value in the envelope for the definition's TTL; with
-     * $onlyIfMissing only when nothing is cached (add). A failure follows the
-     * "write" policy, also when a store without a native add() fails the read
-     * it does first.
+     * Writes the value in the envelope for the definition's TTL, whatever the
+     * key holds: put() and refresh(). A failure follows the "write" policy.
      */
-    private function write(Definition $definition, string $key, mixed $value, bool $onlyIfMissing = false): bool
+    private function write(Definition $definition, string $key, mixed $value): bool
     {
         try {
-            return $onlyIfMissing
-                ? $this->repository()->add($key, Envelope::wrap($value), $definition->ttl)
-                : $this->repository()->put($key, Envelope::wrap($value), $definition->ttl);
+            return $this->repository()->put($key, Envelope::wrap($value), $definition->ttl);
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Write);
 
@@ -345,8 +368,36 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Removes the entry; false when there was none or the cache could not be
+     * A loader's write: only if the key still holds what $seen found
+     * (ADR 0012). A failure follows the "write" policy.
+     */
+    private function writeLoaded(Definition $definition, string $key, StoredEntry $seen, mixed $value): void
+    {
+        try {
+            $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $definition->ttl);
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Write);
+        }
+    }
+
+    /**
+     * Leaves a tombstone at the key; false when the cache could not be
      * reached ("invalidate" policy).
+     */
+    private function bury(string $key): bool
+    {
+        try {
+            return $this->entries->bury($this->repository(), $key);
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Invalidate);
+
+            return false;
+        }
+    }
+
+    /**
+     * Deletes the entry, for pull() on stores other than Redis; false when
+     * there was none or the cache could not be reached ("invalidate" policy).
      */
     private function remove(string $key): bool
     {
@@ -357,50 +408,6 @@ final readonly class CacheContractManager
 
             return false;
         }
-    }
-
-    /**
-     * Reads and removes the entry in one command, GETDEL (Redis 6.2+), on the
-     * store's own connection. The raw value is decoded by the store itself,
-     * exactly as RedisStore::get() does, so serializer and compression
-     * settings and Laravel versions are handled the same way.
-     *
-     * phpredis answers a command that Redis rejects, such as GETDEL on Redis
-     * before 6.2, with false, as for a missing key, and keeps the error aside.
-     * That error is thrown, so it follows the "read" policy instead of being
-     * taken for a miss.
-     *
-     * @return array{0: mixed}|null the envelope, or null when there was none
-     *
-     * @throws RedisException when Redis rejects the command
-     */
-    private function takeFromRedis(RedisStore $store, string $key): ?array
-    {
-        $connection = $store->connection();
-        $client = $connection instanceof PhpRedisConnection ? $connection->client() : null;
-        $client?->clearLastError();
-
-        $raw = $connection->command('getdel', [$store->getPrefix().$key]);
-
-        if ($raw === false && is_string($error = $client?->getLastError())) {
-            throw new RedisException($error);
-        }
-
-        if ($raw === null || $raw === false) {
-            return null;
-        }
-
-        /** @var Closure(mixed, mixed): mixed $decode */
-        $decode = Closure::bind(
-            // The protected method RedisStore::get() uses, in every supported Laravel release (11.44.2+).
-            fn (mixed $value, mixed $connection): mixed => $this->connectionAwareUnserialize($value, $connection),
-            $store,
-            RedisStore::class,
-        );
-
-        $entry = $decode($raw, $connection);
-
-        return Envelope::isHit($entry) ? $entry : null;
     }
 
     private function repository(): Repository

@@ -22,6 +22,7 @@ use Uslanozan\CacheContract\Keys\DefaultKeyFactory;
 use Uslanozan\CacheContract\Keys\KeyFormat;
 use Uslanozan\CacheContract\Keys\ParameterEncoder;
 use Uslanozan\CacheContract\Runtime\CacheContractManager;
+use Uslanozan\CacheContract\Runtime\EntryStore;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Runtime\RedisErrorReporter;
@@ -83,6 +84,12 @@ class CacheContractServiceProvider extends ServiceProvider
             $app->make(RedisErrorReporter::class),
         ));
 
+        // Tombstones and compare-and-set writes (ADR 0012). Holds only the
+        // tombstone TTL; an invalid value fails on first use.
+        $this->app->singleton(EntryStore::class, fn (Application $app): EntryStore => EntryStore::fromConfig(
+            $this->config($app)->get('cache-contract.tombstone_ttl'),
+        ));
+
         // Immutable and without context: withContext() returns a copy, so the
         // shared instance never carries a tenant into the next request.
         $this->app->singleton(CacheContractManager::class, fn (Application $app): CacheContractManager => new CacheContractManager(
@@ -92,6 +99,7 @@ class CacheContractServiceProvider extends ServiceProvider
             $app->make(RedisErrorPolicy::class),
             $app->make(GenerationCounters::class),
             $app->make(TagRegistry::class),
+            $app->make(EntryStore::class),
             $this->store($app),
         ));
 

@@ -34,14 +34,22 @@ model cache and the first commands.
   `false`, `0` or `''` is a hit, and values come back with their type.
   `add` writes only when nothing is cached, atomically on Redis; `pull`
   gives the value only to the call that removes it, so of two concurrent
-  pulls one gets it (one `GETDEL` on Redis, which needs Redis 6.2+).
+  pulls one gets it (one Lua script on Redis).
+- **No stale writes after a removal** (ADR 0012): `forget()` and `pull()`
+  leave a tombstone for `tombstone_ttl` seconds (10) instead of deleting,
+  and `remember()` caches its loader's result only if the key still holds
+  what its read found, in one Lua script on Redis. A value loaded before a
+  removal is returned but not written back. `forget()` returns `true`
+  unless Redis could not be reached. On other stores a tombstone blocks
+  `remember()`'s write and `add()` until it expires.
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
-  is down. It covers connection errors and a command Redis rejects in
-  `pull()`; any other exception propagates. During an outage the first error
-  is reported, then at most one per `report_interval` (60 seconds) in each
-  Octane or queue worker, or one per request under PHP-FPM, with a
-  `RedisErrorsNotReported` count of the errors left out per operation.
+  is down. It covers connection errors and a script that fails in Redis in
+  `remember()`, `add()` or `pull()`; any other exception propagates. During
+  an outage the first error is reported, then at most one per
+  `report_interval` (60 seconds) in each Octane or queue worker, or one per
+  request under PHP-FPM, with a `RedisErrorsNotReported` count of the errors
+  left out per operation.
 - **Model cache:** `ModelCache::for(User::class)->find()` and `findMany()`
   without a definition. Keys include the connection and its database;
   `withContext()` and `withTrashed()`; models with global scopes need a

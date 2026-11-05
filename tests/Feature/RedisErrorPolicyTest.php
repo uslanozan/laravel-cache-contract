@@ -58,7 +58,8 @@ describe('report (default)', function () {
     });
 
     it('reports a failed invalidation', function () {
-        $this->store->fail('forget');
+        // forget() leaves a tombstone, so a failed write is a failed invalidation (ADR 0012).
+        $this->store->fail('put');
 
         expect(CacheContract::forget('external.exchange_rates'))->toBeFalse();
 
@@ -124,12 +125,12 @@ describe('throw', function () {
     })->with([
         'read' => ['get', fn () => CacheContract::get('external.exchange_rates')],
         'write' => ['put', fn () => CacheContract::put('external.exchange_rates', [], 1)],
-        'invalidate' => ['forget', fn () => CacheContract::forget('external.exchange_rates')],
+        'invalidate' => ['put', fn () => CacheContract::forget('external.exchange_rates')],
     ]);
 
     it('lets each operation have its own mode', function () {
         redisErrors(['read' => 'report', 'write' => 'report', 'invalidate' => 'throw']);
-        $this->store->fail('get')->fail('forget');
+        $this->store->fail('get')->fail('put');
 
         expect(CacheContract::get('external.exchange_rates', [], 'default'))->toBe('default')
             ->and(fn () => CacheContract::forget('external.exchange_rates'))->toThrow(RedisException::class);

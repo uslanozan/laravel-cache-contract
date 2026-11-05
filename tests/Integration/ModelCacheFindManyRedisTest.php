@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\ModelCache;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
@@ -51,16 +51,12 @@ function findManyRedisCost(Closure $operation): array
     $store = Cache::store('find_many')->getStore();
     assert($store instanceof RedisStore);
 
-    DB::flushQueryLog();
-    DB::enableQueryLog();
-
-    try {
+    $redis = [];
+    $queries = QueryCounter::count(function () use ($store, $operation, &$redis) {
         $redis = RedisCommandCounter::count($store->connection(), $operation);
-    } finally {
-        DB::disableQueryLog();
-    }
+    });
 
-    return ['queries' => count(DB::getQueryLog()), 'redis' => $redis];
+    return ['queries' => $queries, 'redis' => $redis];
 }
 
 it('loads 100 models with one counter read, one MGET, one query and one bulk write', function () {

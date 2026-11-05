@@ -55,14 +55,15 @@ function onlyOnPhpRedis(string $why): void
 }
 
 /**
- * Rebuilds the contract connection with these phpredis options; options are
- * phpredis' own, so a test that sets some skips on predis.
+ * Rebuilds the contract connection with these options. A prefix works on both
+ * clients; serializer and compression are phpredis' own, so a test that sets
+ * them skips on predis.
  *
- * @param  array<string, int>  $options  e.g. ['serializer' => Redis::SERIALIZER_PHP]
+ * @param  array<string, int|string>  $options  e.g. ['serializer' => Redis::SERIALIZER_PHP]
  */
 function tombstoneConnection(array $options): void
 {
-    if ($options !== []) {
+    if (array_diff_key($options, ['prefix' => true]) !== []) {
         onlyOnPhpRedis('serializer and compression options');
     }
 
@@ -81,7 +82,7 @@ function tombstoneConnection(array $options): void
     }
 }
 
-/** The raw key of user.profile for this user, with the store prefix. */
+/** The raw key of user.profile for this user, with the store prefix (not the connection's). */
 function rawProfileKey(int $userId): string
 {
     /** @var RedisStore $store */
@@ -217,6 +218,42 @@ describe('pull', function () {
         expect(array_map(fn (int $i): mixed => CacheContract::pull('user.profile', ['user_id' => $i], 'missing'), array_keys($values)))
             ->toBe($values);
     })->with('tombstone connection options');
+});
+
+// Laravel's default config/database.php sets a connection prefix (REDIS_PREFIX,
+// "<app>_database_"), so most applications run with one. The client adds it to
+// KEYS[1] of EVAL as it does to GET and SETEX, so the scripts see the same key.
+it('works under a connection prefix, as Laravel sets by default', function () {
+    $connectionPrefix = 'probeapp_database_';
+    // No prefix, not even the global one (Testbench sets "laravel-database-"): sees
+    // the keys as Redis stores them.
+    config()->set('database.redis.bare', [...config('database.redis.contract'), 'options' => ['prefix' => '']]);
+    tombstoneConnection(['prefix' => $connectionPrefix]);
+    $bare = app('redis')->connection('bare');
+
+    // The race from #43 stays closed.
+    CacheContract::remember('user.profile', ['user_id' => 1], function () {
+        CacheContract::forget('user.profile', ['user_id' => 1]);
+
+        return ['name' => 'old'];
+    });
+    expect(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
+    CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'new']);
+    expect(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['name' => 'new']);
+
+    // The tombstone lands under the connection prefix, nowhere else.
+    CacheContract::forget('user.profile', ['user_id' => 2]);
+    expect($bare->exists($connectionPrefix.rawProfileKey(2)))->toBe(1)
+        ->and($bare->exists(rawProfileKey(2)))->toBe(0);
+
+    // pull() and add() read and write the same keys.
+    CacheContract::put('user.profile', ['user_id' => 3], 'once');
+    expect(CacheContract::pull('user.profile', ['user_id' => 3], 'default'))->toBe('once')
+        ->and(CacheContract::pull('user.profile', ['user_id' => 3], 'default'))->toBe('default')
+        ->and($bare->ttl($connectionPrefix.rawProfileKey(3)))->toBeGreaterThan(0)->toBeLessThanOrEqual(10)
+        ->and(CacheContract::add('user.profile', ['user_id' => 3], 'a'))->toBeTrue()
+        ->and(CacheContract::add('user.profile', ['user_id' => 3], 'b'))->toBeFalse()
+        ->and(CacheContract::get('user.profile', ['user_id' => 3]))->toBe('a');
 });
 
 it('repairs a key that holds a value written by other code', function () {

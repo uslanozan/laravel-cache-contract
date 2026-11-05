@@ -127,8 +127,9 @@ LUA;
     }
 
     /**
-     * Caches the value when nothing or a tombstone is cached. An envelope or
-     * a foreign value counts as cached. Of two concurrent calls on Redis, one
+     * Caches the value when nothing or (on Redis) a tombstone is cached; on
+     * other stores a tombstone blocks it until it expires. An envelope or a
+     * foreign value counts as cached. Of two concurrent calls on Redis, one
      * writes.
      *
      * @param  array{0: mixed}  $envelope

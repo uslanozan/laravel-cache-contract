@@ -149,8 +149,9 @@ final readonly class CacheContractManager
      * Caches a value only when none is cached yet, for the definition's TTL.
      * On Redis the check and the write are one script: of two concurrent
      * calls, one writes. A cached null counts as cached, and so does a value
-     * other code wrote under the key; a tombstone left by forget() or pull()
-     * does not (ADR 0012).
+     * other code wrote under the key. On Redis, a tombstone left by forget()
+     * or pull() does not; on other stores it blocks add() until it expires
+     * (ADR 0012).
      *
      * Not a "run once" guarantee for a definition with tags or invalidated_by:
      * its generation counters are read first, and a change in between gives

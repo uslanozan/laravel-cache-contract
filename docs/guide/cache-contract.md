@@ -23,7 +23,7 @@ typed parameter throws `InvalidParameters`, before Redis is touched. See
 | `get($id, $params = [], $default = null)` | the value or `$default` | The cached value, or `$default` (a value or a closure) on a miss. |
 | `has($id, $params = [])` | `bool` | Whether a value is cached. |
 | `put($id, $params, $value)` | `bool` | Caches the value for the definition's TTL; `false` if it could not be written. |
-| `add($id, $params, $value)` | `bool` | Caches the value only when nothing is cached yet (a tombstone counts as nothing); `true` when this call wrote it. Atomic on Redis. |
+| `add($id, $params, $value)` | `bool` | Caches the value only when nothing is cached yet (on Redis, a tombstone counts as nothing); `true` when this call wrote it. Atomic on Redis. |
 | `pull($id, $params = [], $default = null)` | the value or `$default` | The cached value, removed in the same call; `$default` on a miss. On Redis, of two concurrent calls only one gets the value. |
 | `refresh($id, $params, $loader)` | the value | Runs `$loader` and caches its result, even when a value is cached. |
 | `forget($id, $params = [])` | `bool` | Removes the entry by leaving a short-lived tombstone; `true` whether or not something was cached, `false` only if Redis could not be reached. |
@@ -60,7 +60,8 @@ exactly one returns `true`. A cached `null` counts as cached, and so does a
 value another part of your code wrote under the same key: `add()` returns
 `false` until it expires (never, if it was written without a TTL), although
 `get()` treats it as a miss and `put()` or `remember()` would overwrite it.
-A tombstone left by `forget()` or `pull()` counts as nothing.
+On Redis, a tombstone left by `forget()` or `pull()` counts as nothing; on
+other stores it blocks `add()` until it expires.
 
 Use a definition **without** `tags` or `invalidated_by` for such a guard. With
 them, the generation counters are read before the write, and a change in

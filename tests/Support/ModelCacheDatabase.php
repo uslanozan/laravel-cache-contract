@@ -19,7 +19,8 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Ranking;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Token;
 
 /**
- * An in-memory SQLite database on the "testing" connection with one row per
+ * A SQLite database on the "testing" connection, in memory unless a file is
+ * given (processes that share one, LRVL-43), with one row per
  * model-cache fixture: member 1, article 1, ranking 1, project 5 (tenant 7),
  * note 1 (tenant 7) and token "abc-123", and an empty `tblThings` table.
  * Ledger 1 is on a second in-memory connection. The current tenant is 7.
@@ -30,9 +31,12 @@ final class ModelCacheDatabase
 
     public const SECOND_CONNECTION = 'ledger';
 
-    public static function create(): void
+    /**
+     * @param  string  $database  ":memory:", or the path of an empty SQLite file
+     */
+    public static function create(string $database = ':memory:'): void
     {
-        config()->set('database.connections.'.self::CONNECTION, ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+        config()->set('database.connections.'.self::CONNECTION, ['driver' => 'sqlite', 'database' => $database, 'prefix' => '']);
         config()->set('database.connections.'.self::SECOND_CONNECTION, ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
         config()->set('database.default', self::CONNECTION);
         DB::purge(self::CONNECTION);

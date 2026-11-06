@@ -115,9 +115,10 @@ default.** Config (final key names are fixed with the facade):
   change failed, invites duplicate writes on retry, and does not remove the
   stale entry. The required TTL (ADR 0002) bounds how long it lives. Apps can
   still choose `throw`.
-- The policy covers connection errors only: phpredis' `RedisException` (and
-  predis' errors since the update of 2026-11-06 below). Any other exception,
-  such as an unreadable entry, always propagates.
+- The policy covers errors from Redis itself, never bugs. At first that was
+  connection errors only, phpredis' `RedisException`; the updates below add
+  commands Redis rejects and predis' errors. Any other exception, such as an
+  unreadable entry, always propagates.
 - Tests and CI should set all three to `throw`, so failures are not hidden.
 
 ## Consequences

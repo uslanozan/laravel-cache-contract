@@ -6,6 +6,7 @@ use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\CacheContract;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
@@ -14,7 +15,7 @@ use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     foreach (['contract' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
         config()->set("database.redis.{$connection}", [
@@ -134,6 +135,7 @@ describe('add and pull', function () {
     });
 
     it('decodes a pulled value like a read, also with a phpredis serializer', function (array $values) {
+        RedisClient::skipUnlessPhpRedis('the serializer option');
         config()->set('database.redis.contract.options', ['serializer' => Redis::SERIALIZER_PHP]);
         app('redis')->purge('contract');
         Cache::forgetDriver('contract');
@@ -148,21 +150,22 @@ describe('add and pull', function () {
         'mixed values' => [[['token' => 'abc'], 0, null, false, '', 7, 1.5]],
     ]);
 
-    // phpredis answers a script Redis rejects with false, as for a missing key.
+    // phpredis answers a script Redis rejects with false, as for a missing key;
+    // predis throws it. Either way it must be reported, not taken for a miss.
     // A list at the key makes the script's GET fail with WRONGTYPE.
     it('reports a script Redis rejects instead of taking it for a miss', function () {
         putListAt('user.profile', ['user_id' => 1]);
         Exceptions::fake();
 
         expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default');
-        Exceptions::assertReported(fn (RedisException $e): bool => str_starts_with($e->getMessage(), 'WRONGTYPE'));
+        RedisClient::assertRejectedCommandReported('WRONGTYPE');
     });
 
     it('throws a command Redis rejects when the policy says so', function () {
         config()->set('cache-contract.redis_errors.read', 'throw');
         putListAt('user.profile', ['user_id' => 1]);
 
-        expect(fn () => CacheContract::pull('user.profile', ['user_id' => 1]))->toThrow(RedisException::class, 'WRONGTYPE');
+        expect(fn () => CacheContract::pull('user.profile', ['user_id' => 1]))->toThrow(RedisClient::rejectedCommandError(), 'WRONGTYPE');
     });
 
     it('returns the default when Redis is unreachable', function () {
@@ -172,7 +175,7 @@ describe('add and pull', function () {
         expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default')
             ->and(CacheContract::add('user.profile', ['user_id' => 1], 'x'))->toBeFalse();
 
-        Exceptions::assertReported(RedisException::class);
+        Exceptions::assertReported(RedisClient::connectionError());
     });
 });
 
@@ -192,7 +195,7 @@ it('keeps the application working when Redis is unreachable', function () {
     expect(CacheContract::remember('external.exchange_rates', [], fn () => ['usd' => 1]))->toBe(['usd' => 1])
         ->and(CacheContract::forget('external.exchange_rates'))->toBeFalse();
 
-    Exceptions::assertReported(RedisException::class);
+    Exceptions::assertReported(RedisClient::connectionError());
 });
 
 it('reports an outage once per interval, however many calls fail', function () {
@@ -205,12 +208,12 @@ it('reports an outage once per interval, however many calls fail', function () {
     }
 
     Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(RedisException::class);
+    Exceptions::assertReported(RedisClient::connectionError());
 });
 
 it('throws when Redis is unreachable and the policy says so', function () {
     config()->set('cache-contract.store', 'unreachable');
     config()->set('cache-contract.redis_errors.read', 'throw');
 
-    expect(fn () => CacheContract::remember('external.exchange_rates', [], fn () => 1))->toThrow(RedisException::class);
+    expect(fn () => CacheContract::remember('external.exchange_rates', [], fn () => 1))->toThrow(RedisClient::connectionError());
 });

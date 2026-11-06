@@ -9,6 +9,7 @@ use Uslanozan\CacheContract\Facades\ModelCache;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 use Uslanozan\CacheContract\Tests\Support\QueryCounter;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
@@ -18,7 +19,7 @@ use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     foreach (['find_many' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
         config()->set("database.redis.{$connection}", [
@@ -91,5 +92,5 @@ it('loads from the database when Redis is unreachable', function () {
 
     expect(ModelCache::for(Member::class)->findMany([3, 1, 2])->pluck('id')->all())->toBe([3, 1, 2]);
 
-    Exceptions::assertReported(RedisException::class);
+    Exceptions::assertReported(RedisClient::connectionError());
 });

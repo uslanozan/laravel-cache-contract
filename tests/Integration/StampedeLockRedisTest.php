@@ -8,14 +8,14 @@ use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Uslanozan\CacheContract\Facades\CacheContract;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 // The stampede lock of ADR 0012 against real Redis, through Laravel's
 // RedisLock on the store's own connection. The client comes from REDIS_CLIENT
-// (phpredis by default), as in TombstoneRedisTest.
+// (phpredis by default; see RedisClient).
 
 beforeEach(function () {
-    $client = env('REDIS_CLIENT', 'phpredis');
-    config()->set('database.redis.client', is_string($client) && $client !== '' ? $client : 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.lock_redis', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),

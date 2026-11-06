@@ -9,7 +9,7 @@ use RedisException;
 use Throwable;
 
 /**
- * An array store whose get, put or forget can be made to throw, to test the
+ * An array store whose get, put, forget or lock can be made to throw, to test the
  * Redis error policy without stopping Redis. Records every call it receives.
  *
  *     $store->fail('get');                                   // RedisException
@@ -49,6 +49,13 @@ final class FailingStore extends ArrayStore
         $this->attempt('forget');
 
         return parent::forget($key);
+    }
+
+    public function lock($name, $seconds = 0, $owner = null)
+    {
+        $this->attempt('lock');
+
+        return parent::lock($name, $seconds, $owner);
     }
 
     private function attempt(string $method): void

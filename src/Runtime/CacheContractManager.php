@@ -7,11 +7,15 @@ namespace Uslanozan\CacheContract\Runtime;
 use Closure;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Contracts\Cache\Lock as CacheLock;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository;
 use Throwable;
 use Uslanozan\CacheContract\Contracts\DefinitionRegistry;
 use Uslanozan\CacheContract\Contracts\KeyFactory;
 use Uslanozan\CacheContract\Definitions\Definition;
+use Uslanozan\CacheContract\Definitions\Lock;
 use Uslanozan\CacheContract\Definitions\TagRegistry;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 use Uslanozan\CacheContract\Exceptions\InvalidDefinitions;
@@ -230,6 +234,10 @@ final readonly class CacheContractManager
      * (ADR 0012): after a forget() or pull() while the loader ran, the loaded
      * value may be old, so it is returned but not cached.
      *
+     * With a "lock" in the definition, a miss takes the lock "{key}|lock"
+     * first, so one request runs the loader while the others wait for its
+     * value (ADR 0012); see rememberWithLock().
+     *
      * @template TValue
      *
      * @param  array<string, mixed>  $params
@@ -248,9 +256,17 @@ final readonly class CacheContractManager
             return $entry->value();
         }
 
+        // When the read failed, Redis is down: no lock, and no write that would fail too.
+        if ($key !== false && $entry !== false && $definition->lock !== null) {
+            $store = $this->repository()->getStore();
+
+            if ($store instanceof LockProvider) {
+                return $this->rememberWithLock($definition, $definition->lock, $store, $key, $loader);
+            }
+        }
+
         $value = $loader();
 
-        // When the read failed, Redis is down: skip the write that would fail too.
         if ($key !== false && $entry !== false) {
             $this->writeLoaded($definition, $key, $entry, $value);
         }
@@ -316,6 +332,70 @@ final readonly class CacheContractManager
         }
 
         return $this->counters->bump([$tag]);
+    }
+
+    /**
+     * remember() after a miss, with the stampede lock (ADR 0012).
+     *
+     * With the lock, the entry is read again, since another request may have
+     * filled it while this one waited; only on a miss does the loader run.
+     * When the wait ends without the lock, this request does not fail: it
+     * reads once more and on a miss loads too. Either way the value is written
+     * with the compare-and-set against the last read, so it never overwrites
+     * what the holder wrote. A Redis error while taking the lock follows the
+     * "read" policy: the loader runs and nothing is written. The lock is
+     * released by its owner only, also when the loader throws.
+     *
+     * @template TValue
+     *
+     * @param  Closure(): TValue  $loader
+     * @return TValue|mixed
+     */
+    private function rememberWithLock(Definition $definition, Lock $settings, LockProvider $store, string $key, Closure $loader): mixed
+    {
+        try {
+            $lock = $store->lock($key.'|lock', $settings->seconds);
+            $acquired = (bool) $lock->block($settings->wait);
+        } catch (LockTimeoutException) {
+            $acquired = false;
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Read);
+
+            return $loader();
+        }
+
+        try {
+            $entry = $this->read($key);
+
+            if ($entry !== false && $entry->isHit()) {
+                return $entry->value();
+            }
+
+            $value = $loader();
+
+            if ($entry !== false) {
+                $this->writeLoaded($definition, $key, $entry, $value);
+            }
+
+            return $value;
+        } finally {
+            if ($acquired) {
+                $this->release($lock);
+            }
+        }
+    }
+
+    /**
+     * A failure follows the "read" policy, as for taking the lock; an
+     * unreleased lock expires after its "seconds".
+     */
+    private function release(CacheLock $lock): void
+    {
+        try {
+            $lock->release();
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Read);
+        }
     }
 
     /**

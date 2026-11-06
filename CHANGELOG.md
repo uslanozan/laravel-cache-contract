@@ -35,6 +35,11 @@ model cache and the first commands.
   `add` writes only when nothing is cached, atomically on Redis; `pull`
   gives the value only to the call that removes it, so of two concurrent
   pulls one gets it (one Lua script on Redis).
+- **Stampede protection** (ADR 0012): a definition with `'lock' => true` or
+  `['seconds' => …, 'wait' => …]` (10 and 10 by default) makes
+  `remember()` take a lock on a miss, so one request loads while the others
+  wait; a request whose wait ends loads too and never overwrites the
+  holder's value. The `prefix` setting rejects `|`, which lock names use.
 - **No stale writes after a removal** (ADR 0012): `forget()` and `pull()`
   leave a tombstone for `tombstone_ttl` seconds (10) instead of deleting,
   and `remember()` caches its loader's result only if the key still holds

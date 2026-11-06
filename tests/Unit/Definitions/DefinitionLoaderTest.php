@@ -50,8 +50,23 @@ it('builds definitions with enums and defaults', function () {
         ->id->toBe('external.exchange_rates')
         ->subject->toBeNull()
         ->params->toBe([])
-        ->tags->toBe([]);
+        ->tags->toBe([])
+        ->lock->toBeNull();
 });
+
+it('builds the lock with its defaults and overrides', function (mixed $lock, ?array $expected) {
+    [$definition] = $this->loader->load([
+        'report' => ['totals' => ['purpose' => 'totals', 'type' => 'array', 'ttl' => 600, 'description' => 'Totals.', 'lock' => $lock]],
+    ], []);
+
+    expect($definition->lock === null ? null : [$definition->lock->seconds, $definition->lock->wait])->toBe($expected);
+})->with([
+    'off' => [false, null],
+    'on, with the defaults' => [true, [10, 10]],
+    'empty array, with the defaults' => [[], [10, 10]],
+    'one setting' => [['wait' => 0], [10, 0]],
+    'both settings' => [['seconds' => 30, 'wait' => 20], [30, 20]],
+]);
 
 it('throws one exception listing every problem', function () {
     $load = fn () => $this->loader->load(['user' => [

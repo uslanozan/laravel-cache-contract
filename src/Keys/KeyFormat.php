@@ -75,6 +75,12 @@ final readonly class KeyFormat
             throw InvalidKeyFormat::because($pattern, 'it uses {prefix} but the "prefix" setting is empty');
         }
 
+        // A stampede lock is named "{key}|lock" (ADR 0012): "|" never appears in a
+        // generated key, so a lock can never share a name with an entry.
+        if (str_contains($prefix, '|')) {
+            throw InvalidKeyFormat::because($pattern, sprintf('the "prefix" setting must not contain "|", found "%s"', $prefix));
+        }
+
         return new self($pattern, $prefix);
     }
 

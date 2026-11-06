@@ -35,6 +35,11 @@ it('rejects a format that cannot produce unique keys', function (string $pattern
     'separator replaced by letters' => ['{section}x{name}:{params}', 'placeholders must be separated by ":"'],
 ]);
 
+it('rejects a prefix with "|", which lock names use', function () {
+    expect(fn () => KeyFormat::fromString('{prefix}:{section}:{name}:{params}', 'cc|app'))
+        ->toThrow(InvalidKeyFormat::class, 'the "prefix" setting must not contain "|", found "cc|app"');
+});
+
 it('rejects {prefix} with an empty prefix setting', function () {
     expect(fn () => KeyFormat::fromString('{prefix}:{section}:{name}:{params}', ''))
         ->toThrow(InvalidKeyFormat::class, 'the "prefix" setting is empty');

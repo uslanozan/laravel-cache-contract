@@ -137,6 +137,54 @@ tombstone instead of `KeyForgotten`, and a read that finds a tombstone fires
 `CacheHit`, although the package treats it as a miss. Tools that listen to
 these events, such as Telescope or Pulse, show the calls that way.
 
+### Stampede protection
+
+When a popular entry expires or is removed, every request that reads it in
+the next moment misses, and each one runs the loader: a slow query runs a
+hundred times at once. A definition with `lock` lets one request load while
+the others wait for its value (ADR 0012):
+
+```php
+'report' => [
+    'totals' => [
+        // ...
+        'lock' => true,                                // 10 and 10 seconds
+        // 'lock' => ['seconds' => 30, 'wait' => 20],  // or your own
+    ],
+],
+```
+
+On a miss, `remember()` takes a lock named after the entry's key, with
+`|lock` at the end. The lock is stored on the cache store's
+`lock_connection`: in Laravel's default `config/cache.php`, the `default`
+Redis connection (`REDIS_CACHE_LOCK_CONNECTION`), with that connection's
+database and prefix. Look for it there in `redis-cli`, not next to the
+entry.
+
+- **With the lock**, it reads the entry again (another request may have
+  filled it meanwhile), runs the loader only on a miss, caches the value and
+  releases the lock.
+- **When `wait` seconds pass without the lock**, it does not fail: it reads
+  once more and on a miss runs the loader too, returns the value and caches
+  it only if nothing was cached meanwhile, so it never overwrites the value
+  of the request that held the lock.
+- **`seconds`** is how long a lock lives. Set it to cover the loader's
+  slowest run: a slower loader lets the lock expire, and a second request
+  may load too. That is duplicate work, never wrong data, since a lock is
+  released only by its owner.
+- **`wait`** is how long a request waits for the lock. Set it to about the
+  loader's usual run: a request that gives up while the holder is still
+  loading loads too. `0` does not wait.
+- A loader that throws releases the lock, and its exception goes up to you.
+- A Redis error while taking or releasing the lock follows the `read`
+  setting of [Redis errors](production.md#when-redis-is-down): with the
+  default `report`, the loader runs and nothing is written.
+- Only `remember()` locks, and only on a miss. `get()`, `put()`,
+  `refresh()` and the [model cache](model-cache.md) take no lock. A store
+  that cannot lock runs `remember()` without one.
+- Each lock costs a few more Redis commands per miss, so turn it on only for
+  entries that are expensive to load and read by many requests at once.
+
 ## Cached `null`, `false` and `0`
 
 Laravel's cache cannot tell a cached `null` from a miss, so `Cache::remember()`
@@ -235,8 +283,8 @@ a copy that can be loaded again, so it does not fit the mandatory TTL, the
 | `UnknownDefinition` | The ID is not in `config/cache-contract.php`. |
 | `UnknownTag` | `flushTag()` got a tag that is not declared under `tags`. |
 | `InvalidParameters` | A parameter is missing, unexpected or of the wrong type, or a context value is invalid. |
-| `InvalidDefinitions` | The config has errors; thrown on the first call, with every problem listed. |
+| `InvalidDefinitions` | The config has errors, such as an invalid `lock`; thrown on the first call, with every problem listed. |
 | `InvalidConfiguration` | A setting such as `redis_errors` has an invalid value. |
-| `InvalidKeyFormat` | `key_format` is invalid, or it uses `{prefix}` while `prefix` is empty (e.g. `CACHE_CONTRACT_PREFIX=`). |
+| `InvalidKeyFormat` | `key_format` is invalid, it uses `{prefix}` while `prefix` is empty (e.g. `CACHE_CONTRACT_PREFIX=`), or `prefix` contains `\|`. |
 
 All of them implement `Uslanozan\CacheContract\Exceptions\CacheContractException`.

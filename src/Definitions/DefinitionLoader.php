@@ -68,6 +68,7 @@ final class DefinitionLoader
             version: (int) ($raw['version'] ?? 1),
             tags: $tags,
             invalidatedBy: $invalidatedBy,
+            lock: Lock::fromConfig($raw['lock'] ?? false),
         );
     }
 }

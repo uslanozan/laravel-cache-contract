@@ -42,7 +42,7 @@ most important ones are below.
 
 | Setting | Default | Meaning |
 | :--- | :--- | :--- |
-| `prefix` | `cc` (`CACHE_CONTRACT_PREFIX`) | First part of every key; keeps this application's keys apart from others on the same Redis. |
+| `prefix` | `cc` (`CACHE_CONTRACT_PREFIX`) | First part of every key; keeps this application's keys apart from others on the same Redis. Must not contain `\|`, which lock names use. |
 | `key_format` | `{prefix}:{section}:{name}:v{version}:{params}` | One format for every key (ADR 0004). Changing it changes every key at once. |
 | `store` | `null` (`CACHE_CONTRACT_STORE`) | The store from `config/cache.php` that holds the entries; `null` uses the default store. |
 | `redis_errors` | `report` for read, write and invalidate | What happens when Redis is down; see [Production](production.md). |

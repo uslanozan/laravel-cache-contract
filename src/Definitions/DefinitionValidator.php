@@ -29,7 +29,7 @@ final class DefinitionValidator
 
     private const REQUIRED_FIELDS = ['purpose', 'type', 'ttl', 'description'];
 
-    private const OPTIONAL_FIELDS = ['subject', 'params', 'version', 'tags', 'invalidated_by'];
+    private const OPTIONAL_FIELDS = ['subject', 'params', 'version', 'tags', 'invalidated_by', 'lock'];
 
     /** snake_case: lowercase words separated by single underscores. */
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
@@ -249,6 +249,52 @@ final class DefinitionValidator
 
         if (array_key_exists('invalidated_by', $definition) && ! $this->isListOf($definition['invalidated_by'], $this->isModelClass(...))) {
             $errors[] = new ValidationError($id, '"invalidated_by" must be a list of existing Eloquent model classes');
+        }
+
+        if (array_key_exists('lock', $definition)) {
+            array_push($errors, ...$this->validateLock($id, $definition['lock']));
+        }
+
+        return $errors;
+    }
+
+    /**
+     * "lock": true, false, or an array with "seconds" (1 or more) and "wait"
+     * (0 or more), each optional (ADR 0012).
+     *
+     * @return list<ValidationError>
+     */
+    private function validateLock(string $id, mixed $lock): array
+    {
+        if (is_bool($lock)) {
+            return [];
+        }
+
+        if (! is_array($lock) || array_is_list($lock) && $lock !== []) {
+            return [new ValidationError($id, '"lock" must be true, false or an array with "seconds" and "wait"')];
+        }
+
+        $errors = [];
+
+        foreach (array_keys($lock) as $field) {
+            $field = (string) $field;
+
+            if (! in_array($field, Lock::FIELDS, true)) {
+                $suggestion = $this->closest($field, Lock::FIELDS);
+                $errors[] = new ValidationError($id, sprintf(
+                    'unknown "lock" field "%s"%s',
+                    $field,
+                    $suggestion === null ? '' : sprintf(' (did you mean "%s"?)', $suggestion),
+                ));
+            }
+        }
+
+        if (array_key_exists('seconds', $lock) && ! $this->isPositiveInt($lock['seconds'])) {
+            $errors[] = new ValidationError($id, '"lock.seconds" must be a whole number of seconds, 1 or more');
+        }
+
+        if (array_key_exists('wait', $lock) && ! (is_int($lock['wait']) && $lock['wait'] >= 0)) {
+            $errors[] = new ValidationError($id, '"lock.wait" must be a whole number of seconds, 0 or more');
         }
 
         return $errors;

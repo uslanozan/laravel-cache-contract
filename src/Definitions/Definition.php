@@ -22,6 +22,7 @@ final readonly class Definition
      * @param  array<string, ParameterType>  $params  every declared parameter is required at call time
      * @param  list<string>  $tags
      * @param  list<class-string<Model>>  $invalidatedBy  models whose changes clear this definition
+     * @param  Lock|null  $lock  the stampede lock of remember(), or null for none (ADR 0012)
      */
     public function __construct(
         public string $section,
@@ -35,6 +36,7 @@ final readonly class Definition
         public int $version = 1,
         public array $tags = [],
         public array $invalidatedBy = [],
+        public ?Lock $lock = null,
     ) {
         $this->id = $section.'.'.$name;
     }

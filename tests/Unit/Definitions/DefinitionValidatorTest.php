@@ -83,6 +83,22 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'invalidated_by not a model' => [['invalidated_by' => [stdClass::class]], '"invalidated_by" must be a list of existing Eloquent model classes'],
     'typo in a field name' => [['ttll' => 300], 'unknown field "ttll" (did you mean "ttl"?)'],
     'unrelated unknown field' => [['owner' => 'ozan'], 'unknown field "owner"'],
+    'lock not a bool or array' => [['lock' => 'yes'], '"lock" must be true, false or an array with "seconds" and "wait"'],
+    'lock as a list' => [['lock' => [30, 20]], '"lock" must be true, false or an array with "seconds" and "wait"'],
+    'zero lock seconds' => [['lock' => ['seconds' => 0]], '"lock.seconds" must be a whole number of seconds, 1 or more'],
+    'lock seconds as a string' => [['lock' => ['seconds' => '30']], '"lock.seconds" must be a whole number of seconds, 1 or more'],
+    'negative lock wait' => [['lock' => ['wait' => -1]], '"lock.wait" must be a whole number of seconds, 0 or more'],
+    'typo in a lock field' => [['lock' => ['secconds' => 30]], 'unknown "lock" field "secconds" (did you mean "seconds"?)'],
+]);
+
+it('accepts a lock as true, false or an array', function (mixed $lock) {
+    expect(errorsFor(['user' => ['active_list' => validDefinition(['lock' => $lock])]]))->toBe([]);
+})->with([
+    'true' => [true],
+    'false' => [false],
+    'both settings' => [['seconds' => 30, 'wait' => 20]],
+    'no wait' => [['wait' => 0]],
+    'empty: the defaults' => [[]],
 ]);
 
 it('accepts a TTL with units', function () {

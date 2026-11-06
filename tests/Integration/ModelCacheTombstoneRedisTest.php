@@ -15,19 +15,18 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 use Uslanozan\CacheContract\Tests\Support\QueryCounter;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * ADR 0012 in the model cache against real Redis: the stale write found in
  * #43 (a read loads a row, a change clears the entry, the read writes the old
  * row back) is closed for find() and findMany().
  *
- * The client comes from REDIS_CLIENT (phpredis by default), as in
- * TombstoneRedisTest.
+ * The client comes from REDIS_CLIENT (phpredis by default; see RedisClient).
  */
 
 beforeEach(function () {
-    $client = env('REDIS_CLIENT', 'phpredis');
-    config()->set('database.redis.client', is_string($client) && $client !== '' ? $client : 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.model_tombstones', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),
@@ -141,13 +140,9 @@ it('clears a created row with a plain delete', function () {
         ->and(Member::cached(3)?->name)->toBe('New');
 });
 
-// A command that fails inside the compare-and-set script answers false in
-// phpredis, with the error in getLastError() (see TombstoneRedisTest).
+// A command that fails inside the compare-and-set script: phpredis answers
+// false with the error in getLastError(), predis throws it (see TombstoneRedisTest).
 it('reports a write script Redis rejects, and caches nothing', function () {
-    if (config('database.redis.client') !== 'phpredis') {
-        $this->markTestSkipped('phpredis only: a failed script answers false, with the error in getLastError()');
-    }
-
     Member::modelCache()->key(1); // creates the generation counter while SETEX is allowed
 
     /** @var RedisStore $store */
@@ -166,7 +161,7 @@ it('reports a write script Redis rejects, and caches nothing', function () {
         expect(ModelCache::for(Member::class)->find(1)?->name)->toBe('Ada')
             ->and(ModelCache::for(Member::class)->findMany([1])->pluck('name')->all())->toBe(['Ada']);
 
-        Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'ACL failure in script'));
+        RedisClient::assertRejectedCommandReported('ACL failure in script');
         expect(modelTombstonesStore()->get(Member::modelCache()->key(1)))->toBeNull();
     } finally {
         config()->set('database.redis.model_tombstones.username', null);

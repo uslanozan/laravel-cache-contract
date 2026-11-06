@@ -8,6 +8,7 @@ use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * HasCache invalidation against real Redis (LRVL-38): entries are cleared
@@ -16,7 +17,7 @@ use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.invalidation', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),

@@ -8,6 +8,7 @@ use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorMode;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Runtime\RedisOperation;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * Generation counters (ADR 0009) against real Redis: values are random ints
@@ -16,7 +17,7 @@ use Uslanozan\CacheContract\Runtime\RedisOperation;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     foreach (['counters' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
         config()->set("database.redis.{$connection}", [
@@ -81,8 +82,8 @@ it('follows the Redis error policy when Redis is unreachable', function () {
 
     expect($counters->current(['users'], RedisOperation::Read))->toBeFalse()
         ->and($counters->bump(['users']))->toBeFalse()
-        ->and(fn () => $throwing->current(['users'], RedisOperation::Read))->toThrow(RedisException::class)
-        ->and(fn () => $counters->currentOrFail(['users']))->toThrow(RedisException::class);
+        ->and(fn () => $throwing->current(['users'], RedisOperation::Read))->toThrow(RedisClient::connectionError())
+        ->and(fn () => $counters->currentOrFail(['users']))->toThrow(RedisClient::connectionError());
 
-    Exceptions::assertReported(RedisException::class);
+    Exceptions::assertReported(RedisClient::connectionError());
 });

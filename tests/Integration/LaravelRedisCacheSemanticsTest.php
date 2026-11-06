@@ -7,6 +7,7 @@ use Illuminate\Cache\RedisStore;
 use Illuminate\Cache\Repository;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Redis\RedisManager;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * Characterization tests: they pin how Laravel's own Redis cache store behaves,
@@ -20,11 +21,11 @@ use Illuminate\Redis\RedisManager;
  * A Laravel cache repository on its own Redis connection, built the same way
  * Laravel builds the `redis` store.
  *
- * @param  array<string, mixed>  $options  phpredis client options, e.g. a serializer
+ * @param  array<string, mixed>  $options  client options, e.g. phpredis' serializer
  */
 function semanticsCache(array $options = [], ?int $port = null): Repository
 {
-    $manager = new RedisManager(app(), 'phpredis', [
+    $manager = new RedisManager(app(), RedisClient::name(), [
         'options' => ['prefix' => ''] + $options,
         'cache' => [
             'host' => env('REDIS_HOST', '127.0.0.1'),
@@ -32,6 +33,7 @@ function semanticsCache(array $options = [], ?int $port = null): Repository
             'database' => 1,
             'timeout' => 1.0,
             'read_timeout' => 1.0,
+            'read_write_timeout' => 1.0,
         ],
     ]);
 
@@ -103,6 +105,7 @@ describe('default serialization', function () {
 
 describe('phpredis PHP serializer', function () {
     it('keeps number types but reads a cached false as a miss', function () {
+        RedisClient::skipUnlessPhpRedis('the serializer option');
         $cache = semanticsCache(['serializer' => Redis::SERIALIZER_PHP]);
         [$number, $false] = [semanticsKey(), semanticsKey()];
 
@@ -117,6 +120,10 @@ describe('phpredis PHP serializer', function () {
 
 describe('a one-element envelope', function () {
     it('round-trips every value under both serializers', function (array $options) {
+        if ($options !== []) {
+            RedisClient::skipUnlessPhpRedis('the serializer option');
+        }
+
         $cache = semanticsCache($options);
         $values = [null, false, true, 0, 5, -1, 0.0, 1.0, 1.5, '', '0', '05', [], [1, 2]];
 
@@ -135,10 +142,10 @@ describe('a one-element envelope', function () {
 });
 
 describe('unreachable Redis', function () {
-    it('throws a RedisException from every operation', function (Closure $operation) {
+    it('throws the connection error of the client from every operation', function (Closure $operation) {
         $cache = semanticsCache(port: 1);
 
-        expect(fn () => $operation($cache))->toThrow(RedisException::class);
+        expect(fn () => $operation($cache))->toThrow(RedisClient::connectionError());
     })->with([
         'get' => [fn (Repository $cache) => $cache->get('k')],
         'many' => [fn (Repository $cache) => $cache->many(['a', 'b'])],
@@ -156,7 +163,7 @@ describe('unreachable Redis', function () {
             $ran = true;
 
             return 1;
-        }))->toThrow(RedisException::class)
+        }))->toThrow(RedisClient::connectionError())
             ->and($ran)->toBeFalse();
     });
 });

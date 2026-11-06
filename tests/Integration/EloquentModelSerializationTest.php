@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Organization;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * Characterization tests for ADR 0008: how an Eloquent model survives Laravel's
@@ -25,7 +26,7 @@ const SERIALIZATION_PREFIX = 'cache_contract_serialization:';
 
 function serializationRedis(): RedisManager
 {
-    return new RedisManager(app(), 'phpredis', [
+    return new RedisManager(app(), RedisClient::name(), [
         'options' => ['prefix' => ''],
         'cache' => [
             'host' => env('REDIS_HOST', '127.0.0.1'),
@@ -33,6 +34,7 @@ function serializationRedis(): RedisManager
             'database' => 1,
             'timeout' => 1.0,
             'read_timeout' => 1.0,
+            'read_write_timeout' => 1.0,
         ],
     ]);
 }

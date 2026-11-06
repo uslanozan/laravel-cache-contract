@@ -84,7 +84,7 @@ final readonly class GenerationCounters
             return [];
         }
 
-        $entries = $this->repository()->many(array_map($this->key(...), $names));
+        $entries = RedisReads::many($this->repository(), array_map($this->key(...), $names));
         $values = [];
 
         foreach ($names as $name) {
@@ -127,7 +127,8 @@ final readonly class GenerationCounters
         }
 
         $keys = array_map($this->key(...), $names);
-        $entries = $this->repository()->many($keys);
+        // A rejected MGET is thrown, so nothing is created or overwritten (LRVL-79).
+        $entries = RedisReads::many($this->repository(), $keys);
         $values = [];
 
         foreach ($names as $name) {

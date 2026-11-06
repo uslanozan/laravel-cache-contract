@@ -34,6 +34,7 @@ docker compose exec redis redis-cli ping   # PONG
 | What | Command |
 | :--- | :--- |
 | Run tests | `docker compose exec php composer test` |
+| Run tests on predis | `docker compose exec -e REDIS_CLIENT=predis php composer test` |
 | Static analysis | `docker compose exec php composer analyse` |
 | Check code style | `docker compose exec php composer lint` |
 | Fix code style | `docker compose exec php composer format` |

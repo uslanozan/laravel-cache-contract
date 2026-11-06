@@ -28,6 +28,10 @@ cache. This is set per kind of operation in `config/cache-contract.php`
   `Predis\CommunicationException` (such as `ConnectionException`) or a
   `Predis\Response\ServerException`. Any other exception, such as one thrown
   by your loader, always propagates.
+- On predis, keep the client's `exceptions` option on, as it is by default.
+  With `'exceptions' => false` in the connection's `options`, predis returns
+  an error object instead of throwing, so this setting never sees the error
+  and nothing is reported.
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
 - With `report`, an outage is not reported once per call: once per minute in

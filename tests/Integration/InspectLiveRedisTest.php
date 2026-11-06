@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * cache-contract:inspect --live against real Redis: it reads the generation
@@ -11,7 +12,7 @@ use Uslanozan\CacheContract\Runtime\GenerationCounters;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     foreach (['inspect_live' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
         config()->set("database.redis.{$connection}", [
@@ -68,5 +69,5 @@ it('fails with one line when Redis cannot be reached', function () {
     $exit = Artisan::call('cache-contract:inspect', ['id' => 'user.profile', '--param' => ['user_id=42'], '--live' => true]);
 
     expect($exit)->toBe(1)
-        ->and(Artisan::output())->toContain('Could not read the generation counters (RedisException: ');
+        ->and(Artisan::output())->toContain('Could not read the generation counters ('.RedisClient::connectionError().': ');
 });

@@ -20,6 +20,7 @@ arch('every package exception can be caught as CacheContractException')
 arch('value objects are immutable')
     ->expect([
         'Uslanozan\CacheContract\Definitions\Definition',
+        'Uslanozan\CacheContract\Definitions\Lock',
         'Uslanozan\CacheContract\Similarity\Finding',
         'Uslanozan\CacheContract\Definitions\ValidationError',
         'Uslanozan\CacheContract\Similarity\NameScore',

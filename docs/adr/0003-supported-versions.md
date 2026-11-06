@@ -140,3 +140,27 @@ throws it as a `RedisException`, so `pull()` follows the `read` policy and
 the problem is reported instead of passing silently. The open question above
 about the Redis version in company production now has a floor to check
 against.
+
+## Update 2026-11-06: Redis clients, Cluster and the company's Redis
+
+The company answered the open question above (D13): its projects use
+**predis** (`predis/predis: ^1.1`), **no Redis Cluster**, and **Redis 6.2.3**.
+
+**Decision:**
+
+- The package supports **both clients**: phpredis, as before, and predis
+  **`^2.3`**, the range Laravel 11 and 12 test against (Laravel 13 also
+  allows `^3.0`, which we do not test yet). predis 1.x is not supported: it
+  was last supported by Laravel 9, and has had no release since January 2022.
+  We recommend the company move from `^1.1` to `^2.3`, which for a standard
+  Laravel setup is a version bump.
+- The Redis error policy covers both clients (ADR 0007, update 2026-11-06).
+  Integration tests that are about the client run on both, whatever
+  `REDIS_CLIENT` is set to.
+- **Redis Cluster is not supported in v1.** Nothing in the package spreads
+  keys over slots: the generation counters are read with one `MGET`, and the
+  scripts of ADR 0012 take one key. The guide says so.
+- **The floor stays at Redis 6.2.** Since ADR 0012, `pull()` no longer needs
+  `GETDEL`, but 6.2 is what the company runs and what CI will test as the
+  oldest release (LRVL-81). Redis 7.0+ features (functions, `EXPIRETIME`,
+  `EXPIRE` with `NX`/`XX`/`GT`/`LT`) must not be used.

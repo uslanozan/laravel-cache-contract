@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Redis\Connections\PhpRedisConnection;
+use Predis\Response\ServerException;
 use RedisException;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
@@ -99,15 +100,16 @@ LUA;
 
     /**
      * A loader's write: only if the key still holds what $seen found. A
-     * foreign value is overwritten, so such a key is repaired instead of
-     * blocking every write until it expires (ADR 0012).
+     * foreign value, or an envelope the caller could not use (the model cache
+     * finds one whose row is not an array), is overwritten, so such a key is
+     * repaired instead of blocking every write until it expires (ADR 0012).
      *
      * @param  array{0: mixed}  $envelope
      * @return bool true when the value was written
      */
     public function writeIfUnchanged(Repository $repository, string $key, StoredEntry $seen, array $envelope, int $ttl): bool
     {
-        if ($seen->isForeign()) {
+        if ($seen->isForeign() || $seen->isHit()) {
             return $repository->put($key, $envelope, $ttl);
         }
 
@@ -162,11 +164,14 @@ LUA;
      * script fails (one the ACL forbids, OOM, WRONGTYPE), phpredis answers
      * with false, as for a nil reply, and keeps the error aside; that error
      * is thrown, so it follows the Redis error policy instead of being taken
-     * for an answer. A rejected EVAL itself is thrown by phpredis already.
+     * for an answer. A rejected EVAL itself is thrown by phpredis already,
+     * and predis throws both as a ServerException, which the policy covers
+     * too.
      *
      * @param  list<mixed>  $arguments
      *
-     * @throws RedisException when Redis rejects the script
+     * @throws RedisException when Redis rejects the script on phpredis
+     * @throws ServerException when Redis rejects the script on predis
      */
     private function evaluate(RedisStore $store, string $script, string $key, array $arguments): mixed
     {
@@ -174,7 +179,7 @@ LUA;
         $key = $store->getPrefix().$key;
 
         if (! $connection instanceof PhpRedisConnection) {
-            // Predis (not supported yet, D13) throws a failed script itself.
+            // predis throws a failed script itself, as a ServerException.
             return $connection->command('eval', [$script, 1, $key, ...$arguments]);
         }
 

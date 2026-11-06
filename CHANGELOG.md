@@ -35,6 +35,11 @@ model cache and the first commands.
   `add` writes only when nothing is cached, atomically on Redis; `pull`
   gives the value only to the call that removes it, so of two concurrent
   pulls one gets it (one Lua script on Redis).
+- **Stampede protection** (ADR 0012): a definition with `'lock' => true` or
+  `['seconds' => …, 'wait' => …]` (10 and 10 by default) makes
+  `remember()` take a lock on a miss, so one request loads while the others
+  wait; a request whose wait ends loads too and never overwrites the
+  holder's value. The `prefix` setting rejects `|`, which lock names use.
 - **No stale writes after a removal** (ADR 0012): `forget()` and `pull()`
   leave a tombstone for `tombstone_ttl` seconds (10) instead of deleting,
   and `remember()` caches its loader's result only if the key still holds
@@ -42,9 +47,12 @@ model cache and the first commands.
   removal is returned but not written back. `forget()` returns `true`
   unless Redis could not be reached. On other stores a tombstone blocks
   `remember()`'s write and `add()` until it expires.
+- **Redis clients:** phpredis and predis 2.3+ (`predis/predis: ^2.3`), under
+  the same error policy; Redis 6.2+, no Redis Cluster (ADR 0003).
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
-  is down. It covers connection errors and a script that fails in Redis in
+  is down. It covers errors from Redis itself on both clients: the
+  connection, a timeout and a command Redis rejects, also inside a script in
   `remember()`, `add()` or `pull()`; any other exception propagates. During
   an outage the first error is reported, then at most one per
   `report_interval` (60 seconds) in each Octane or queue worker, or one per
@@ -58,7 +66,10 @@ model cache and the first commands.
 - **`HasCache` trait:** `cached()`, `cachedMany()`, `modelCache()`,
   `forgetCache()` and `flushCache()`. Saving, deleting or restoring a model
   clears its entries after the commit, under its current and previous
-  context; `flushCache()` gives the model's generation counter a new value.
+  context, with tombstones (ADR 0012), so a `find()` or `findMany()` that
+  loaded the row before the change does not write it back; a created row is
+  cleared with a plain delete, and a save that changed nothing clears
+  nothing. `flushCache()` gives the model's generation counter a new value.
   Models whose scopes need a context implement `ProvidesCacheContext`. A save
   never fails because of the cache.
 - **Transactions:** while a transaction is open on the model's connection,

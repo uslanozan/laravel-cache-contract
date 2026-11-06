@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Uslanozan\CacheContract\Runtime;
 
+use Predis\CommunicationException as PredisCommunicationException;
+use Predis\Response\ServerException as PredisServerException;
 use RedisException;
 use Throwable;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
@@ -12,12 +14,20 @@ use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
  * The "redis_errors" setting: throw or report, per kind of operation
  * (ADR 0007), and how often errors are reported.
  *
- * Only connection errors follow the policy, and a command Redis rejects
- * where the package checks for it (pull(), ADR 0007 update 2026-11-04): phpredis
- * answers a rejected command with false and keeps the error aside, and the
- * package throws that error as a RedisException, so it follows the policy like
- * an outage. Any other exception, such as a bug in a loader or an unknown
- * store, always propagates.
+ * Only errors from Redis itself follow the policy, on both supported clients
+ * (ADR 0007, update 2026-11-06):
+ *
+ * - phpredis: a RedisException, for a connection error and for a command
+ *   Redis rejects. Where phpredis answers a rejected command with false and
+ *   keeps the error aside (a script, pull()), the package throws that error
+ *   as a RedisException, so it follows the policy like an outage.
+ * - predis 2.3+: a CommunicationException (the connection, its timeouts and
+ *   the protocol) and a ServerException (a command Redis rejects: NOPERM,
+ *   OOM, WRONGTYPE).
+ *
+ * Any other exception, such as a bug in a loader, an unknown store or a
+ * predis ClientException (a command predis does not know), always
+ * propagates.
  */
 final readonly class RedisErrorPolicy
 {
@@ -62,11 +72,12 @@ final readonly class RedisErrorPolicy
 
     public static function isConnectionError(Throwable $e): bool
     {
-        // phpredis, including a rejected command the package rethrows as a
-        // RedisException (see the class docblock), so not only an outage.
-        // Predis' connection exception joins here if Predis is supported
-        // later (D13).
-        return $e instanceof RedisException;
+        // Not only an outage: a command Redis rejects too, on both clients (see
+        // the class docblock). The predis classes need not exist: instanceof
+        // does not load them.
+        return $e instanceof RedisException
+            || $e instanceof PredisCommunicationException
+            || $e instanceof PredisServerException;
     }
 
     /**

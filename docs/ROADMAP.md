@@ -88,7 +88,7 @@ to Ozan when their owner is overloaded; this is decided in Thursday planning.
 | D10 | Artisan commands use the package prefix `cache-contract:` (not Laravel's `cache:`). The "new definition" command only **shows** similar definitions; it does not edit the config file. | ✅ agreed |
 | D11 | No Laravel Sail in this repo (Sail is for applications; the package uses `docker-compose.yml`). The demo app may use Sail. | ✅ agreed |
 | D12 | Composer package name **`uslanozan/laravel-cache-contract`**, PHP namespace **`Uslanozan\CacheContract`** | ✅ agreed |
-| D13 | Redis client: start with **phpredis** (Laravel's default, compatible with PHP 8.3 + Laravel 11); predis support and Redis Cluster are decided once company production details are known | ⏳ to confirm with company |
+| D13 | Redis clients: **phpredis** and **predis `^2.3`**; no Redis Cluster in v1; Redis 6.2+ (the company runs predis, no Cluster, Redis 6.2.3) → [ADR 0003](adr/0003-supported-versions.md#update-2026-11-06-redis-clients-cluster-and-the-companys-redis) | ✅ agreed |
 | D14 | Demo app lives in this repo under **`examples/`** (a full Laravel app that installs the package from the local path; excluded from the Composer dist). May move to its own repo later. | ✅ agreed |
 | D15 | Runtime facade name: **`CacheContract`** (matches the package name and the `cache-contract:` command prefix) | ✅ agreed |
 
@@ -287,7 +287,6 @@ fails CI on a direct `Cache::put` in app code.
 
 | Question | Owner | Needed by |
 | :--- | :--- | :--- |
-| Which Redis version and client do company projects run, and is Redis Cluster used? | Ozan | Phase 1 (D13) |
 | Do company projects run Laravel Octane? (Design is Octane-safe from day one regardless: no request state in singletons.) | Ozan | Phase 2 |
 
 ## 7. ADR backlog

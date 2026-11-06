@@ -11,6 +11,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Organization;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
@@ -21,7 +22,7 @@ use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.invalidated_by', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),

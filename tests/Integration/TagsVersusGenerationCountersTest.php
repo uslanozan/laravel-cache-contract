@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Cache\RedisStore;
 use Illuminate\Cache\Repository;
 use Illuminate\Redis\RedisManager;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 /*
@@ -17,7 +18,7 @@ const INVALIDATION_PREFIX = 'cache_contract_invalidation:';
 
 function invalidationRedis(): RedisManager
 {
-    return new RedisManager(app(), 'phpredis', [
+    return new RedisManager(app(), RedisClient::name(), [
         'options' => ['prefix' => ''],
         'cache' => [
             'host' => env('REDIS_HOST', '127.0.0.1'),
@@ -25,6 +26,7 @@ function invalidationRedis(): RedisManager
             'database' => 1,
             'timeout' => 1.0,
             'read_timeout' => 1.0,
+            'read_write_timeout' => 1.0,
         ],
     ]);
 }

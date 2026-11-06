@@ -8,15 +8,16 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\Tombstone;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 // ADR 0012 against real Redis: removals leave a tombstone, and a loader writes
 // only if the key still holds what its read found, in one Lua script.
 //
-// The client comes from REDIS_CLIENT (phpredis by default), so the same tests
-// run on predis (LRVL-80). Tests of phpredis' own behaviour skip on predis.
+// The client comes from REDIS_CLIENT (phpredis by default; see RedisClient), so
+// the same tests run on predis. Tests of phpredis' own options skip on predis.
 
 beforeEach(function () {
-    config()->set('database.redis.client', redisClient());
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.contract', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),
@@ -39,21 +40,6 @@ beforeEach(function () {
     ]);
 });
 
-function redisClient(): string
-{
-    $client = env('REDIS_CLIENT', 'phpredis');
-
-    return is_string($client) && $client !== '' ? $client : 'phpredis';
-}
-
-/** Skips the running test unless the client is phpredis. */
-function onlyOnPhpRedis(string $why): void
-{
-    if (redisClient() !== 'phpredis') {
-        test()->markTestSkipped('phpredis only: '.$why);
-    }
-}
-
 /**
  * Rebuilds the contract connection with these options. A prefix works on both
  * clients; serializer and compression are phpredis' own, so a test that sets
@@ -64,7 +50,7 @@ function onlyOnPhpRedis(string $why): void
 function tombstoneConnection(array $options): void
 {
     if (array_diff_key($options, ['prefix' => true]) !== []) {
-        onlyOnPhpRedis('serializer and compression options');
+        RedisClient::skipUnlessPhpRedis('serializer and compression options');
     }
 
     config()->set('database.redis.contract.options', $options);
@@ -73,7 +59,7 @@ function tombstoneConnection(array $options): void
     app()->forgetInstance('redis');
     Cache::forgetDriver('contract');
 
-    if (redisClient() === 'phpredis') {
+    if (RedisClient::isPhpRedis()) {
         /** @var Redis $client */
         $client = contractConnection()->client();
 
@@ -264,16 +250,13 @@ it('repairs a key that holds a value written by other code', function () {
     expect(CacheContract::get('user.profile', ['user_id' => 1]))->toBe(['name' => 'Ozan']);
 });
 
-// A command Redis rejects inside a script makes the script fail, and phpredis
+// A command Redis rejects inside a script makes the script fail. phpredis
 // answers that with false, keeping the error aside (a rejected EVAL itself, or
-// a rejected plain command, throws instead). A user without SETEX can read and
-// run scripts, but every script that writes fails with an ACL error.
+// a rejected plain command, throws instead), and the package throws it; predis
+// throws a ServerException itself. A user without SETEX can read and run
+// scripts, but every script that writes fails with an ACL error.
 describe('a script Redis rejects', function () {
     beforeEach(function () {
-        // predis throws a failed script as a ServerException itself; RedisClientErrorsTest
-        // checks that it follows the policy on both clients.
-        onlyOnPhpRedis('a failed script answers false, with the error in getLastError()');
-
         $this->user = 'cc_nosetex_'.bin2hex(random_bytes(4));
         contractConnection()->command('acl', ['SETUSER', $this->user, 'on', '>secret', '~*', '+@all', '-setex']);
 
@@ -284,10 +267,6 @@ describe('a script Redis rejects', function () {
     });
 
     afterEach(function () {
-        if (! isset($this->user)) {
-            return; // skipped
-        }
-
         config()->set('database.redis.contract.username', null);
         config()->set('database.redis.contract.password', null);
         tombstoneConnection([]);
@@ -298,13 +277,13 @@ describe('a script Redis rejects', function () {
         expect(CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded'))->toBe('loaded')
             ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
 
-        Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'ACL failure in script'));
+        RedisClient::assertRejectedCommandReported('ACL failure in script');
     });
 
     it('is reported by add() instead of answering "already cached"', function () {
         expect(CacheContract::add('user.profile', ['user_id' => 1], 'a'))->toBeFalse();
 
-        Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'ACL failure in script'));
+        RedisClient::assertRejectedCommandReported('ACL failure in script');
     });
 
     it('is reported by pull() instead of taking it for a miss', function () {
@@ -314,13 +293,13 @@ describe('a script Redis rejects', function () {
         expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default')
             ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe('once');
 
-        Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'ACL failure in script'));
+        RedisClient::assertRejectedCommandReported('ACL failure in script');
     });
 
     it('is thrown when the policy says so', function () {
         config()->set('cache-contract.redis_errors.write', 'throw');
 
         expect(fn () => CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded'))
-            ->toThrow(RedisException::class, 'ACL failure in script');
+            ->toThrow(RedisClient::rejectedCommandError(), 'ACL failure in script');
     });
 });

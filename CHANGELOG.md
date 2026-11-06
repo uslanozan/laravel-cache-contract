@@ -53,7 +53,9 @@ model cache and the first commands.
   write and invalidate; the default keeps the application working when Redis
   is down. It covers errors from Redis itself on both clients: the
   connection, a timeout and a command Redis rejects, also inside a script in
-  `remember()`, `add()` or `pull()`; any other exception propagates. During
+  `remember()`, `add()` or `pull()` and in the `MGET` that reads the
+  generation counters or `findMany()`'s entries (which phpredis answers with
+  `false`); any other exception propagates. During
   an outage the first error is reported, then at most one per
   `report_interval` (60 seconds) in each Octane or queue worker, or one per
   request under PHP-FPM, with a `RedisErrorsNotReported` count of the errors

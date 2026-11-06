@@ -12,6 +12,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 use Uslanozan\CacheContract\Tests\Support\QueryCounter;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * The model cache against real Redis (phpredis): the envelope and the
@@ -20,7 +21,7 @@ use Uslanozan\CacheContract\Tests\Support\QueryCounter;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     foreach (['model_cache' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
         config()->set("database.redis.{$connection}", [
@@ -86,7 +87,7 @@ it('loads from the database when Redis is unreachable', function () {
 
     expect(ModelCache::for(Member::class)->find(1)?->name)->toBe('Ada');
 
-    Exceptions::assertReported(RedisException::class);
+    Exceptions::assertReported(RedisClient::connectionError());
 });
 
 it('leaves no uncommitted row in Redis after a rollback', function () {

@@ -9,26 +9,18 @@ use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * increment() and decrement() against real Redis (LRVL-78): they fire
  * "updated" but never "saved", and both the model cache and invalidated_by
  * now clear on "updated". The client comes from REDIS_CLIENT (phpredis by
- * default).
+ * default; see RedisClient).
  */
 
 beforeEach(function () {
-    $client = env('REDIS_CLIENT', 'phpredis');
-    config()->set('database.redis.client', is_string($client) && $client !== '' ? $client : 'phpredis');
-    config()->set('database.redis.increments', [
-        'host' => env('REDIS_HOST', '127.0.0.1'),
-        'port' => (int) env('REDIS_PORT', 6379),
-        'database' => 1,
-        'timeout' => 1.0,
-        'read_timeout' => 1.0,
-        'read_write_timeout' => 1.0,
-        'max_retries' => 0,
-    ]);
+    config()->set('database.redis.client', RedisClient::name());
+    config()->set('database.redis.increments', RedisClient::connection());
     config()->set('cache.stores.increments', ['driver' => 'redis', 'connection' => 'increments']);
     config()->set('cache-contract.store', 'increments');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.

@@ -4,7 +4,11 @@
 
 - PHP 8.3.36+, 8.4.27+ or 8.5.12+ (earlier releases have a known zero-day)
 - Laravel 11.44.2+, 12.0.1+ or 13 (on PHP 8.5: Laravel 12.40+ or 13)
-- Redis 6.2+ with the phpredis extension, used as a Laravel cache store.
+- Redis 6.2+, used as a Laravel cache store, through either Laravel Redis
+  client: the phpredis extension, or predis 2.3+ (`predis/predis: ^2.3`).
+  predis 1.x is not supported; Laravel 11 and later test only predis 2.
+- Redis Cluster is not supported: the package is tested against a single
+  Redis server.
 
 Other cache stores work for trying the package out (the test suite also runs
 on the `array` store), but the package is designed and tested for Redis.

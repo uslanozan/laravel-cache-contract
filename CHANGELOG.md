@@ -42,9 +42,12 @@ model cache and the first commands.
   removal is returned but not written back. `forget()` returns `true`
   unless Redis could not be reached. On other stores a tombstone blocks
   `remember()`'s write and `add()` until it expires.
+- **Redis clients:** phpredis and predis 2.3+ (`predis/predis: ^2.3`), under
+  the same error policy; Redis 6.2+, no Redis Cluster (ADR 0003).
 - **Redis error policy** (`redis_errors`): `report` or `throw`, per read,
   write and invalidate; the default keeps the application working when Redis
-  is down. It covers connection errors and a script that fails in Redis in
+  is down. It covers errors from Redis itself on both clients: the
+  connection, a timeout and a command Redis rejects, also inside a script in
   `remember()`, `add()` or `pull()`; any other exception propagates. During
   an outage the first error is reported, then at most one per
   `report_interval` (60 seconds) in each Octane or queue worker, or one per

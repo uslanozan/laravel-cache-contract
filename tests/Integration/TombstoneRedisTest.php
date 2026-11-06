@@ -270,7 +270,8 @@ it('repairs a key that holds a value written by other code', function () {
 // run scripts, but every script that writes fails with an ACL error.
 describe('a script Redis rejects', function () {
     beforeEach(function () {
-        // predis throws a failed script as a ServerException itself (LRVL-80).
+        // predis throws a failed script as a ServerException itself; RedisClientErrorsTest
+        // checks that it follows the policy on both clients.
         onlyOnPhpRedis('a failed script answers false, with the error in getLastError()');
 
         $this->user = 'cc_nosetex_'.bin2hex(random_bytes(4));

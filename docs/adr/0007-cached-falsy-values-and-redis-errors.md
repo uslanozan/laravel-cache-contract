@@ -116,8 +116,8 @@ default.** Config (final key names are fixed with the facade):
   stale entry. The required TTL (ADR 0002) bounds how long it lives. Apps can
   still choose `throw`.
 - The policy covers connection errors only: phpredis' `RedisException` (and
-  Predis' connection exception if Predis is supported later, D13). Any other
-  exception, such as an unreadable entry, always propagates.
+  predis' errors since the update of 2026-11-06 below). Any other exception,
+  such as an unreadable entry, always propagates.
 - Tests and CI should set all three to `throw`, so failures are not hidden.
 
 ## Consequences
@@ -221,3 +221,26 @@ reports every error, as before.
   every call still tries Redis and pays the connection timeout. Skipping
   Redis for a while after errors changes how the package behaves, so it
   stays a separate decision.
+
+## Update 2026-11-06: predis
+
+The package supports predis `^2.3` next to phpredis (ADR 0003, update
+2026-11-06). Checked against Redis 7.4 with predis 2.4:
+
+| Failure | phpredis | predis |
+| :--- | :--- | :--- |
+| Redis cannot be reached, a timeout | `RedisException` | `ConnectionException` (a `CommunicationException`) |
+| A plain command Redis rejects (`NOPERM`, `OOM`) | `RedisException` | `ServerException` |
+| A script that fails inside Redis (`WRONGTYPE`, a command the ACL forbids) | `false`; the package throws the last error as a `RedisException` | `ServerException` |
+| A rejected `MGET` | `false` or nulls (LRVL-79) | `ServerException` |
+| A command the client does not know | `Error` | `ClientException` |
+
+**Decision:** on predis, a `CommunicationException` (the connection, its
+timeouts and the protocol) and a `ServerException` (a command Redis rejects)
+follow the policy, as a `RedisException` does on phpredis, so both clients
+give the same result. A `ClientException` is a bug in the calling code and
+propagates. The predis classes are checked with `instanceof`, so the package
+still needs neither client installed.
+
+On predis, the `MGET` of the generation counters is covered by this: a
+rejection is thrown and follows the policy. On phpredis it is still LRVL-79.

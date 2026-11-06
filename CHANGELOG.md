@@ -63,7 +63,10 @@ model cache and the first commands.
 - **`HasCache` trait:** `cached()`, `cachedMany()`, `modelCache()`,
   `forgetCache()` and `flushCache()`. Saving, deleting or restoring a model
   clears its entries after the commit, under its current and previous
-  context; `flushCache()` gives the model's generation counter a new value.
+  context, with tombstones (ADR 0012), so a `find()` or `findMany()` that
+  loaded the row before the change does not write it back; a created row is
+  cleared with a plain delete, and a save that changed nothing clears
+  nothing. `flushCache()` gives the model's generation counter a new value.
   Models whose scopes need a context implement `ProvidesCacheContext`. A save
   never fails because of the cache.
 - **Transactions:** while a transaction is open on the model's connection,

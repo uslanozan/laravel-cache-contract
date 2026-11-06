@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
@@ -50,7 +51,8 @@ it('clears the entry in Redis after the commit', function () {
         expect(Cache::store('invalidation')->has($key))->toBeTrue();
     });
 
-    expect(Cache::store('invalidation')->has($key))->toBeFalse()
+    // Cleared with a tombstone, so a read from before the change cannot write it back (ADR 0012).
+    expect(Tombstone::is(Cache::store('invalidation')->get($key)))->toBeTrue()
         ->and(Member::cached(1)?->name)->toBe('Grace');
 });
 
@@ -78,8 +80,8 @@ it('clears both tenants\' entries when a row moves to another tenant', function 
     $project->tenant_id = 9;
     $project->save();
 
-    expect(Cache::store('invalidation')->has($tenant7->key(5)))->toBeFalse()
-        ->and(Cache::store('invalidation')->has($tenant9->key(5)))->toBeFalse();
+    expect(Tombstone::is(Cache::store('invalidation')->get($tenant7->key(5))))->toBeTrue()
+        ->and(Tombstone::is(Cache::store('invalidation')->get($tenant9->key(5))))->toBeTrue();
 });
 
 it('makes every entry of the model unreachable with flushCache()', function () {

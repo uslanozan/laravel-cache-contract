@@ -71,10 +71,12 @@ $users = ModelCache::for(User::class)->findMany([3, 1, 2]);
 $users->load('company');   // one query for all of them
 ```
 
-- Cached models are read in one go, the rest are loaded with one query and
-  cached in one go. 100 models take two Redis reads (the model's generation
-  counter and the entries), one query and one Redis write the first time,
-  and two Redis reads afterwards.
+- Cached models are read in one go, and the rest are loaded with one query.
+  Each loaded model is then written with its own small script, which checks
+  that nothing changed the entry since the read (see
+  [A read during a change](#a-read-during-a-change)). 100 models take two
+  Redis reads (the model's generation counter and the entries), one query
+  and 100 script calls the first time, and two Redis reads afterwards.
 - The result is an Eloquent collection **in the order you asked for**.
 - An ID with no row is left out of the result (and cached as `null`).
   A repeated ID is returned once; `'1'` and `1` are the same ID.
@@ -85,7 +87,7 @@ $users->load('company');   // one query for all of them
 ## Automatic invalidation
 
 With `HasCache`, a model's entries are cleared when it is saved (created or
-updated), deleted or restored:
+updated), deleted or restored. A save that changed nothing clears nothing.
 
 - **After the commit.** Inside a transaction on the model's connection, the
   entries are cleared once it commits; on rollback nothing is cleared.
@@ -117,12 +119,35 @@ and changes from other applications. `increment()` and `decrement()` on a
 model are not seen either: they fire `updated` but not `saved` (LRVL-78).
 Call `User::flushCache()` after a mass change and `$user->forgetCache()`
 after an `increment()` on one model, or keep the TTL short enough.
-`flushCache()` also avoids the gap below.
 
-**A read during a change:** a read that loads a row just before a change can
-write the old row back after the change clears it; it then stays until its
-TTL ends. `flushCache()` does not have this gap, because entries under the
-old generation are never read again.
+### A read during a change
+
+A `find()` that loads a row just before a change could write the old row
+back after the change clears it, and it would stay until its TTL ends. So
+clearing does not delete the entries: it leaves a **tombstone**, a marker
+every read treats as a miss, for `tombstone_ttl` seconds (10 by default; see
+[Removals leave a tombstone](cache-contract.md#removals-leave-a-tombstone)).
+`find()` and `findMany()` write a loaded row only if the key still holds what
+their read found:
+
+- A read that ran across the change returns the row it loaded, but does not
+  cache it; the next read loads the new row.
+- A read that started after the change caches the new row at once.
+- `ModelCache::forget()` and `forgetCache()` return `true` whenever the
+  tombstones were written, and `false` only when Redis could not be reached.
+- **A created row** is cleared with a plain delete, not a tombstone: nothing
+  can have cached it but a "no such row", and a tombstone per insert would
+  cost a key per created row. One gap remains, accepted in ADR 0012: a read
+  that queries before the insert commits finds no row, and if it caches that
+  "no such row" after the delete, it stays until its TTL ends. With
+  auto-increment IDs nobody asks for an ID before it exists; with IDs your
+  application generates (UUIDs, ULIDs), a job dispatched before the commit
+  or a polling client can.
+- `flushCache()` needs no tombstone: entries under the old generation are
+  never read again.
+- **On other stores** (`array`, `database`, `file`…) a tombstone blocks the
+  write until it expires: right after a change, reads go to the database for
+  `tombstone_ttl` seconds. Keep that in mind in tests on the `array` store.
 
 ### Inside a transaction
 

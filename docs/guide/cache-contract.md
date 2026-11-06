@@ -123,6 +123,8 @@ write are one script.
   such a key is repaired.
 - `flushTag()` and `invalidated_by` are not affected: they change the key,
   not the entry.
+- The [model cache](model-cache.md#a-read-during-a-change) works the same
+  way for `find()`, `findMany()` and the clearing after a model change.
 
 **On other stores** (`array`, `database`, `file`…) the check is a plain
 `add()`: a tombstone blocks `remember()`'s write and `add()` until it

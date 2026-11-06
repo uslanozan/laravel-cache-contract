@@ -99,15 +99,16 @@ LUA;
 
     /**
      * A loader's write: only if the key still holds what $seen found. A
-     * foreign value is overwritten, so such a key is repaired instead of
-     * blocking every write until it expires (ADR 0012).
+     * foreign value, or an envelope the caller could not use (the model cache
+     * finds one whose row is not an array), is overwritten, so such a key is
+     * repaired instead of blocking every write until it expires (ADR 0012).
      *
      * @param  array{0: mixed}  $envelope
      * @return bool true when the value was written
      */
     public function writeIfUnchanged(Repository $repository, string $key, StoredEntry $seen, array $envelope, int $ttl): bool
     {
-        if ($seen->isForeign()) {
+        if ($seen->isForeign() || $seen->isHit()) {
             return $repository->put($key, $envelope, $ttl);
         }
 

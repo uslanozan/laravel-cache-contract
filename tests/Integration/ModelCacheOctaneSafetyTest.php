@@ -10,6 +10,7 @@ use Uslanozan\CacheContract\Tests\Fixtures\Jobs\FindTenantProject;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 use Uslanozan\CacheContract\Tests\Support\QueryCounter;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * Model-side safety for long-running processes (LRVL-38), against real Redis.
@@ -19,7 +20,7 @@ use Uslanozan\CacheContract\Tests\Support\QueryCounter;
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
     config()->set('database.redis.octane_safety', [
         'host' => env('REDIS_HOST', '127.0.0.1'),
         'port' => (int) env('REDIS_PORT', 6379),

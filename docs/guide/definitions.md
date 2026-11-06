@@ -55,8 +55,9 @@ through their TTL; nothing has to be flushed.
 ## invalidated_by
 
 List the models whose changes make the cached data wrong. When one of them
-is saved (created or updated), deleted or restored, every entry of the
-definition is invalidated:
+is saved (created or updated), deleted or restored, or changed with
+`increment()` or `decrement()`, every entry of the definition is
+invalidated:
 
 ```php
 'member' => [
@@ -95,9 +96,8 @@ Member::create([...]);   // a new member enters the list: the next call loads it
   `report`, it is reported and the entries stay until their TTL ends.
 - **Not seen by model events**, as in Eloquent itself: mass updates and
   deletes (`Member::query()->update([...])`), `saveQuietly()`,
-  `withoutEvents()`, raw SQL and changes from other applications. Keep the
-  TTL short enough for those. `increment()` and `decrement()` on a model are
-  not seen either: they fire `updated` but not `saved` (LRVL-78).
+  `withoutEvents()`, `incrementQuietly()`, raw SQL and changes from other
+  applications. Keep the TTL short enough for those.
 
 Each definition with `invalidated_by` has a generation counter (ADR 0009).
 A change gives it a new value, which is part of every key of the definition,

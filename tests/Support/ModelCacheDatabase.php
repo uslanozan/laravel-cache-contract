@@ -55,6 +55,7 @@ final class ModelCacheDatabase
             $table->boolean('is_admin');
             $table->string('status');
             $table->timestamp('last_login_at');
+            $table->unsignedInteger('logins')->default(0); // for increment() and decrement() (LRVL-78)
             $table->timestamps();
         });
         Schema::create('articles', function (Blueprint $table) {

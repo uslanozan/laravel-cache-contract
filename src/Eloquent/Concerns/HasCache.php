@@ -119,11 +119,14 @@ trait HasCache
     }
 
     /**
-     * Registered once per model class, when it boots.
+     * Registered once per model class, when it boots. An update is cleared on
+     * "updated", which increment() and decrement() fire too while they never
+     * fire "saved"; "saved" clears only an insert, so a save() is cleared once
+     * (LRVL-78).
      */
     public static function bootHasCache(): void
     {
-        foreach (['saved', 'deleted', 'restored'] as $event) {
+        foreach (['saved', 'updated', 'deleted', 'restored'] as $event) {
             static::registerModelEvent($event, static function (Model $model) use ($event): void {
                 /** @var static $model */
                 $model->clearCacheAfterChange($event);
@@ -142,15 +145,16 @@ trait HasCache
      * ProvidesCacheContext, an invalid context) and an exception from
      * cacheContext() are reported instead.
      *
-     * @param  string  $event  the model event: saved, deleted or restored
+     * @param  string  $event  the model event: saved, updated, deleted or restored
      */
     protected function clearCacheAfterChange(string $event = 'saved'): void
     {
-        // "Created" is the insert's own saved event: a later update of the same
-        // instance has changes, and gets tombstones.
+        // "Created" is the insert's own saved event. Any other saved event belongs to
+        // an update, which "updated" has cleared already (or a save that changed
+        // nothing, which fires no "updated" and clears nothing).
         $created = $event === 'saved' && $this->wasRecentlyCreated && ! $this->wasChanged();
 
-        if ($event === 'saved' && ! $created && ! $this->wasChanged()) {
+        if ($event === 'saved' && ! $created) {
             return;
         }
 

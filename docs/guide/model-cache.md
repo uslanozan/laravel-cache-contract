@@ -87,7 +87,9 @@ $users->load('company');   // one query for all of them
 ## Automatic invalidation
 
 With `HasCache`, a model's entries are cleared when it is saved (created or
-updated), deleted or restored. A save that changed nothing clears nothing.
+updated), deleted or restored, and after `increment()` and `decrement()` on
+it, which update the row without a save. A save that changed nothing clears
+nothing, and a save is cleared once.
 
 - **After the commit.** Inside a transaction on the model's connection, the
   entries are cleared once it commits; on rollback nothing is cleared.
@@ -114,11 +116,11 @@ definition's [`invalidated_by`](definitions.md#invalidated_by); that needs no
 `HasCache`.
 
 **Not seen by model events**, as in Eloquent itself: mass updates and deletes
-(`User::query()->update([...])`), `saveQuietly()`, `withoutEvents()`, raw SQL
-and changes from other applications. `increment()` and `decrement()` on a
-model are not seen either: they fire `updated` but not `saved` (LRVL-78).
-Call `User::flushCache()` after a mass change and `$user->forgetCache()`
-after an `increment()` on one model, or keep the TTL short enough.
+(`User::query()->update([...])`, `User::query()->increment(...)`),
+`saveQuietly()`, `incrementQuietly()`, `withoutEvents()`, raw SQL and changes
+from other applications. Call `User::flushCache()` after a mass change and
+`$user->forgetCache()` after a quiet change to one model, or keep the TTL
+short enough.
 
 ### A read during a change
 

@@ -155,7 +155,11 @@ the others wait for its value (ADR 0012):
 ```
 
 On a miss, `remember()` takes a lock named after the entry's key, with
-`|lock` at the end:
+`|lock` at the end. The lock is stored on the cache store's
+`lock_connection`: in Laravel's default `config/cache.php`, the `default`
+Redis connection (`REDIS_CACHE_LOCK_CONNECTION`), with that connection's
+database and prefix. Look for it there in `redis-cli`, not next to the
+entry.
 
 - **With the lock**, it reads the entry again (another request may have
   filled it meanwhile), runs the loader only on a miss, caches the value and

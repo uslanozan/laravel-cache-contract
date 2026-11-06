@@ -98,6 +98,20 @@ it('caches at once a row read after the change', function () {
         ->and(QueryCounter::count(fn () => Member::cached(1)))->toBe(0);
 });
 
+it('caches at once in findMany() a row read after the change', function () {
+    $ids = [1, ...ModelCacheDatabase::addMembers(1)];
+    Member::cachedMany($ids);
+
+    $member = Member::query()->findOrFail(1);
+    $member->name = 'Grace';
+    $member->save(); // a tombstone on member 1
+
+    // The read finds the tombstone, so its compare-and-set replaces it: the next
+    // call is answered from Redis, not from the database.
+    expect(Member::cachedMany($ids)->pluck('name')->all())->toBe(['Grace', 'Member 2'])
+        ->and(QueryCounter::count(fn () => Member::cachedMany($ids)))->toBe(0);
+});
+
 it('leaves tombstones on the normal and the withTrashed() entry', function () {
     Article::cached(1);
     Article::modelCache()->withTrashed()->find(1);

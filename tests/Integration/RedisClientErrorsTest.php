@@ -200,17 +200,13 @@ describe('a command Redis rejects', function () {
     })->with('redis clients');
 
     it('follows "read" when the generation counters cannot be read', function (string $client) {
-        if ($client === 'phpredis') {
-            // phpredis answers a rejected MGET with false or nulls, not an exception (LRVL-79).
-            test()->markTestSkipped('phpredis: a rejected MGET is LRVL-79');
-        }
-
+        // phpredis answers a rejected MGET with false; the package throws it (LRVL-79).
         $this->client = $client;
         $this->user = loginAsUserWithout($client, ['mget']);
         Exceptions::fake();
 
         expect(CacheContract::get('user.profile', ['user_id' => 1], 'default'))->toBe('default')
             ->and(CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'Ada']))->toBe(['name' => 'Ada']);
-        Exceptions::assertReported(fn (ServerException $e): bool => str_contains($e->getMessage(), 'NOPERM') && str_contains($e->getMessage(), 'mget'));
+        assertRejectedCommandReported($client, "run the 'mget' command");
     })->with('redis clients');
 });

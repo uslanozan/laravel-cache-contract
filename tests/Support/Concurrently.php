@@ -7,6 +7,7 @@ namespace Uslanozan\CacheContract\Tests\Support;
 use Closure;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -59,9 +60,10 @@ final class Concurrently
      * @param  string  $connection  a Redis connection whose read_timeout exceeds $timeout + 5
      * @param  list<string>  $stores  cache stores to rebuild in each process
      * @param  int  $timeout  seconds a process waits for a signal
+     * @param  list<string>  $databases  database connections to reopen in each process (a shared SQLite file)
      * @return list<mixed> what each closure returned, in order
      */
-    public static function run(array $workers, string $connection = 'concurrency', array $stores = [], int $timeout = self::TIMEOUT): array
+    public static function run(array $workers, string $connection = 'concurrency', array $stores = [], int $timeout = self::TIMEOUT, array $databases = []): array
     {
         $run = 'cc_concurrency:'.bin2hex(random_bytes(6));
         $count = count($workers);
@@ -75,7 +77,7 @@ final class Concurrently
             }
 
             if ($pid === 0) {
-                self::child($worker, $index, $count, $run, $connection, $stores, $timeout); // never returns
+                self::child($worker, $index, $count, $run, $connection, $stores, $timeout, $databases); // never returns
             }
 
             $pids[] = $pid;
@@ -143,14 +145,18 @@ final class Concurrently
     /**
      * @param  Closure(self): mixed  $worker
      * @param  list<string>  $stores
+     * @param  list<string>  $databases
      */
-    private static function child(Closure $worker, int $index, int $count, string $run, string $connection, array $stores, int $timeout): never
+    private static function child(Closure $worker, int $index, int $count, string $run, string $connection, array $stores, int $timeout, array $databases): never
     {
         try {
             // New connections for this process: the parent's sockets stay the parent's.
             app()->forgetInstance('redis');
             foreach ($stores as $store) {
                 Cache::forgetDriver($store);
+            }
+            foreach ($databases as $database) {
+                DB::purge($database);
             }
 
             $redis = self::connection($connection);

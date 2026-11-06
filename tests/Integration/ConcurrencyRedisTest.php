@@ -2,10 +2,16 @@
 
 declare(strict_types=1);
 
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\Tombstone;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\Concurrently;
+use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
 
 /*
  * Races between processes against real Redis (LRVL-43): parallel calls on the
@@ -37,6 +43,8 @@ beforeEach(function () {
         'report' => [
             'totals' => ['purpose' => 'totals', 'type' => 'array', 'ttl' => 600, 'description' => 'Totals.'],
             'guard' => ['purpose' => 'guard', 'type' => 'array', 'params' => ['round' => 'int'], 'ttl' => 600, 'description' => 'Guard.'],
+            'locked' => ['purpose' => 'locked', 'type' => 'array', 'ttl' => 600, 'description' => 'Locked.', 'lock' => ['seconds' => 10, 'wait' => 10]],
+            'impatient' => ['purpose' => 'impatient', 'type' => 'array', 'ttl' => 600, 'description' => 'Locked, no wait.', 'lock' => ['seconds' => 10, 'wait' => 0]],
             'tagged' => ['purpose' => 'tagged', 'type' => 'array', 'ttl' => 600, 'description' => 'Tagged.', 'tags' => ['reports']],
         ],
     ]);
@@ -49,6 +57,42 @@ beforeEach(function () {
 function concurrently(array $workers): array
 {
     return Concurrently::run($workers, 'concurrency', ['concurrency']);
+}
+
+/**
+ * concurrently() for the model cache: each process reopens the shared SQLite file.
+ *
+ * @param  list<Closure(Concurrently): mixed>  $workers
+ * @return list<mixed>
+ */
+function concurrentlyWithDatabase(array $workers): array
+{
+    return Concurrently::run($workers, 'concurrency', ['concurrency'], databases: [ModelCacheDatabase::CONNECTION]);
+}
+
+/**
+ * Right after the first SELECT on members in this process, before the model
+ * cache writes what it read: signals "read", then waits for "changed".
+ */
+function pauseAfterReadingMembers(Concurrently $run): void
+{
+    $paused = false;
+    DB::listen(function (QueryExecuted $query) use ($run, &$paused) {
+        if (! $paused && str_starts_with($query->sql, 'select') && str_contains($query->sql, '"members"')) {
+            $paused = true;
+            $run->signal('read');
+            $run->await('changed');
+        }
+    });
+}
+
+function renameMemberOne(Concurrently $run): void
+{
+    $run->await('read');
+    $member = Member::query()->findOrFail(1);
+    $member->name = 'Ada Lovelace';
+    $member->save(); // HasCache leaves a tombstone: no transaction, so at once
+    $run->signal('changed');
 }
 
 /**
@@ -187,4 +231,115 @@ describe('an invalidation while a loader runs', function () {
 it('fails with a message instead of hanging when a process waits for a signal nobody sends', function () {
     expect(fn () => Concurrently::run([fn (Concurrently $run) => $run->await('never')], 'concurrency', ['concurrency'], timeout: 1))
         ->toThrow(RuntimeException::class, 'Process 0 failed: RuntimeException: Timed out after 1 seconds waiting for "never"');
+});
+
+describe('the stampede lock', function () {
+    it('lets one of ten processes load a cold key while the others wait for its value', function () {
+        $readers = times(10, function (Concurrently $run): array {
+            Event::listen(CacheMissed::class, fn () => $run->signal('missed'));
+            $loaded = false;
+
+            $value = CacheContract::remember('report.locked', [], function () use ($run, &$loaded) {
+                $loaded = true;
+                $run->signal('loading');
+                $run->await('finish');
+
+                return ['by' => getmypid()];
+            });
+
+            return [$value, $loaded];
+        });
+
+        // The loader holds the lock until all ten processes have missed: none of them
+        // finds the value by luck, every one of them has to wait for it.
+        $results = concurrently([...$readers, function (Concurrently $run): void {
+            $run->await('loading');
+            for ($i = 0; $i < 10; $i++) {
+                $run->await('missed');
+            }
+            $run->signal('finish');
+        }]);
+        array_pop($results);
+
+        $values = array_column($results, 0);
+
+        expect(array_filter(array_column($results, 1)))->toHaveCount(1) // the loader ran once
+            ->and(array_unique(array_map(serialize(...), $values)))->toHaveCount(1)
+            ->and(CacheContract::get('report.locked'))->toBe($values[0]);
+    });
+
+    it('lets a request whose wait ends load too, without overwriting the holder', function () {
+        [$holder, $waiter] = concurrently([
+            function (Concurrently $run) {
+                $value = CacheContract::remember('report.impatient', [], function () use ($run) {
+                    $run->signal('holding');
+                    $run->await('waiter loading');
+
+                    return ['by' => 'holder'];
+                });
+                $run->signal('holder wrote');
+
+                return $value;
+            },
+            function (Concurrently $run) {
+                $run->await('holding'); // the lock is taken, and "wait" is 0
+
+                return CacheContract::remember('report.impatient', [], function () use ($run) {
+                    $run->signal('waiter loading');
+                    $run->await('holder wrote');
+
+                    return ['by' => 'waiter'];
+                });
+            },
+        ]);
+
+        expect($holder)->toBe(['by' => 'holder'])
+            ->and($waiter)->toBe(['by' => 'waiter'])
+            ->and(CacheContract::get('report.impatient'))->toBe(['by' => 'holder']);
+    });
+});
+
+// The in-memory test database is copied into each process, so these tests share
+// a SQLite file that every process reopens.
+describe('the model cache', function () {
+    beforeEach(function () {
+        $this->database = (string) tempnam(sys_get_temp_dir(), 'cc_concurrency_');
+        ModelCacheDatabase::create($this->database);
+        ModelCacheDatabase::addMembers(1); // member 2
+    });
+
+    afterEach(function () {
+        @unlink($this->database);
+    });
+
+    it('does not cache a row find() read before another process changed it', function () {
+        [$read] = concurrentlyWithDatabase([
+            function (Concurrently $run) {
+                pauseAfterReadingMembers($run);
+
+                return Member::cached(1)?->name;
+            },
+            fn (Concurrently $run) => renameMemberOne($run),
+        ]);
+
+        expect($read)->toBe('Ada')
+            ->and(Tombstone::is(Cache::store('concurrency')->get(Member::modelCache()->key(1))))->toBeTrue()
+            ->and(Member::cached(1)?->name)->toBe('Ada Lovelace');
+    });
+
+    it('does not cache a row findMany() read before another process changed it, and caches the others', function () {
+        [$read] = concurrentlyWithDatabase([
+            function (Concurrently $run) {
+                pauseAfterReadingMembers($run);
+
+                return Member::cachedMany([1, 2])->pluck('name')->all();
+            },
+            fn (Concurrently $run) => renameMemberOne($run),
+        ]);
+
+        expect($read)->toBe(['Ada', 'Member 2'])
+            ->and(Tombstone::is(Cache::store('concurrency')->get(Member::modelCache()->key(1))))->toBeTrue()
+            ->and(Cache::store('concurrency')->get(Member::modelCache()->key(2))[0]['name'] ?? null)->toBe('Member 2')
+            ->and(Member::cachedMany([1, 2])->pluck('name')->all())->toBe(['Ada Lovelace', 'Member 2']);
+    });
 });

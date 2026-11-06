@@ -19,10 +19,12 @@ use Uslanozan\CacheContract\Eloquent\Concerns\HasCache;
 use Uslanozan\CacheContract\Exceptions\InvalidParameters;
 use Uslanozan\CacheContract\Exceptions\ModelNotCachable;
 use Uslanozan\CacheContract\Invalidation\AfterCommit;
+use Uslanozan\CacheContract\Runtime\EntryStore;
 use Uslanozan\CacheContract\Runtime\Envelope;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Runtime\RedisOperation;
+use Uslanozan\CacheContract\Runtime\StoredEntry;
 
 /**
  * Caches one model class by primary key, without a definition in the config
@@ -45,6 +47,10 @@ use Uslanozan\CacheContract\Runtime\RedisOperation;
  * is cached too, as null. While a transaction is open on the model's
  * connection, entries are read but nothing is written: the rows it sees may
  * not be committed, and a rollback would leave them in the cache.
+ *
+ * forget() leaves a tombstone, and a loaded row is written only if the key
+ * still holds what the read found, so a row read before a change is not
+ * written back after it (ADR 0012).
  *
  * Immutable: withContext() and withTrashed() return a copy, so a tenant set
  * for one call never reaches the next request (Octane, queue workers).
@@ -75,6 +81,7 @@ final readonly class ModelCache
         private KeyFactory $keys,
         private RedisErrorPolicy $errors,
         private GenerationCounters $counters,
+        private EntryStore $entries = new EntryStore,
         private array $safeScopes = [],
         private ?string $store = null,
         private int $chunkSize = ModelCacheConfig::DEFAULT_CHUNK_SIZE,
@@ -102,7 +109,7 @@ final readonly class ModelCache
         }
 
         return new self(
-            $this->class, $this->definition, $this->cache, $this->keys, $this->errors, $this->counters,
+            $this->class, $this->definition, $this->cache, $this->keys, $this->errors, $this->counters, $this->entries,
             $this->safeScopes, $this->store, $this->chunkSize, array_merge($this->context, $context), $this->withTrashed,
         );
     }
@@ -123,7 +130,7 @@ final readonly class ModelCache
         }
 
         return new self(
-            $this->class, $this->definition, $this->cache, $this->keys, $this->errors, $this->counters,
+            $this->class, $this->definition, $this->cache, $this->keys, $this->errors, $this->counters, $this->entries,
             $this->safeScopes, $this->store, $this->chunkSize, $this->context, true,
         );
     }
@@ -153,14 +160,39 @@ final readonly class ModelCache
 
     /**
      * Removes the entries of this ID for this instance's context: the normal
-     * one and, for a soft-deletable model, the withTrashed() one. A failure
-     * follows the "invalidate" policy (ADR 0007).
+     * one and, for a soft-deletable model, the withTrashed() one. Each gets a
+     * tombstone for "tombstone_ttl" seconds, so a read that loaded the row
+     * before this call does not write it back (ADR 0012). A failure follows
+     * the "invalidate" policy (ADR 0007).
      *
-     * @return bool false when Redis could not be reached
+     * @return bool true when the tombstones were written, whether or not
+     *              anything was cached; false only when Redis could not be reached
      *
      * @throws InvalidParameters when the ID does not match the model's key type
      */
     public function forget(int|string $id): bool
+    {
+        return $this->remove($id, tombstone: true);
+    }
+
+    /**
+     * forget() for a row that was just created: a plain delete, without
+     * tombstones. Nothing can have cached such a row but a "no such row", and
+     * a tombstone per insert would cost a key per created row (ADR 0012).
+     *
+     * @internal called by HasCache after an insert
+     *
+     * @throws InvalidParameters when the ID does not match the model's key type
+     */
+    public function forgetCreated(int|string $id): bool
+    {
+        return $this->remove($id, tombstone: false);
+    }
+
+    /**
+     * @throws InvalidParameters when the ID does not match the model's key type
+     */
+    private function remove(int|string $id, bool $tombstone): bool
     {
         $model = new $this->class;
         $id = $this->normalizeId($id);
@@ -179,7 +211,8 @@ final readonly class ModelCache
 
         try {
             foreach ($variants as $trashed) {
-                $this->repository()->forget($this->makeKey($model, $id, $generation, $trashed));
+                $key = $this->makeKey($model, $id, $generation, $trashed);
+                $tombstone ? $this->entries->bury($this->repository(), $key) : $this->repository()->forget($key);
             }
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Invalidate);
@@ -230,8 +263,8 @@ final readonly class ModelCache
         $key = $this->makeKey($model, $id, $generation);
         $entry = $this->read($key);
 
-        if (Envelope::isHit($entry)) {
-            $attributes = Envelope::unwrap($entry);
+        if ($entry !== false && $entry->isHit()) {
+            $attributes = $entry->value();
 
             if ($attributes === null) {
                 return null;
@@ -247,7 +280,7 @@ final readonly class ModelCache
 
         // When the read failed, Redis is down: skip the write that would fail too (ADR 0007).
         if ($entry !== false && ! AfterCommit::isOpen($model->getConnection())) {
-            $this->write($key, $found?->getAttributes());
+            $this->write($key, $entry, $found?->getAttributes());
         }
 
         return $found;
@@ -255,7 +288,8 @@ final readonly class ModelCache
 
     /**
      * The models with these primary keys, in the order asked for: cached ones
-     * from one MGET, the rest from one query, then written back in one go.
+     * from one MGET, the rest from one query, then written back one key at a
+     * time, each only if the key still holds what the MGET found (ADR 0012).
      * Large lists are split into chunks of "models.chunk_size" (1,000 by
      * default) for both the MGET and the query.
      *
@@ -306,6 +340,9 @@ final readonly class ModelCache
         /** @var array<array-key, TModel|null> $found ID => model, or null when the ID has no row */
         $found = [];
 
+        /** @var array<string, StoredEntry> $seen key => what the MGET found there */
+        $seen = [];
+
         foreach ($readFailed ? [] : array_chunk($requested, $this->chunkSize, true) as $chunk) {
             $entries = $this->readMany(array_column($chunk, 'key'));
 
@@ -317,13 +354,13 @@ final readonly class ModelCache
             }
 
             foreach ($chunk as $id => ['key' => $key]) {
-                $entry = $entries[$key] ?? null;
+                $entry = $seen[$key] = new StoredEntry($entries[$key] ?? null);
 
-                if (! Envelope::isHit($entry)) {
+                if (! $entry->isHit()) {
                     continue;
                 }
 
-                $attributes = Envelope::unwrap($entry);
+                $attributes = $entry->value();
 
                 if ($attributes === null) {
                     $found[$id] = null;
@@ -344,10 +381,11 @@ final readonly class ModelCache
                 }
             }
 
+            /** @var array<string, array{0: StoredEntry, 1: array<string, mixed>|null}> $writes */
             $writes = [];
             foreach ($missing as $id => ['key' => $key]) {
                 $found[$id] = $loaded[$id] ?? null;
-                $writes[$key] = Envelope::wrap($found[$id]?->getAttributes());
+                $writes[$key] = [$seen[$key] ?? new StoredEntry(null), $found[$id]?->getAttributes()];
             }
 
             if (! $readFailed && ! AfterCommit::isOpen($model->getConnection())) {
@@ -491,15 +529,12 @@ final readonly class ModelCache
     }
 
     /**
-     * @return array{0: mixed}|false|null the envelope on a hit, null on a miss,
-     *                                    false when Redis could not be reached
+     * What the key holds; false when Redis could not be reached.
      */
-    private function read(string $key): array|false|null
+    private function read(string $key): StoredEntry|false
     {
         try {
-            $entry = $this->repository()->get($key);
-
-            return Envelope::isHit($entry) ? $entry : null;
+            return $this->entries->read($this->repository(), $key);
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Read);
 
@@ -507,13 +542,22 @@ final readonly class ModelCache
         }
     }
 
-    private function write(string $key, mixed $value): void
+    /**
+     * Writes a loaded row only if the key still holds what $seen found
+     * (ADR 0012). A failure follows the "write" policy.
+     */
+    private function write(string $key, StoredEntry $seen, mixed $value): void
     {
         try {
-            $this->repository()->put($key, Envelope::wrap($value), $this->definition->ttl);
+            $this->writeLoaded($key, $seen, $value);
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Write);
         }
+    }
+
+    private function writeLoaded(string $key, StoredEntry $seen, mixed $value): void
+    {
+        $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $this->definition->ttl);
     }
 
     /**
@@ -533,21 +577,19 @@ final readonly class ModelCache
     }
 
     /**
-     * Writes in chunks; stops at the first failure, since the next chunk would
-     * wait for the same unreachable Redis.
+     * One compare-and-set per key (ADR 0012); stops at the first failure,
+     * since the next write would wait for the same unreachable Redis.
      *
-     * @param  array<string, mixed>  $values
+     * @param  array<string, array{0: StoredEntry, 1: mixed}>  $writes  key => what the read found, the value
      */
-    private function writeMany(array $values): void
+    private function writeMany(array $writes): void
     {
-        foreach (array_chunk($values, $this->chunkSize, true) as $chunk) {
-            try {
-                $this->repository()->putMany($chunk, $this->definition->ttl);
-            } catch (Throwable $e) {
-                $this->errors->handle($e, RedisOperation::Write);
-
-                return;
+        try {
+            foreach ($writes as $key => [$seen, $value]) {
+                $this->writeLoaded($key, $seen, $value);
             }
+        } catch (Throwable $e) {
+            $this->errors->handle($e, RedisOperation::Write);
         }
     }
 

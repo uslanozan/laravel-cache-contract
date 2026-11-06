@@ -40,6 +40,7 @@ The section `model` is reserved for the [model cache](model-cache.md).
 | `version` | no | A positive integer, default `1`; see [Versions](#versions). |
 | `tags` | no | A list of tag names declared under `tags`; see [Tags](#tags). |
 | `invalidated_by` | no | A list of model classes whose changes clear every entry of this definition; see [invalidated_by](#invalidated_by). |
+| `lock` | no | `true` or `['seconds' => …, 'wait' => …]`: on a miss, `remember()` lets one request load while the others wait; see [Stampede protection](cache-contract.md#stampede-protection). Off by default. |
 
 Two definitions with the same `subject` and `purpose` are rejected: that is
 the same data cached under two names.

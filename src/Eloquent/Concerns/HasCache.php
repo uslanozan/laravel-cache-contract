@@ -83,9 +83,10 @@ trait HasCache
 
     /**
      * Removes this model's entries: for its current and, if changed, its
-     * previous ID and context, with and without withTrashed().
+     * previous ID and context, with and without withTrashed(). Each gets a
+     * tombstone (ADR 0012).
      *
-     * @return bool false when Redis could not be reached
+     * @return bool false only when Redis could not be reached
      *
      * @throws ModelNotCachable when the model needs a context and does not implement ProvidesCacheContext
      */
@@ -123,22 +124,36 @@ trait HasCache
     public static function bootHasCache(): void
     {
         foreach (['saved', 'deleted', 'restored'] as $event) {
-            static::registerModelEvent($event, static function (Model $model): void {
+            static::registerModelEvent($event, static function (Model $model) use ($event): void {
                 /** @var static $model */
-                $model->clearCacheAfterChange();
+                $model->clearCacheAfterChange($event);
             });
         }
     }
 
     /**
-     * Clears this model's entries once the change is committed. Never fails
-     * the save or the commit because of the cache setup: the package's own
-     * errors (a model it cannot cache, a missing ProvidesCacheContext, an
-     * invalid context) and an exception from cacheContext() are reported
-     * instead.
+     * Clears this model's entries once the change is committed, with
+     * tombstones (ADR 0012), so a read that loaded the row before the change
+     * does not write it back. A row that was just created is cleared with a
+     * plain delete, and a save that changed nothing clears nothing.
+     *
+     * Never fails the save or the commit because of the cache setup: the
+     * package's own errors (a model it cannot cache, a missing
+     * ProvidesCacheContext, an invalid context) and an exception from
+     * cacheContext() are reported instead.
+     *
+     * @param  string  $event  the model event: saved, deleted or restored
      */
-    protected function clearCacheAfterChange(): void
+    protected function clearCacheAfterChange(string $event = 'saved'): void
     {
+        // "Created" is the insert's own saved event: a later update of the same
+        // instance has changes, and gets tombstones.
+        $created = $event === 'saved' && $this->wasRecentlyCreated && ! $this->wasChanged();
+
+        if ($event === 'saved' && ! $created && ! $this->wasChanged()) {
+            return;
+        }
+
         try {
             $cache = static::modelCache();
 
@@ -166,10 +181,12 @@ trait HasCache
             return;
         }
 
-        AfterCommit::on($this->getConnection(), static function () use ($cache, $targets): void {
+        AfterCommit::on($this->getConnection(), static function () use ($cache, $targets, $created): void {
             foreach ($targets as [$context, $id]) {
                 try {
-                    $cache->withContext($context)->forget($id);
+                    $created
+                        ? $cache->withContext($context)->forgetCreated($id)
+                        : $cache->withContext($context)->forget($id);
                 } catch (CacheContractException $e) {
                     // Thrown here, it would fail the commit and skip the transaction's
                     // other after-commit callbacks, queued jobs included.

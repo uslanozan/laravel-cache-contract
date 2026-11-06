@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Redis\Connections\PhpRedisConnection;
+use Predis\Response\ServerException;
 use RedisException;
 use Uslanozan\CacheContract\Exceptions\InvalidConfiguration;
 
@@ -163,11 +164,14 @@ LUA;
      * script fails (one the ACL forbids, OOM, WRONGTYPE), phpredis answers
      * with false, as for a nil reply, and keeps the error aside; that error
      * is thrown, so it follows the Redis error policy instead of being taken
-     * for an answer. A rejected EVAL itself is thrown by phpredis already.
+     * for an answer. A rejected EVAL itself is thrown by phpredis already,
+     * and predis throws both as a ServerException, which the policy covers
+     * too.
      *
      * @param  list<mixed>  $arguments
      *
-     * @throws RedisException when Redis rejects the script
+     * @throws RedisException when Redis rejects the script on phpredis
+     * @throws ServerException when Redis rejects the script on predis
      */
     private function evaluate(RedisStore $store, string $script, string $key, array $arguments): mixed
     {
@@ -175,7 +179,7 @@ LUA;
         $key = $store->getPrefix().$key;
 
         if (! $connection instanceof PhpRedisConnection) {
-            // Predis (not supported yet, D13) throws a failed script itself.
+            // predis throws a failed script itself, as a ServerException.
             return $connection->command('eval', [$script, 1, $key, ...$arguments]);
         }
 

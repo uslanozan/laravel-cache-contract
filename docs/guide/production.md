@@ -17,14 +17,17 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 
 | Operation | With `report` | With `throw` |
 | :--- | :--- | :--- |
-| `read`: `get`, `has`, `remember`, `pull` (on Redis, its single read-and-remove command), model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` and `pull()` return the default, the model cache loads from the database. Nothing is written while Redis is down. | The `RedisException` is thrown. |
+| `read`: `get`, `has`, `remember`, `pull` (on Redis, its single read-and-remove command), model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` and `pull()` return the default, the model cache loads from the database. Nothing is written while Redis is down. | The client's exception is thrown (see below). |
 | `write`: `put`, `add` and the read it does first, `remember`, `refresh`, model cache writes | The value is returned but not cached; `put()` and `add()` return `false`, and the model cache returns the loaded models without caching them. | Thrown. |
 | `invalidate`: `forget`, `flushTag`, the delete in `pull` on stores other than Redis, model `forgetCache` and `flushCache`, and the clearing after a model change, `invalidated_by` included | `false` is returned and the old entry stays until its TTL ends; `pull()` returns the default instead of a value it could not remove. | Thrown. |
 
-- Only Redis connection errors follow this setting, and a script that fails
-  in Redis in `remember()`, `add()` or `pull()` (a command your ACL forbids,
-  `OOM`). Any other exception, such as one thrown by your loader, always
-  propagates.
+- Only errors from Redis itself follow this setting: the connection, a
+  timeout, and a command Redis rejects (one your ACL forbids, `OOM`). On
+  phpredis that is a `RedisException`, also for a script that fails in Redis
+  in `remember()`, `add()` or `pull()`. On predis it is a
+  `Predis\CommunicationException` (such as `ConnectionException`) or a
+  `Predis\Response\ServerException`. Any other exception, such as one thrown
+  by your loader, always propagates.
 - Consider `throw` for all three in your test suite, so a broken Redis setup
   fails the tests instead of passing silently.
 - With `report`, an outage is not reported once per call: once per minute in
@@ -80,10 +83,11 @@ errors matter most: each one may have left a stale entry until its TTL ends.
 
 ## Redis timeouts
 
-Laravel's default Redis configuration sets no timeout. phpredis then waits
-for PHP's `default_socket_timeout`, 60 seconds by default, before it gives
-up. With `report` the application still works during an outage, but every
-cache call can wait that long first.
+Laravel's default Redis configuration sets no read timeout. The client then
+waits for PHP's `default_socket_timeout`, 60 seconds by default, before it
+gives up (phpredis also uses it to connect; predis connects within 5
+seconds). With `report` the application still works during an outage, but
+every cache call can wait that long first.
 
 Set short timeouts on the connection the cache store uses, in
 `config/database.php`:
@@ -92,8 +96,9 @@ Set short timeouts on the connection the cache store uses, in
 'redis' => [
     'cache' => [
         // host, port, password, database ...
-        'timeout' => 1,        // seconds to connect
-        'read_timeout' => 1,   // seconds to wait for an answer
+        'timeout' => 1,              // seconds to connect
+        'read_timeout' => 1,         // seconds to wait for an answer (phpredis)
+        'read_write_timeout' => 1,   // the same for predis
     ],
 ],
 ```

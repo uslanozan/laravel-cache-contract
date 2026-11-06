@@ -104,3 +104,10 @@ The questions on LRVL-63 are answered by that, not by a design:
   them outside the allowed paths, as it does every cache call.
 - Revisit if several projects need counters that fit no option above. The
   new type would then get its own ADR, starting from option A.
+
+## Update 2026-11-07: `increment()` on a model is seen
+
+LRVL-78 is fixed: `HasCache` and `invalidated_by` clear on `updated`, which
+`increment()` and `decrement()` on a model fire, and on `saved` only for an
+insert, so a `save()` is still cleared once. The guide's warnings are gone;
+`incrementQuietly()`, like `saveQuietly()`, fires no events and is not seen.

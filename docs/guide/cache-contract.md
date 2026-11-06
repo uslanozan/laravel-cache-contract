@@ -269,11 +269,9 @@ a copy that can be loaded again, so it does not fit the mandatory TTL, the
   (`RateLimiter::hit()`, `tooManyAttempts()`). It throws when Redis fails, so
   a failure does not go unnoticed.
 - **Counts that must not be lost:** the database (`$post->increment('views')`).
-  An `increment()` or `decrement()` on a model fires no `saved` event, so it
-  clears neither that model's [cache](model-cache.md) nor definitions with
-  the model in `invalidated_by`. Call `$post->forgetCache()` after it for the
-  model cache; for those definitions, call `flushTag()` if they have a tag,
-  or keep their TTL short.
+  An `increment()` or `decrement()` on a model clears that model's
+  [cache](model-cache.md) and definitions with the model in
+  `invalidated_by`, as a save does; `incrementQuietly()` clears nothing.
 - **High-volume counters:** Redis directly. `INCR` creates a missing key
   without a TTL, so set the expiry yourself, for example with `EXPIRE` in the
   same `MULTI`; otherwise the keys never expire in a shared Redis.

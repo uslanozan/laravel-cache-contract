@@ -64,12 +64,13 @@ model cache and the first commands.
   context unless the scope is listed in `safe_scopes`; per-model `ttl` and
   `version` overrides.
 - **`HasCache` trait:** `cached()`, `cachedMany()`, `modelCache()`,
-  `forgetCache()` and `flushCache()`. Saving, deleting or restoring a model
-  clears its entries after the commit, under its current and previous
-  context, with tombstones (ADR 0012), so a `find()` or `findMany()` that
-  loaded the row before the change does not write it back; a created row is
-  cleared with a plain delete, and a save that changed nothing clears
-  nothing. `flushCache()` gives the model's generation counter a new value.
+  `forgetCache()` and `flushCache()`. Saving, deleting or restoring a model,
+  or `increment()` / `decrement()` on it, clears its entries after the
+  commit, under its current and previous context, with tombstones
+  (ADR 0012), so a `find()` or `findMany()` that loaded the row before the
+  change does not write it back; a created row is cleared with a plain
+  delete, a save that changed nothing clears nothing, and a save is cleared
+  once. `flushCache()` gives the model's generation counter a new value.
   Models whose scopes need a context implement `ProvidesCacheContext`. A save
   never fails because of the cache.
 - **Transactions:** while a transaction is open on the model's connection,
@@ -82,11 +83,12 @@ model cache and the first commands.
   `CacheContract::flushTag('users')` invalidates every entry of every
   definition with the tag in one Redis write, and throws `UnknownTag` for a
   tag that is not declared.
-- **`invalidated_by`:** saving, deleting or restoring a listed model
-  invalidates every entry of the definition after the commit, with the
-  definition's generation counter; the model needs no `HasCache`. Keys of
-  definitions with `tags` or `invalidated_by` end with their counters'
-  values, and `cache-contract:inspect` lists the counters.
+- **`invalidated_by`:** saving, deleting or restoring a listed model, or
+  `increment()` / `decrement()` on it, invalidates every entry of the
+  definition after the commit, with the definition's generation counter;
+  the model needs no `HasCache`. Keys of definitions with `tags` or
+  `invalidated_by` end with their counters' values, and
+  `cache-contract:inspect` lists the counters.
 - **Commands:** `cache-contract:list` (with `--section`, `--subject` and
   `--json`) and `cache-contract:inspect` (with `--param` and `--context`,
   and suggestions for a mistyped ID). For a definition with generation

@@ -30,9 +30,11 @@ use Uslanozan\CacheContract\Runtime\GenerationCounters;
 final class InvalidatedBy
 {
     /**
-     * Registers one listener per listed model and event. Eloquent fires
-     * "saved" also when save() had nothing to write; that save is skipped, so
-     * it does not empty every entry of the definition for nothing.
+     * Registers one listener per listed model and event. An update counts on
+     * "updated", which increment() and decrement() fire too while they never
+     * fire "saved" (LRVL-78); "saved" counts only for an insert, so a save()
+     * bumps once. A save() that had nothing to write fires no "updated", so it
+     * does not empty every entry of the definition for nothing.
      *
      * @param  mixed  $definitions  the raw "definitions" config, valid or not
      */
@@ -42,10 +44,11 @@ final class InvalidatedBy
             $listener = static fn (Model $model) => self::modelChanged($model, $counters);
 
             $events->listen("eloquent.saved: {$class}", static function (Model $model) use ($listener): void {
-                if ($model->wasRecentlyCreated || $model->wasChanged()) {
+                if ($model->wasRecentlyCreated && ! $model->wasChanged()) {
                     $listener($model);
                 }
             });
+            $events->listen("eloquent.updated: {$class}", $listener);
             // No such check here: a deleted or restored model may have no changes of its own.
             $events->listen("eloquent.deleted: {$class}", $listener);
             $events->listen("eloquent.restored: {$class}", $listener);

@@ -24,6 +24,7 @@ use Uslanozan\CacheContract\Runtime\Envelope;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
 use Uslanozan\CacheContract\Runtime\RedisOperation;
+use Uslanozan\CacheContract\Runtime\RedisReads;
 use Uslanozan\CacheContract\Runtime\StoredEntry;
 
 /**
@@ -567,8 +568,7 @@ final readonly class ModelCache
     private function readMany(array $keys): array|false
     {
         try {
-            /** @var array<string, mixed> */
-            return $this->repository()->many($keys);
+            return RedisReads::many($this->repository(), $keys);
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Read);
 

@@ -167,7 +167,8 @@ answer without a report. Checked against Redis 7.4 with phpredis 6.3:
   `false` and throws a `TypeError`, which no policy handles. On Laravel 13 it
   returns nulls: every counter looks missing, `current()` gives a new value
   on every call, so every entry of the definition misses, and
-  `inspect --live` reports the counters as "not in Redis yet". LRVL-79.
+  `inspect --live` reports the counters as "not in Redis yet". Closed by
+  the update of 2026-11-06 on a rejected `MGET` below.
 - Laravel's `RedisStore::add()`, a Lua script: a rejected script returns
   `false`, so `CacheContract::add()` answers "already cached". ADR 0012
   replaces it with the package's own compare-and-set script, which must check
@@ -232,7 +233,7 @@ The package supports predis `^2.3` next to phpredis (ADR 0003, update
 | Redis cannot be reached, a timeout | `RedisException` | `ConnectionException` (a `CommunicationException`) |
 | A plain command Redis rejects (`NOPERM`, `OOM`) | `RedisException` | `ServerException` |
 | A script that fails inside Redis (`WRONGTYPE`, a command the ACL forbids) | `false`; the package throws the last error as a `RedisException` | `ServerException` |
-| A rejected `MGET` | `false` or nulls (LRVL-79) | `ServerException` |
+| A rejected `MGET` | `false`, which Laravel turns into a `TypeError` or nulls; the package throws the last error as a `RedisException` (update below) | `ServerException` |
 | A command the client does not know | `Error` | `ClientException` |
 
 **Decision:** on predis, a `CommunicationException` (the connection, its
@@ -243,4 +244,31 @@ propagates. The predis classes are checked with `instanceof`, so the package
 still needs neither client installed.
 
 On predis, the `MGET` of the generation counters is covered by this: a
-rejection is thrown and follows the policy. On phpredis it is still LRVL-79.
+rejection is thrown and follows the policy. On phpredis, see the next update.
+
+## Update 2026-11-06: a rejected `MGET` on phpredis
+
+The last item of "Still open" above: phpredis answers an `MGET` that Redis
+rejects (`NOPERM` from an ACL, `OOM`, `LOADING` on a replica) with `false`
+and keeps the error aside. Laravel's `PhpRedisConnection::mget()` then maps
+over that `false` and throws a `TypeError` (11.44.2 and 12.0.1), or answers
+that every key is missing (later releases). Neither follows the policy: the
+first fails every call to a definition with `tags` or `invalidated_by`, the
+second makes every generation counter look missing, so `current()` creates a
+new value on every call and every entry misses, unreported. `findMany()` reads
+its entries with an `MGET` too and had the same problem.
+
+**Decision:** every `MGET` the package sends goes through one helper,
+`RedisReads::many()`. On phpredis it clears the last error, calls
+`Repository::many()`, and throws the last error as a `RedisException` when
+there is one, also in place of Laravel's `TypeError`. A `TypeError` with no
+error aside is a bug and propagates. So the generation counters and
+`findMany()` follow the `read` policy: with `report` the counters are not
+created or overwritten, `findMany()` loads from the database and caches
+nothing, and `inspect --live` fails with one line.
+
+What stays open on phpredis: a plain command that hits a key of the wrong
+type (`WRONGTYPE`, a key other code wrote as a hash, for example) answers
+`false` instead of throwing, so nothing is reported. The package's own
+scripts check the last error, so this concerns only plain reads of such a
+key.

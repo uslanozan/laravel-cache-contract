@@ -252,6 +252,33 @@ it('reads X|null as ?X, for cache types and wrappers', function () {
     expect(array_map(fn (CacheUsage $usage) => $usage->style->value, $usages))->toBe(['repository', 'wrapper']);
 });
 
+// LRVL-75: a typed parameter reaches a closure only through use(), and any
+// parameter of the same name hides it, as for assigned values (#39).
+it('sees a typed parameter in a closure or arrow function only where PHP does', function (string $type, string $style) {
+    $code = <<<PHP
+        <?php
+        use Illuminate\\Contracts\\Cache\\Repository;
+        function handle({$type} \$cache, array \$items): void
+        {
+            array_map(function () { \$cache->get('no use'); }, \$items);
+            array_map(fn (\$cache) => \$cache->get('untyped arrow'), \$items);
+            array_map(function (\$cache) { \$cache->get('untyped closure'); }, \$items);
+            array_map(function () use (\$cache) { \$cache->get('use'); }, \$items);
+            array_map(fn () => \$cache->get('arrow'), \$items);
+            array_map(fn ({$type} \$cache) => \$cache->get('own typed parameter'), \$items);
+            array_map(function () use (\$cache) { array_map(fn (\$cache) => \$cache->get('nested hidden'), []); }, \$items);
+        }
+        PHP;
+
+    $usages = (new Scanner(['App\Wrapper' => ['get' => Operation::Read]]))->scanCode($code);
+
+    expect(array_map(fn (CacheUsage $usage) => $usage->line, $usages))->toBe([8, 9, 10])
+        ->and(array_unique(array_map(fn (CacheUsage $usage) => $usage->style->value, $usages)))->toBe([$style]);
+})->with([
+    'a cache repository' => ['Repository', 'repository'],
+    'a wrapper' => ['App\Wrapper', 'wrapper'],
+]);
+
 it('finds no wrapper calls when none are configured', function () {
     expect(array_filter(scannedUsages('WrapperUsage'), fn (string $usage) => str_starts_with($usage, 'wrapper')))->toBe([]);
 });

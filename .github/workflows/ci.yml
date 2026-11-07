@@ -67,7 +67,7 @@ jobs:
         run: composer analyse
 
   tests:
-    name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }})
+    name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }}, ${{ matrix.client }}, Redis ${{ matrix.redis }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -83,10 +83,19 @@ jobs:
       # composer.json requires the zero-day fixes (8.3.36, 8.4.27, 8.5.12), so
       # "Install dependencies" fails on an older runner PHP (ADR 0003, update
       # 2026-10-27).
+      # Redis client and server (ADR 0003, update 2026-11-06): the full matrix
+      # runs phpredis against Redis 7.4. Five more jobs, listed at the end of
+      # "include", cover predis on each Laravel version (the lowest predis,
+      # 2.3.0, with prefer-lowest) and Redis 6.2, the floor, on both clients;
+      # the last one is the company's stack (PHP 8.3, Laravel 11, predis,
+      # Redis 6.2). They set every value themselves, so they do not depend on
+      # how GitHub merges the entries above them.
       matrix:
         php: ["8.3", "8.4", "8.5"]
         laravel: ["11", "12", "13"]
         stability: [prefer-lowest, prefer-stable]
+        client: [phpredis]
+        redis: ["7.4"]
         include:
           - laravel: "11"
             framework: "^11.44.2"
@@ -103,6 +112,13 @@ jobs:
           - php: "8.5"
             laravel: "12"
             framework: "^12.40.0"
+          # predis on each Laravel version.
+          - { php: "8.3", laravel: "11", stability: prefer-lowest, client: predis, redis: "7.4", framework: "^11.44.2", testbench: "^9.0" }
+          - { php: "8.4", laravel: "12", stability: prefer-stable, client: predis, redis: "7.4", framework: "^12.0.1", testbench: "^10.0" }
+          - { php: "8.5", laravel: "13", stability: prefer-stable, client: predis, redis: "7.4", framework: "^13.0", testbench: "^11.0" }
+          # Redis 6.2, the floor, on both clients.
+          - { php: "8.3", laravel: "11", stability: prefer-stable, client: phpredis, redis: "6.2", framework: "^11.44.2", testbench: "^9.0" }
+          - { php: "8.3", laravel: "11", stability: prefer-stable, client: predis, redis: "6.2", framework: "^11.44.2", testbench: "^9.0" }
         exclude:
           # A support-policy exclusion, not a Composer conflict: Laravel 11's
           # composer.json has no PHP upper bound, but Laravel supports 11 on
@@ -113,8 +129,8 @@ jobs:
 
     services:
       redis:
-        # Keep in sync with the redis service in docker-compose.yml.
-        image: redis:7.4-alpine
+        # The default (7.4) is kept in sync with the redis service in docker-compose.yml.
+        image: redis:${{ matrix.redis }}-alpine
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
@@ -125,6 +141,8 @@ jobs:
     env:
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: 6379
+      # Read by the integration tests (tests/Support/RedisClient.php).
+      REDIS_CLIENT: ${{ matrix.client }}
 
     steps:
       - uses: actions/checkout@v7

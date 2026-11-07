@@ -6,6 +6,7 @@ use Illuminate\Cache\RedisStore;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
+use Predis\Response\ServerException;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Support\RedisClient;
@@ -292,12 +293,16 @@ describe('a script Redis rejects', function () {
     it('is thrown when the policy says so', function () {
         config()->set('cache-contract.redis_errors.write', 'throw');
 
+        // Only the clients' errors are caught: an assertion failure must not be.
+        $thrown = null;
         try {
             CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded');
-            test()->fail('Expected the rejected script to be thrown.');
-        } catch (Throwable $e) {
-            expect($e)->toBeInstanceOf(RedisClient::rejectedCommandError())
-                ->and($e->getMessage())->toMatch(RedisClient::SCRIPT_ACL_FAILURE);
+        } catch (RedisException|ServerException $e) {
+            $thrown = $e;
         }
+
+        expect($thrown)->not->toBeNull('remember() did not throw the rejected script')
+            ->and($thrown)->toBeInstanceOf(RedisClient::rejectedCommandError())
+            ->and($thrown?->getMessage())->toMatch(RedisClient::SCRIPT_ACL_FAILURE);
     });
 });

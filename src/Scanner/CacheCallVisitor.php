@@ -622,21 +622,36 @@ final class CacheCallVisitor extends NodeVisitorAbstract
     }
 
     /**
-     * The class each parameter of a function is typed as. Closures and arrow
-     * functions also see the ones of the function around them.
+     * The class each variable of a function is typed as, by its parameters.
+     * As in PHP, and as for assigned values (assignmentsIn()): an arrow
+     * function also sees the typed variables around it, a closure only those
+     * in its use() list, and a parameter of the same name, typed or not,
+     * hides the outer one (LRVL-75).
      *
      * @return array<string, string>
      */
     private function parameterTypes(FunctionLike $function): array
     {
-        $types = $function instanceof Closure || $function instanceof ArrowFunction
-            ? (end($this->variables) ?: [])
-            : [];
+        $outer = end($this->variables) ?: [];
+        $types = match (true) {
+            $function instanceof ArrowFunction => $outer,
+            $function instanceof Closure => array_intersect_key(
+                $outer,
+                array_flip(array_filter(array_map(fn (ClosureUse $use): mixed => $use->var->name, $function->uses), is_string(...))),
+            ),
+            default => [],
+        };
 
         foreach ($function->getParams() as $param) {
+            if (! $param->var instanceof Variable || ! is_string($param->var->name)) {
+                continue;
+            }
+
             $type = $this->className($param->type);
 
-            if ($type !== null && $param->var instanceof Variable && is_string($param->var->name)) {
+            if ($type === null) {
+                unset($types[$param->var->name]);
+            } else {
                 $types[$param->var->name] = $type;
             }
         }

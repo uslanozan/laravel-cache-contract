@@ -181,7 +181,10 @@ as:
 - an instance created with `new`: `(new CacheProperties)->get()`, or a
   variable assigned one once: `$cache = new CacheProperties; $cache->get()`
 - a property or parameter typed as the wrapper (also `?CacheProperties` or
-  `CacheProperties|null`), as for an injected repository
+  `CacheProperties|null`), as for an injected repository. Inside a closure,
+  a parameter of the function around it counts only when it is in the
+  closure's `use (…)` list; an arrow function sees it unless one of its own
+  parameters has the same name. The same holds for an injected repository.
 - a static call: `CacheProperties::flushAll()`
 
 The key of a wrapper call is always `unresolved` with no expression: the

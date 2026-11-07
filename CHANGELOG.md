@@ -128,9 +128,13 @@ model cache and the first commands.
   optional `lock` of a definition, for `remember()`.
 - **`cache-contract:lint`, `search` and `make` are not released yet.**
   `cache-contract:scan` lists the cache usage they will check.
-- **A read just before an insert:** a read that queries before the insert
-  commits finds no row, and can cache that "no such row" until its TTL ends
-  (ADR 0012). Keep the TTL of definitions that cache missing rows short.
+- **A model cache read just before an insert:** a `find()` that queries
+  before the insert commits finds no row, and can cache that "no such row"
+  until its TTL ends (ADR 0012). Keep the model cache's TTL short for models
+  whose IDs your application generates (UUIDs, ULIDs).
+- **`refresh()` during a removal:** a `refresh()` whose loader runs across a
+  `forget()` or `pull()` can cache the old value until its TTL ends
+  (ADR 0012).
 - **phpredis and a key of the wrong type:** a plain read of a key that other
   code wrote with another Redis type answers `false` instead of an error, so
   nothing is reported (ADR 0007). The package's own scripts report it.

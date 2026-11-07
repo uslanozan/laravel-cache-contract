@@ -54,12 +54,14 @@
     },
     "scripts": {
         "test": "pest",
+        "test:coverage": "@php -d memory_limit=1G vendor/bin/pest --coverage --min=95",
         "analyse": "phpstan analyse --memory-limit=1G",
         "lint": "pint --test",
         "format": "pint"
     },
     "scripts-descriptions": {
         "test": "Run the test suite",
+        "test:coverage": "Run the test suite with line coverage of src/ (pcov); fails below 95%",
         "analyse": "Run static analysis (Larastan, level 8)",
         "lint": "Check code style without changing files",
         "format": "Fix code style"

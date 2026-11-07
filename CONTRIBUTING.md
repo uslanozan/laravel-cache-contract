@@ -35,6 +35,7 @@ docker compose exec redis redis-cli ping   # PONG
 | :--- | :--- |
 | Run tests | `docker compose exec php composer test` |
 | Run tests on predis | `docker compose exec -e REDIS_CLIENT=predis php composer test` |
+| Run tests with coverage | `docker compose exec php composer test:coverage` (fails below 95%) |
 | Static analysis | `docker compose exec php composer analyse` |
 | Check code style | `docker compose exec php composer lint` |
 | Fix code style | `docker compose exec php composer format` |
@@ -44,7 +45,8 @@ docker compose exec redis redis-cli ping   # PONG
 
 > CI runs exactly these scripts, so a green run locally means a green run in CI.
 > The full matrix uses phpredis and Redis 7.4; five more jobs run predis on
-> each Laravel version and Redis 6.2 (the oldest supported) on both clients.
+> each Laravel version and Redis 6.2 (the oldest supported) on both clients,
+> and one job measures coverage.
 
 ## Workflow
 

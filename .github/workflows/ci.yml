@@ -26,6 +26,8 @@ jobs:
   quality:
     name: Quality (lint + static analysis)
     runs-on: ubuntu-latest
+    # A hung step fails here instead of running for GitHub's default 6 hours.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -69,6 +71,9 @@ jobs:
   tests:
     name: Tests (PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, ${{ matrix.stability }}, ${{ matrix.client }}, Redis ${{ matrix.redis }})
     runs-on: ubuntu-latest
+    # A job takes about a minute; a Redis that stops answering or a stuck
+    # forked process (ConcurrencyRedisTest) fails it here, not after 6 hours.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       # Supported range: ADR 0003 / docs/ROADMAP.md D5. Each floor is the
@@ -209,16 +214,70 @@ jobs:
       - name: Run tests
         run: composer test
 
+  coverage:
+    # Line coverage of src/ with pcov, on one setup. It fails below 95%
+    # (98% when it was added), so a large untested change shows up here.
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      REDIS_CLIENT: phpredis
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: redis, pcntl, posix
+          coverage: pcov
+          tools: composer:v2
+
+      - name: Get Composer cache directory and week
+        id: composer-cache
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-coverage-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: |
+            composer-${{ runner.os }}-coverage-${{ hashFiles('composer.json') }}-
+            composer-${{ runner.os }}-coverage-
+
+      # Laravel 13, the latest release the constraints allow on PHP 8.4.
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run tests with coverage
+        run: composer test:coverage
+
   result:
     # The single required status check (see the header).
     name: CI result
-    needs: [quality, tests]
+    needs: [quality, tests, coverage]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          for r in "${{ needs.quality.result }}" "${{ needs.tests.result }}"; do
+          for r in "${{ needs.quality.result }}" "${{ needs.tests.result }}" "${{ needs.coverage.result }}"; do
             if [ "$r" != "success" ]; then
               echo "A required job did not succeed ($r)."; exit 1
             fi

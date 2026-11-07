@@ -5,7 +5,9 @@ All notable changes to this package are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Below `1.0.0`, a
 breaking change bumps the minor version.
 
-## [0.1.0] - Unreleased
+## [Unreleased]
+
+## [0.1.0] - 2026-11-09
 
 The first release: central definitions, generated keys, the runtime API, the
 model cache and the first commands.
@@ -115,7 +117,26 @@ model cache and the first commands.
 - PHP `~8.3.36 || ~8.4.27 || ^8.5.12`: the releases that fix the PHP
   zero-day ([ADR 0003](docs/adr/0003-supported-versions.md))
 - Laravel `^11.44.2 || ^12.0.1 || ^13.0`; on PHP 8.5, Laravel 12.40+
-- Redis with phpredis
+- Redis 6.2+ as the cache store, through phpredis or predis 2.3+
+  (`predis/predis: ^2.3`); no Redis Cluster
+
+### Known limitations
+
+- **Redis Cluster is not supported:** the package is tested against a single
+  Redis server.
+- **`flexible()` is not in the facade yet.** Stampede protection is the
+  optional `lock` of a definition, for `remember()`.
+- **`cache-contract:lint`, `search` and `make` are not released yet.**
+  `cache-contract:scan` lists the cache usage they will check.
+- **A read just before an insert:** a read that queries before the insert
+  commits finds no row, and can cache that "no such row" until its TTL ends
+  (ADR 0012). Keep the TTL of definitions that cache missing rows short.
+- **phpredis and a key of the wrong type:** a plain read of a key that other
+  code wrote with another Redis type answers `false` instead of an error, so
+  nothing is reported (ADR 0007). The package's own scripts report it.
+- **Other stores than Redis** work for trying the package out, but a
+  tombstone blocks writes to its key until it expires, and `pull()` is not
+  atomic there.
 
 ### Decisions
 
@@ -134,3 +155,6 @@ The architecture decisions accepted for this release, in
 - [0011](docs/adr/0011-scanner-scope-and-limits.md) Scanner scope and limits
 - [0012](docs/adr/0012-stampede-and-stale-writes.md) Stale writes after a forget, and stampede locks
 - [0013](docs/adr/0013-no-counters-in-v1.md) No counters in v1
+
+[Unreleased]: https://github.com/uslanozan/laravel-cache-contract/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/uslanozan/laravel-cache-contract/releases/tag/v0.1.0

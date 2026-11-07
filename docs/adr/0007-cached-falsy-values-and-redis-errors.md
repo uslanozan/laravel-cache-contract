@@ -216,9 +216,11 @@ reports every error, as before.
   is a separate decision. The guide says so.
 - The counts of the last interval are lost when no error follows it, for
   example when Redis comes back. Accepted, and in the guide.
-- Any `RedisException` counts, also one that is not about the connection
-  (`WRONGTYPE`, or a command Redis rejects in `pull()`): after an outage
-  report, such an error is counted, not reported, until the interval ends.
+- Any error the policy covers counts, also one that is not about the
+  connection: a command Redis rejects (`NOPERM`, `WRONGTYPE`, inside a
+  script too) on phpredis or predis (updates of 2026-11-06 below). After an
+  outage report, such an error is counted, not reported, until the interval
+  ends.
 - **Still no circuit breaker.** This changes only how errors are reported;
   every call still tries Redis and pays the connection timeout. Skipping
   Redis for a while after errors changes how the package behaves, so it

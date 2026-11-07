@@ -17,7 +17,7 @@ cache. This is set per kind of operation in `config/cache-contract.php`
 
 | Operation | With `report` | With `throw` |
 | :--- | :--- | :--- |
-| `read`: `get`, `has`, `remember`, `pull` (on Redis, its single read-and-remove command), model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` and `pull()` return the default, the model cache loads from the database. Nothing is written while Redis is down. | The client's exception is thrown (see below). |
+| `read`: `get`, `has`, `remember`, `pull` (on Redis, its single script that reads the value and leaves a tombstone), model `find` and `findMany`, and reading the generation counters for them | Treated as a miss: `remember()` runs the loader, `get()` and `pull()` return the default, the model cache loads from the database. Nothing is written while Redis is down. | The client's exception is thrown (see below). |
 | `write`: `put`, `add` and the read it does first, `remember`, `refresh`, model cache writes | The value is returned but not cached; `put()` and `add()` return `false`, and the model cache returns the loaded models without caching them. | Thrown. |
 | `invalidate`: `forget`, `flushTag`, the delete in `pull` on stores other than Redis, model `forgetCache` and `flushCache`, and the clearing after a model change, `invalidated_by` included | `false` is returned and the old entry stays until its TTL ends; `pull()` returns the default instead of a value it could not remove. | Thrown. |
 

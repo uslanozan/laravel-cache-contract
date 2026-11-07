@@ -12,6 +12,7 @@ use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\Concurrently;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * Races between processes against real Redis (LRVL-43): parallel calls on the
@@ -27,13 +28,13 @@ beforeEach(function () {
         $this->markTestSkipped('needs the pcntl and posix extensions');
     }
 
-    $client = env('REDIS_CLIENT', 'phpredis');
-    config()->set('database.redis.client', is_string($client) && $client !== '' ? $client : 'phpredis');
+    config()->set('database.redis.client', RedisClient::name());
 
     $server = ['host' => env('REDIS_HOST', '127.0.0.1'), 'port' => (int) env('REDIS_PORT', 6379), 'database' => 1, 'max_retries' => 0];
-    config()->set('database.redis.concurrency_store', [...$server, 'timeout' => 1.0, 'read_timeout' => 2.0]);
+    // read_timeout is phpredis', read_write_timeout predis'.
+    config()->set('database.redis.concurrency_store', [...$server, 'timeout' => 1.0, 'read_timeout' => 2.0, 'read_write_timeout' => 2.0]);
     // The signals block up to Concurrently::TIMEOUT seconds: a longer read timeout.
-    config()->set('database.redis.concurrency', [...$server, 'timeout' => 1.0, 'read_timeout' => Concurrently::TIMEOUT + 5]);
+    config()->set('database.redis.concurrency', [...$server, 'timeout' => 1.0, 'read_timeout' => Concurrently::TIMEOUT + 5, 'read_write_timeout' => Concurrently::TIMEOUT + 5]);
     config()->set('cache.stores.concurrency', ['driver' => 'redis', 'connection' => 'concurrency_store']);
     config()->set('cache-contract.store', 'concurrency');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.

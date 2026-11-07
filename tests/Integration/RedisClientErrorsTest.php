@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Predis\Connection\ConnectionException;
 use Predis\Response\ServerException;
 use Uslanozan\CacheContract\Facades\CacheContract;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
  * The Redis error policy on both supported clients, against real Redis
@@ -89,6 +90,14 @@ function assertRejectedCommandReported(string $client, string $needle): void
     $client === 'phpredis'
         ? Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), $needle))
         : Exceptions::assertReported(fn (ServerException $e): bool => str_contains($e->getMessage(), $needle));
+}
+
+/** Asserts that a script an ACL rule stopped was reported, in any Redis release's wording. */
+function assertRejectedScriptReportedOn(string $client): void
+{
+    $client === 'phpredis'
+        ? Exceptions::assertReported(fn (RedisException $e): bool => preg_match(RedisClient::SCRIPT_ACL_FAILURE, $e->getMessage()) === 1)
+        : Exceptions::assertReported(fn (ServerException $e): bool => preg_match(RedisClient::SCRIPT_ACL_FAILURE, $e->getMessage()) === 1);
 }
 
 /** The store's connection, logged in as the default user. */
@@ -185,7 +194,7 @@ describe('a command Redis rejects', function () {
         expect(CacheContract::remember('external.exchange_rates', [], fn () => ['usd' => 1]))->toBe(['usd' => 1])
             ->and(CacheContract::add('external.exchange_rates', [], ['usd' => 1]))->toBeFalse()
             ->and(CacheContract::has('external.exchange_rates'))->toBeFalse();
-        assertRejectedCommandReported($client, 'ACL failure in script');
+        assertRejectedScriptReportedOn($client);
     })->with('redis clients');
 
     it('follows "read" for a pull() whose script finds the wrong type', function (string $client) {

@@ -50,7 +50,8 @@ docker compose exec php composer format     # Pint (fix)
 ```
 
 CI runs the same scripts against real Redis on PHP 8.3–8.5 × Laravel 11/12/13
-(the latest patch release of each PHP version).
+(the latest patch release of each PHP version), with phpredis on Redis 7.4,
+plus predis and Redis 6.2 jobs. Locally: `-e REDIS_CLIENT=predis`.
 
 ## Code rules
 

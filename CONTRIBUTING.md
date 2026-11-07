@@ -43,6 +43,8 @@ docker compose exec redis redis-cli ping   # PONG
 | Stop everything | `docker compose down` |
 
 > CI runs exactly these scripts, so a green run locally means a green run in CI.
+> The full matrix uses phpredis and Redis 7.4; five more jobs run predis on
+> each Laravel version and Redis 6.2 (the oldest supported) on both clients.
 
 ## Workflow
 

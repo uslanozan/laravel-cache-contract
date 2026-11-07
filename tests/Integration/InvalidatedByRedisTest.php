@@ -23,14 +23,7 @@ use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 
 beforeEach(function () {
     config()->set('database.redis.client', RedisClient::name());
-    config()->set('database.redis.invalidated_by', [
-        'host' => env('REDIS_HOST', '127.0.0.1'),
-        'port' => (int) env('REDIS_PORT', 6379),
-        'database' => 1,
-        'timeout' => 1.0,
-        'read_timeout' => 1.0,
-        'max_retries' => 0,
-    ]);
+    config()->set('database.redis.invalidated_by', RedisClient::connection());
     config()->set('cache.stores.invalidated_by', ['driver' => 'redis', 'connection' => 'invalidated_by']);
     config()->set('cache-contract.store', 'invalidated_by');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.

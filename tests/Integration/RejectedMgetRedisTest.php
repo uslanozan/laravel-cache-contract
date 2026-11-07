@@ -11,28 +11,22 @@ use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\GenerationCounters;
 use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
 use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 /*
- * An MGET Redis rejects, on phpredis, against real Redis (LRVL-79). phpredis
- * answers it with false and keeps the error aside; the package throws that
- * error, so it follows the "read" policy instead of every generation counter
- * (or every model in findMany()) looking missing. predis throws a rejected
- * MGET itself; RedisClientErrorsTest checks both clients.
+ * An MGET Redis rejects, against real Redis (LRVL-79), on the client in
+ * REDIS_CLIENT. phpredis answers it with false and keeps the error aside; the
+ * package throws that error as a RedisException. predis throws a
+ * ServerException itself. Either way it follows the "read" policy instead of
+ * every generation counter (or every model in findMany()) looking missing.
  *
  * The package logs in as a Redis user that may not run MGET: GET, SET and
  * scripts work, so only the MGET is rejected.
  */
 
 beforeEach(function () {
-    config()->set('database.redis.client', 'phpredis');
-    config()->set('database.redis.mget', [
-        'host' => env('REDIS_HOST', '127.0.0.1'),
-        'port' => (int) env('REDIS_PORT', 6379),
-        'database' => 1,
-        'timeout' => 1.0,
-        'read_timeout' => 1.0,
-        'max_retries' => 0,
-    ]);
+    config()->set('database.redis.client', RedisClient::name());
+    config()->set('database.redis.mget', RedisClient::connection());
     config()->set('cache.stores.mget', ['driver' => 'redis', 'connection' => 'mget']);
     config()->set('cache-contract.store', 'mget');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.
@@ -106,7 +100,7 @@ describe('the generation counters', function () {
         expect(CacheContract::get('user.profile', ['user_id' => 1], 'default'))->toBe('default')
             ->and(CacheContract::remember('user.profile', ['user_id' => 1], fn () => ['name' => 'Ada']))->toBe(['name' => 'Ada']);
 
-        Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'NOPERM') && str_contains($e->getMessage(), 'mget'));
+        RedisClient::assertRejectedCommandReported("run the 'mget' command");
         Exceptions::assertReportedCount(2);
         expect(usersCounter())->toBe($before);
     });
@@ -124,7 +118,7 @@ describe('the generation counters', function () {
         $this->user = loginAsMgetUser(['~*', '-mget']);
         config()->set('cache-contract.redis_errors.read', 'throw');
 
-        expect(fn () => CacheContract::get('user.profile', ['user_id' => 1]))->toThrow(RedisException::class, 'NOPERM');
+        expect(fn () => CacheContract::get('user.profile', ['user_id' => 1]))->toThrow(RedisClient::rejectedCommandError(), 'NOPERM');
     });
 
     it('make inspect --live fail with one line instead of "Not in Redis yet"', function () {
@@ -135,14 +129,16 @@ describe('the generation counters', function () {
         $output = Artisan::output();
 
         expect($exit)->toBe(1)
-            ->and($output)->toContain('Could not read the generation counters (RedisException: NOPERM')
+            ->and($output)->toContain('Could not read the generation counters ('.RedisClient::rejectedCommandError().': NOPERM')
             ->and($output)->not->toContain('Not in Redis yet');
     });
 });
 
 it('lets findMany() load from the database and cache nothing when the MGET of its entries is rejected', function () {
     // MGET allowed on some keys only needs an ACL selector (Redis 7.0+).
-    $version = mgetConnection()->command('info', ['server'])['redis_version'] ?? '0';
+    // phpredis answers INFO flat, predis by section.
+    $info = mgetConnection()->command('info', ['server']);
+    $version = $info['redis_version'] ?? $info['Server']['redis_version'] ?? '0';
     if (version_compare((string) $version, '7.0.0', '<')) {
         test()->markTestSkipped("ACL read and write key permissions need Redis 7.0+, this is {$version}");
     }
@@ -160,7 +156,7 @@ it('lets findMany() load from the database and cache nothing when the MGET of it
     $names = Member::cachedMany($ids)->pluck('name')->all();
 
     expect($names)->toBe(['Ada', 'Member 2', 'Member 3']);
-    Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), 'NOPERM'));
+    RedisClient::assertRejectedCommandReported('NOPERM');
 
     // Only the rejected read was reported, and nothing was written: no entry exists.
     Exceptions::assertReportedCount(1);

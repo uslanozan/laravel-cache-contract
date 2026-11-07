@@ -21,15 +21,8 @@ use Uslanozan\CacheContract\Tests\Support\RedisCommandCounter;
 beforeEach(function () {
     config()->set('database.redis.client', RedisClient::name());
 
-    foreach (['find_many' => (int) env('REDIS_PORT', 6379), 'unreachable' => 1] as $connection => $port) {
-        config()->set("database.redis.{$connection}", [
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'port' => $port,
-            'database' => 1,
-            'timeout' => 1.0,
-            'read_timeout' => 1.0,
-            'max_retries' => 0,
-        ]);
+    foreach (['find_many' => true, 'unreachable' => false] as $connection => $reachable) {
+        config()->set("database.redis.{$connection}", RedisClient::connection($reachable));
         config()->set("cache.stores.{$connection}", ['driver' => 'redis', 'connection' => $connection]);
     }
 

@@ -26,6 +26,14 @@ final class RedisClient
 {
     public const CLIENTS = ['phpredis', 'predis'];
 
+    /**
+     * The message of a script stopped by an ACL rule, in both wordings:
+     * Redis 7.0+ "ACL failure in script: User … has no permissions to run …",
+     * Redis 6.2 "Error running script (…): … The user executing the script
+     * can't run this command or subcommand".
+     */
+    public const SCRIPT_ACL_FAILURE = "/ACL failure in script|The user executing the script can't run this command/";
+
     public static function name(): string
     {
         $client = env('REDIS_CLIENT');
@@ -85,6 +93,17 @@ final class RedisClient
         self::isPhpRedis()
             ? Exceptions::assertReported(fn (RedisException $e): bool => str_contains($e->getMessage(), $needle))
             : Exceptions::assertReported(fn (ServerException $e): bool => str_contains($e->getMessage(), $needle));
+    }
+
+    /**
+     * Asserts that a script an ACL rule stopped was reported, in the wording of
+     * any supported Redis release (see SCRIPT_ACL_FAILURE).
+     */
+    public static function assertRejectedScriptReported(): void
+    {
+        self::isPhpRedis()
+            ? Exceptions::assertReported(fn (RedisException $e): bool => preg_match(self::SCRIPT_ACL_FAILURE, $e->getMessage()) === 1)
+            : Exceptions::assertReported(fn (ServerException $e): bool => preg_match(self::SCRIPT_ACL_FAILURE, $e->getMessage()) === 1);
     }
 
     /**

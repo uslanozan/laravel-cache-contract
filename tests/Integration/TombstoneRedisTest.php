@@ -6,6 +6,7 @@ use Illuminate\Cache\RedisStore;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
+use Predis\Response\ServerException;
 use Uslanozan\CacheContract\Facades\CacheContract;
 use Uslanozan\CacheContract\Runtime\Tombstone;
 use Uslanozan\CacheContract\Tests\Support\RedisClient;
@@ -18,14 +19,7 @@ use Uslanozan\CacheContract\Tests\Support\RedisClient;
 
 beforeEach(function () {
     config()->set('database.redis.client', RedisClient::name());
-    config()->set('database.redis.contract', [
-        'host' => env('REDIS_HOST', '127.0.0.1'),
-        'port' => (int) env('REDIS_PORT', 6379),
-        'database' => 1,
-        'timeout' => 1.0,
-        'read_timeout' => 1.0,
-        'max_retries' => 0,
-    ]);
+    config()->set('database.redis.contract', RedisClient::connection());
     config()->set('cache.stores.contract', ['driver' => 'redis', 'connection' => 'contract']);
     config()->set('cache-contract.store', 'contract');
     // A fresh prefix per test: nothing to clean up, nothing shared between runs.
@@ -277,13 +271,13 @@ describe('a script Redis rejects', function () {
         expect(CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded'))->toBe('loaded')
             ->and(CacheContract::has('user.profile', ['user_id' => 1]))->toBeFalse();
 
-        RedisClient::assertRejectedCommandReported('ACL failure in script');
+        RedisClient::assertRejectedScriptReported();
     });
 
     it('is reported by add() instead of answering "already cached"', function () {
         expect(CacheContract::add('user.profile', ['user_id' => 1], 'a'))->toBeFalse();
 
-        RedisClient::assertRejectedCommandReported('ACL failure in script');
+        RedisClient::assertRejectedScriptReported();
     });
 
     it('is reported by pull() instead of taking it for a miss', function () {
@@ -293,13 +287,22 @@ describe('a script Redis rejects', function () {
         expect(CacheContract::pull('user.profile', ['user_id' => 1], 'default'))->toBe('default')
             ->and(CacheContract::get('user.profile', ['user_id' => 1]))->toBe('once');
 
-        RedisClient::assertRejectedCommandReported('ACL failure in script');
+        RedisClient::assertRejectedScriptReported();
     });
 
     it('is thrown when the policy says so', function () {
         config()->set('cache-contract.redis_errors.write', 'throw');
 
-        expect(fn () => CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded'))
-            ->toThrow(RedisClient::rejectedCommandError(), 'ACL failure in script');
+        // Only the clients' errors are caught: an assertion failure must not be.
+        $thrown = null;
+        try {
+            CacheContract::remember('user.profile', ['user_id' => 1], fn () => 'loaded');
+        } catch (RedisException|ServerException $e) {
+            $thrown = $e;
+        }
+
+        expect($thrown)->not->toBeNull('remember() did not throw the rejected script')
+            ->and($thrown)->toBeInstanceOf(RedisClient::rejectedCommandError())
+            ->and($thrown?->getMessage())->toMatch(RedisClient::SCRIPT_ACL_FAILURE);
     });
 });

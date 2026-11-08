@@ -55,18 +55,8 @@ $profile = CacheContract::remember('user.profile', ['user_id' => 42], fn () => $
 
 ## Installation
 
-The package is not on Packagist yet, so install it from GitHub. There is no
-tag yet either, so require `dev-develop`; once `v0.1.0` is tagged, use `^0.1`.
-
-```json
-// composer.json
-"repositories": [
-    { "type": "vcs", "url": "https://github.com/uslanozan/laravel-cache-contract" }
-]
-```
-
 ```bash
-composer require uslanozan/laravel-cache-contract:dev-develop
+composer require uslanozan/laravel-cache-contract
 php artisan vendor:publish --tag=cache-contract-config
 ```
 

@@ -23,6 +23,7 @@ final readonly class Definition
      * @param  list<string>  $tags
      * @param  list<class-string<Model>>  $invalidatedBy  models whose changes clear this definition
      * @param  Lock|null  $lock  the stampede lock of remember(), or null for none (ADR 0012)
+     * @param  int|null  $nullTtl  seconds a cached null ("not found") lives, or null for $ttl (LRVL-60)
      */
     public function __construct(
         public string $section,
@@ -37,8 +38,19 @@ final readonly class Definition
         public array $tags = [],
         public array $invalidatedBy = [],
         public ?Lock $lock = null,
+        public ?int $nullTtl = null,
     ) {
         $this->id = $section.'.'.$name;
+    }
+
+    /**
+     * Seconds an entry with this value lives: "null_ttl" for a cached null
+     * ("not found"), when the definition has one, otherwise "ttl". Only null:
+     * false, 0, '' and [] are values like any other (ADR 0007).
+     */
+    public function ttlFor(mixed $value): int
+    {
+        return $value === null && $this->nullTtl !== null ? $this->nullTtl : $this->ttl;
     }
 
     /**

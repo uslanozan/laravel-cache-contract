@@ -74,6 +74,7 @@ final readonly class ModelCacheFactory
             purpose: 'by_id',
             type: ResultType::Model,
             ttl: $this->config->ttlFor($class),
+            nullTtl: $this->config->nullTtlFor($class),
             description: sprintf('%s by primary key (convention key, ADR 0006).', $class),
             subject: $class,
             params: ['id' => $keyType],

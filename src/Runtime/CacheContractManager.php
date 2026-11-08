@@ -136,7 +136,7 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Caches a value for the definition's TTL.
+     * Caches a value for the definition's TTL ("null_ttl" for a null).
      *
      * @param  array<string, mixed>  $params
      * @return bool false when the value could not be written
@@ -150,7 +150,8 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Caches a value only when none is cached yet, for the definition's TTL.
+     * Caches a value only when none is cached yet, for the definition's TTL
+     * ("null_ttl" for a null).
      * On Redis the check and the write are one script: of two concurrent
      * calls, one writes. A cached null counts as cached, and so does a value
      * other code wrote under the key. On Redis, a tombstone left by forget()
@@ -174,7 +175,7 @@ final readonly class CacheContractManager
         }
 
         try {
-            return $this->entries->add($this->repository(), $key, Envelope::wrap($value), $definition->ttl);
+            return $this->entries->add($this->repository(), $key, Envelope::wrap($value), $definition->ttlFor($value));
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Write);
 
@@ -434,13 +435,14 @@ final readonly class CacheContractManager
     }
 
     /**
-     * Writes the value in the envelope for the definition's TTL, whatever the
+     * Writes the value in the envelope for the definition's TTL ("null_ttl"
+     * for a null), whatever the
      * key holds: put() and refresh(). A failure follows the "write" policy.
      */
     private function write(Definition $definition, string $key, mixed $value): bool
     {
         try {
-            return $this->repository()->put($key, Envelope::wrap($value), $definition->ttl);
+            return $this->repository()->put($key, Envelope::wrap($value), $definition->ttlFor($value));
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Write);
 
@@ -455,7 +457,7 @@ final readonly class CacheContractManager
     private function writeLoaded(Definition $definition, string $key, StoredEntry $seen, mixed $value): void
     {
         try {
-            $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $definition->ttl);
+            $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $definition->ttlFor($value));
         } catch (Throwable $e) {
             $this->errors->handle($e, RedisOperation::Write);
         }

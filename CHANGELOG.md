@@ -7,6 +7,20 @@ breaking change bumps the minor version.
 
 ## [Unreleased]
 
+### Added
+
+- **A shorter TTL for a cached `null`** (`null_ttl`): a definition can give
+  "not found" a shorter life than a value, in the forms of `ttl` and never
+  longer than it. Only `null` gets it; `false`, `0`, `''` and `[]` are
+  values. `cache-contract:list` and `inspect` show it (ADR 0002).
+
+### Changed
+
+- **The model cache caches "no such row" for 60 seconds** by default
+  (`models.null_ttl`, per-model overrides, `null` for as long as a row),
+  instead of the model's full TTL. A row created where model events do not
+  see it shows up within a minute (ADR 0007).
+
 ## [0.1.0] - 2026-11-08
 
 The first release: central definitions, generated keys, the runtime API, the

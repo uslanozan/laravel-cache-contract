@@ -89,6 +89,17 @@ it('rejects a broken definition', function (array $overrides, string $expected) 
     'lock seconds as a string' => [['lock' => ['seconds' => '30']], '"lock.seconds" must be a whole number of seconds, 1 or more'],
     'negative lock wait' => [['lock' => ['wait' => -1]], '"lock.wait" must be a whole number of seconds, 0 or more'],
     'typo in a lock field' => [['lock' => ['secconds' => 30]], 'unknown "lock" field "secconds" (did you mean "seconds"?)'],
+    'null_ttl longer than ttl' => [['ttl' => 300, 'null_ttl' => '10 minutes'], '"null_ttl" (600 s) must not be longer than "ttl" (300 s)'],
+    'zero null_ttl' => [['null_ttl' => 0], '"null_ttl" must be positive (entries without expiry are not allowed)'],
+    'null_ttl in months' => [['null_ttl' => '1 month'], '"null_ttl" "1 month": months and years have no fixed length; use days or weeks, e.g. "30 days"'],
+]);
+
+it('accepts a null_ttl as long as the ttl at most, in seconds or with units', function (mixed $nullTtl) {
+    expect(errorsFor(['user' => ['active_list' => validDefinition(['null_ttl' => $nullTtl])]]))->toBe([]);
+})->with([
+    'seconds' => [60],
+    'with units' => ['1 minute'],
+    'as long as the ttl' => [300],
 ]);
 
 it('accepts a lock as true, false or an array', function (mixed $lock) {

@@ -179,3 +179,16 @@ passed as seconds) and many bare numbers.
   tag, because a typo there would otherwise clear nothing, unnoticed.
 - The tag list is read by a plain `TagRegistry` class, not a contract: no
   application needs to replace it, and `DefinitionRegistry` stays unchanged.
+
+## Update 2026-11-08: `null_ttl` (LRVL-60)
+
+A cached `null` is a hit (ADR 0007) and lived for the whole `ttl`. When
+`null` means "not found yet" and the data can appear through code the
+package does not see, the answer stayed wrong until the TTL ended (Koel's
+`license_status` caches a known status for a week, an unknown one for
+15 minutes; `docs/research/cache-usage-in-the-wild.md`).
+
+**Decision:** a new optional field, `null_ttl`, in the forms of `ttl` and never
+longer than it (a definition error otherwise). Only `null` gets it; `false`,
+`0`, `''` and `[]` are values. Without it nothing changes. `list` and
+`inspect` show it.

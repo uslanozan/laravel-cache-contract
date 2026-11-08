@@ -69,6 +69,7 @@ final class DefinitionLoader
             tags: $tags,
             invalidatedBy: $invalidatedBy,
             lock: Lock::fromConfig($raw['lock'] ?? false),
+            nullTtl: isset($raw['null_ttl']) ? Ttl::seconds($raw['null_ttl']) : null,
         );
     }
 }

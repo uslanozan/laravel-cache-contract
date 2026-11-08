@@ -60,3 +60,16 @@ it('maps config strings to enums', function () {
         ->and(ParameterType::from('int'))->toBe(ParameterType::Int)
         ->and(ResultType::tryFrom('colection'))->toBeNull();
 });
+
+it('gives a cached null its null_ttl, and every other value the ttl', function (?int $nullTtl, mixed $value, int $expected) {
+    $definition = new Definition('user', 'profile', 'profile', ResultType::Array, 3600, 'Profile.', nullTtl: $nullTtl);
+
+    expect($definition->ttlFor($value))->toBe($expected);
+})->with([
+    'null, with a null_ttl' => [60, null, 60],
+    'null, without one' => [null, null, 3600],
+    'a value' => [60, ['name' => 'Ada'], 3600],
+    'false is a value' => [60, false, 3600],
+    '0 is a value' => [60, 0, 3600],
+    'an empty array is a value' => [60, [], 3600],
+]);

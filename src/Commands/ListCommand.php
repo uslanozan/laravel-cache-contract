@@ -59,7 +59,7 @@ final class ListCommand extends Command
                 $d->subject === null ? '-' : class_basename($d->subject),
                 $d->type->value,
                 self::describeParams($d) ?: '-',
-                $d->ttl,
+                $d->nullTtl === null ? $d->ttl : sprintf('%d (null: %d)', $d->ttl, $d->nullTtl),
                 $d->version,
                 Str::limit($d->description, 50),
             ], $definitions),
@@ -118,6 +118,7 @@ final class ListCommand extends Command
             // Always a JSON object, also when empty: {} rather than [].
             'params' => (object) array_map(fn (ParameterType $type): string => $type->value, $definition->params),
             'ttl' => $definition->ttl,
+            'null_ttl' => $definition->nullTtl,
             'version' => $definition->version,
             'tags' => $definition->tags,
             'invalidated_by' => $definition->invalidatedBy,

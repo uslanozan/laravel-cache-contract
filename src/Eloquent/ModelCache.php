@@ -510,6 +510,7 @@ final readonly class ModelCache
             params: $d->params,
             version: $d->version,
             tags: [$counter],
+            nullTtl: $d->nullTtl,
         );
     }
 
@@ -558,7 +559,7 @@ final readonly class ModelCache
 
     private function writeLoaded(string $key, StoredEntry $seen, mixed $value): void
     {
-        $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $this->definition->ttl);
+        $this->entries->writeIfUnchanged($this->repository(), $key, $seen, Envelope::wrap($value), $this->definition->ttlFor($value));
     }
 
     /**

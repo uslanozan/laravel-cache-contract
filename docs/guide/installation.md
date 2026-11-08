@@ -41,7 +41,7 @@ most important ones are below.
 | `key_format` | `{prefix}:{section}:{name}:v{version}:{params}` | One format for every key (ADR 0004). Changing it changes every key at once. |
 | `store` | `null` (`CACHE_CONTRACT_STORE`) | The store from `config/cache.php` that holds the entries; `null` uses the default store. |
 | `redis_errors` | `report` for read, write and invalidate | What happens when Redis is down; see [Production](production.md). |
-| `models` | `ttl` 3600, `chunk_size` 1000 | The model cache; see [Model cache](model-cache.md). |
+| `models` | `ttl` 3600, `null_ttl` 60, `chunk_size` 1000 | The model cache; see [Model cache](model-cache.md). |
 | `definitions` | `[]` | Your cache entries; see [Definitions](definitions.md). |
 | `scanner` | whole project, without `vendor`, `tests`… | Where the scanner looks; see [Scanner](scanner.md). |
 

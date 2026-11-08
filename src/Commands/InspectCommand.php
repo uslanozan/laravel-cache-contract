@@ -149,6 +149,7 @@ final class InspectCommand extends Command
             'Purpose' => $definition->purpose,
             'Type' => $definition->type->value,
             'TTL' => sprintf('%d s (%s)', $definition->ttl, Ttl::forHumans($definition->ttl)),
+            'Null TTL' => $definition->nullTtl === null ? '- (as the TTL)' : sprintf('%d s (%s)', $definition->nullTtl, Ttl::forHumans($definition->nullTtl)),
             'Version' => (string) $definition->version,
             'Params' => ListCommand::describeParams($definition) ?: '-',
             'Tags' => $definition->tags === [] ? '-' : implode(', ', $definition->tags),

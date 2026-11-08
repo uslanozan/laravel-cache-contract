@@ -15,7 +15,7 @@ beforeEach(function () {
             ],
             'profile' => [
                 'subject' => User::class, 'purpose' => 'profile', 'type' => 'array',
-                'params' => ['user_id' => 'int'], 'ttl' => 3600, 'version' => 2, 'description' => 'Profile page data.',
+                'params' => ['user_id' => 'int'], 'ttl' => 3600, 'null_ttl' => '1 minute', 'version' => 2, 'description' => 'Profile page data.',
             ],
         ],
         'company' => [
@@ -36,7 +36,7 @@ it('lists every definition in a table', function () {
             ['ID', 'Subject', 'Type', 'Params', 'TTL', 'Version', 'Description'],
             [
                 ['user.active_list', 'User', 'collection', 'tenant_id: int', 300, 1, 'Active users of a tenant.'],
-                ['user.profile', 'User', 'array', 'user_id: int', 3600, 2, 'Profile page data.'],
+                ['user.profile', 'User', 'array', 'user_id: int', '3600 (null: 60)', 2, 'Profile page data.'],
                 ['company.summary', 'Company', 'array', '-', 600, 1, 'Company summary card.'],
                 ['external.exchange_rates', '-', 'array', '-', 600, 1, 'Rates.'],
             ],
@@ -68,6 +68,7 @@ it('prints machine-readable JSON', function () {
         'type' => 'array',
         'params' => ['user_id' => 'int'],
         'ttl' => 3600,
+        'null_ttl' => 60,
         'version' => 2,
         'tags' => [],
         'invalidated_by' => [],

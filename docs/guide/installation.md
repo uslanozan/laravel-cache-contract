@@ -15,22 +15,13 @@ on the `array` store), but the package is designed and tested for Redis.
 
 ## Require the package
 
-The package is not on Packagist yet. Add the GitHub repository to your
-`composer.json`:
-
-```json
-"repositories": [
-    { "type": "vcs", "url": "https://github.com/uslanozan/laravel-cache-contract" }
-]
-```
-
-Then require it. Until the `v0.1.0` tag exists, use `dev-develop`:
-
 ```bash
-composer require uslanozan/laravel-cache-contract:^0.1
-# before v0.1.0 is tagged:
-composer require uslanozan/laravel-cache-contract:dev-develop
+composer require uslanozan/laravel-cache-contract
 ```
+
+Below `1.0.0` a minor release can break the API (see the
+[CHANGELOG](../../CHANGELOG.md)), so Composer's default constraint, `^0.1`,
+stays on `0.1.x`.
 
 The service provider and the `CacheContract` and `ModelCache` facades are
 registered automatically through package discovery.

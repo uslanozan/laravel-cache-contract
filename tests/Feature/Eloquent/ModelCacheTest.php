@@ -137,6 +137,9 @@ describe('configuration', function () {
         'unknown setting' => [['ttl' => 60, 'overrides' => [Member::class => ['tll' => 60]]], 'unknown setting "tll"'],
         'version zero' => [['ttl' => 60, 'overrides' => [Member::class => ['version' => 0]]], '.version'],
         'scopes not a list' => [['ttl' => 60, 'overrides' => [Member::class => ['safe_scopes' => 'x']]], '.safe_scopes'],
+        'null_ttl longer than the TTL' => [['ttl' => 60, 'null_ttl' => 120], '"cache-contract.models.null_ttl": must not be longer than the TTL (60 s), got 120 s'],
+        'null_ttl in months' => [['ttl' => 60, 'null_ttl' => '1 month'], 'months and years have no fixed length'],
+        'an override\'s null_ttl longer than its TTL' => [['ttl' => 3600, 'overrides' => [Member::class => ['ttl' => 30, 'null_ttl' => 60]]], '.null_ttl": must not be longer than the TTL (30 s)'],
     ]);
 
     it('rejects a class that is not a model', function () {

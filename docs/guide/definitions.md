@@ -40,6 +40,7 @@ The section `model` is reserved for the [model cache](model-cache.md).
 | `version` | no | A positive integer, default `1`; see [Versions](#versions). |
 | `tags` | no | A list of tag names declared under `tags`; see [Tags](#tags). |
 | `invalidated_by` | no | A list of model classes whose changes clear every entry of this definition; see [invalidated_by](#invalidated_by). |
+| `null_ttl` | no | How long a cached `null` ("not found") lives, in the forms of `ttl` and never longer than it; see [A shorter TTL for "not found"](#a-shorter-ttl-for-not-found). Without it, a `null` lives as long as any value. |
 | `lock` | no | `true` or `['seconds' => …, 'wait' => …]`: on a miss, `remember()` lets one request load while the others wait; see [Stampede protection](cache-contract.md#stampede-protection). Off by default. |
 
 Two definitions with the same `subject` and `purpose` are rejected: that is
@@ -205,6 +206,33 @@ it in seconds, or with units so the meaning is visible:
 
 `php artisan cache-contract:inspect <id>` shows the TTL in seconds and in
 words, e.g. `3600 s (1 hour)`.
+
+### A shorter TTL for "not found"
+
+A cached `null` is a hit (ADR 0007): the loader does not run again until the
+entry expires. When `null` means "not found yet" and the data can appear
+later, through code the package does not see (another service, an import, a
+model without `HasCache`), give it a shorter life:
+
+```php
+'license' => [
+    'status' => [
+        // ...
+        'ttl' => '1 week',        // a known status
+        'null_ttl' => '15 minutes', // "no license yet": ask again soon
+    ],
+],
+```
+
+- Only `null` gets `null_ttl`. `false`, `0`, `''` and `[]` are values and
+  live for `ttl`.
+- Every write of a `null` uses it: `remember()`, `put()`, `add()` and
+  `refresh()`.
+- It takes the forms of `ttl` and cannot be longer than it.
+- `cache-contract:list` shows it next to the TTL, and `inspect` on a line of
+  its own.
+- The [model cache](model-cache.md#configuration) has its own setting,
+  `models.null_ttl`, 60 seconds by default.
 
 ## Parameters
 

@@ -141,7 +141,8 @@ their read found:
   can have cached it but a "no such row", and a tombstone per insert would
   cost a key per created row. One gap remains, accepted in ADR 0012: a read
   that queries before the insert commits finds no row, and if it caches that
-  "no such row" after the delete, it stays until its TTL ends. With
+  "no such row" after the delete, it stays until `null_ttl` ends (60 seconds
+  by default; see [Configuration](#configuration)). With
   auto-increment IDs nobody asks for an ID before it exists; with IDs your
   application generates (UUIDs, ULIDs), a job dispatched before the commit
   or a polling client can.
@@ -282,6 +283,7 @@ In `config/cache-contract.php` (publish it with
 ```php
 'models' => [
     'ttl' => '1 hour',      // how long an entry lives; required, never forever
+    'null_ttl' => 60,       // how long a cached "no such row" lives
     'chunk_size' => 1000,   // keys per Redis read and IDs per query in findMany()
     'overrides' => [
         User::class => ['ttl' => '10 minutes', 'version' => 2],
@@ -293,8 +295,10 @@ In `config/cache-contract.php` (publish it with
 | Setting | Meaning |
 | :--- | :--- |
 | `ttl` | Default lifetime of a model entry: seconds (`3600`) or a duration (`'1 hour'`, `'1h 30m'`), at most 365 days. The same forms as a definition's `ttl` ([Definitions](definitions.md#ttl)). |
+| `null_ttl` | How long a cached "no such row" lives, **60 seconds** by default, in the same forms and never longer than `ttl`. A row created where model events do not see it (a raw insert, another application) shows up after this, not after `ttl`. `null`: as long as a row. |
 | `chunk_size` | `findMany()` reads at most this many keys and loads at most this many IDs at once, so one call never blocks Redis or exceeds the database's parameter limit. |
-| `overrides.<Model>.ttl` | Lifetime for this model, in the same forms. |
+| `overrides.<Model>.ttl` | Lifetime for this model, in the same forms. A shorter `ttl` also shortens the default `null_ttl` to it. |
+| `overrides.<Model>.null_ttl` | Lifetime of "no such row" for this model, never longer than its `ttl`; `null` for as long as a row. |
 | `overrides.<Model>.version` | **Bump it when the model's table changes** (a column added, removed or renamed): old entries are no longer read and expire through their TTL. Changing only the model class (casts, accessors, `$hidden`) needs no bump. |
 | `overrides.<Model>.safe_scopes` | Global scopes that need no context (see above). |
 

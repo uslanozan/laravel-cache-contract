@@ -29,7 +29,7 @@ final class DefinitionValidator
 
     private const REQUIRED_FIELDS = ['purpose', 'type', 'ttl', 'description'];
 
-    private const OPTIONAL_FIELDS = ['subject', 'params', 'version', 'tags', 'invalidated_by', 'lock'];
+    private const OPTIONAL_FIELDS = ['subject', 'params', 'version', 'tags', 'invalidated_by', 'lock', 'null_ttl'];
 
     /** snake_case: lowercase words separated by single underscores. */
     private const NAME_PATTERN = '/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/';
@@ -211,6 +211,15 @@ final class DefinitionValidator
 
         if (array_key_exists('ttl', $definition) && ($problem = Ttl::problem($definition['ttl'])) !== null) {
             $errors[] = new ValidationError($id, '"ttl" '.$problem);
+        }
+
+        if (isset($definition['null_ttl'])) {
+            if (($problem = Ttl::problem($definition['null_ttl'])) !== null) {
+                $errors[] = new ValidationError($id, '"null_ttl" '.$problem);
+            } elseif (isset($definition['ttl']) && Ttl::problem($definition['ttl']) === null
+                && ($nullTtl = Ttl::seconds($definition['null_ttl'])) > ($ttl = Ttl::seconds($definition['ttl']))) {
+                $errors[] = new ValidationError($id, sprintf('"null_ttl" (%d s) must not be longer than "ttl" (%d s)', $nullTtl, $ttl));
+            }
         }
 
         if (array_key_exists('description', $definition) && ! (is_string($definition['description']) && trim($definition['description']) !== '')) {

@@ -275,3 +275,18 @@ type (`WRONGTYPE`, a key other code wrote as a hash, for example) answers
 `false` instead of throwing, so nothing is reported. The package's own
 scripts check the last error, so this concerns only plain reads of such a
 key.
+
+## Update 2026-11-08: a shorter TTL for a cached `null` (LRVL-60)
+
+A cached `null` is still a hit, but it no longer has to live as long as a
+value: a definition's `null_ttl` (ADR 0002, update 2026-11-08) and the model
+cache's `models.null_ttl` set its TTL.
+
+**Decision:** the model cache caches "no such row" for **60 seconds** by
+default (`models.null_ttl`, per-model overrides, `null` for as long as a
+row). A row created where model events do not see it shows up within a
+minute, and ADR 0012's accepted gap for a read just before an insert lasts
+at most that long. A model whose `ttl` override is shorter takes that
+instead, so a short `ttl` needs no `null_ttl` of its own. This changes the
+model cache's behaviour from v0.1.0, where "no such row" lived for the
+model's full TTL.

@@ -107,11 +107,15 @@ return [
     |
     | ttl:        how long a model entry lives, in seconds or with units
     |             ("1 hour", "30 minutes"); required, never forever
+    | null_ttl:   how long a cached "no such row" lives, so a row created
+    |             where model events do not see it shows up soon; never
+    |             longer than ttl. null: as long as a row
     | chunk_size: findMany() reads at most this many keys per MGET and loads
     |             at most this many IDs per query, so one call never blocks
     |             Redis or exceeds the database's parameter limit
     | overrides:  per model class:
     |             ttl         its own TTL
+    |             null_ttl    its own TTL for "no such row"
     |             version     bump it when the table's columns change (ADR 0008)
     |             safe_scopes global scopes that need no context
     |
@@ -130,6 +134,7 @@ return [
 
     'models' => [
         'ttl' => 3600,
+        'null_ttl' => 60,
         'chunk_size' => 1000,
         'overrides' => [],
     ],

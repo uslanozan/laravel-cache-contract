@@ -205,6 +205,9 @@ CacheContract::has('user.profile', ['user_id' => 404]);               // true
 `get()` returns `$default` only on a miss, so use `has()` when you need to
 tell a cached `null` from a missing entry.
 
+A cached `null` lives as long as any value. When it means "not found yet",
+give the definition a shorter [`null_ttl`](definitions.md#a-shorter-ttl-for-not-found).
+
 Numbers and booleans also come back with their type: an `int` stays an `int`,
 not the string Redis would return.
 

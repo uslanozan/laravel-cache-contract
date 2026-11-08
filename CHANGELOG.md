@@ -7,7 +7,7 @@ breaking change bumps the minor version.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-07
+## [0.1.0] - 2026-11-08
 
 The first release: central definitions, generated keys, the runtime API, the
 model cache and the first commands.

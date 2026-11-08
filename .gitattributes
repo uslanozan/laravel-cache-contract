@@ -12,6 +12,8 @@
 /.github            export-ignore
 /docker             export-ignore
 /docs               export-ignore
+/examples           export-ignore
+/scripts            export-ignore
 /tests              export-ignore
 /workbench          export-ignore
 /.dockerignore      export-ignore
@@ -22,5 +24,7 @@
 /phpstan.neon.dist  export-ignore
 /phpunit.xml.dist   export-ignore
 /pint.json          export-ignore
+/AGENTS.md          export-ignore
+/CLAUDE.md          export-ignore
 /CONTRIBUTING.md    export-ignore
 /SECURITY.md        export-ignore

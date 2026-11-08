@@ -5,7 +5,7 @@
 tag.
 
 ```text
-feat/CACHE-12-registry ──squash──▶ develop ──merge commit──▶ main (tag v0.2.0)
+feat/LRVL-12-registry ──squash──▶ develop ──merge commit──▶ main (tag v0.2.0)
                                       ▲                         │
                                       └──── back-merge ─────────┘ (after a hotfix)
 ```
@@ -16,15 +16,19 @@ feat/CACHE-12-registry ──squash──▶ develop ──merge commit──▶
 | :--- | :--- | :--- | :--- |
 | `feat/…`, `fix/…`, `perf/…`, `refactor/…`, `test/…`, `docs/…`, `build/…`, `ci/…`, `chore/…` | `develop` | `develop` | squash |
 | `release/vX.Y.Z` (optional) | `develop` | `main` | merge commit |
-| `hotfix/…` | `main` | `main`, then back-merge `main` → `develop` | merge commit |
+| `hotfix/…` | `main` | `main`, then back-merge `main` → `develop` | merge commit (back-merge: see below) |
 
-**Naming:** `<type>/<linear-id>-<short-description>`, lowercase, words separated
+`develop` only offers **Squash and merge**; `main` only offers **Create a
+merge commit**. GitHub hides the other buttons, so the right method is the
+only one you can click.
+
+**Naming:** `<type>/<linear-id>-<short-description>`; the description is lowercase, words separated
 by `-`. The prefix uses the same words as the commit types, so there is nothing
 to translate.
 
 ```text
-feat/CACHE-12-definition-registry
-fix/CACHE-31-null-value-treated-as-miss
+feat/LRVL-12-definition-registry
+fix/LRVL-31-null-value-treated-as-miss
 docs/readme-installation
 ```
 
@@ -32,15 +36,30 @@ Putting the Linear issue ID in the branch name links the branch and its PR to
 the issue automatically, and Linear moves the issue to *Done* when the PR is
 merged.
 
+**Getting the name from Linear:** open the issue and press `Ctrl+Shift+.`
+(*Copy git branch name*). Linear gives `lrvl-12-definition-registry`; add the
+type prefix yourself: `feat/lrvl-12-definition-registry`. The `Branch flow`
+check rejects branches without a prefix. Upper or lower case in the ID does
+not matter for linking.
+
+| Event on GitHub | Linear issue status |
+| :--- | :--- |
+| You start the work | move it to **In Progress** yourself, before the first commit |
+| PR opened and a reviewer requested (CODEOWNERS does this) | **In Review** (automatic) |
+| PR merged into `develop` | **Done** (automatic) |
+
+Work that ends without a PR (research, a decision taken in a meeting) is moved
+to *Done* by hand.
+
 ## Daily workflow
 
 ```bash
 git switch develop
 git pull
-git switch -c feat/CACHE-12-definition-registry
+git switch -c feat/LRVL-12-definition-registry
 
 # work, commit (see commit-convention.md)
-git push -u origin feat/CACHE-12-definition-registry
+git push -u origin feat/LRVL-12-definition-registry
 gh pr create --base develop --fill   # or open it from the GitHub UI
 ```
 
@@ -50,7 +69,15 @@ While the PR is open:
 - If `develop` moves ahead, update your branch (GitHub's *Update branch* button,
   or `git rebase develop`). Rulesets require the branch to be up to date before merging.
 - Every new push dismisses earlier approvals, so ask for a re-review after changes.
-- The PR author merges once it is approved and green.
+- The PR author merges once it is approved and green, with **Squash and merge**
+  (the only option GitHub offers on `develop`). "Update branch" may add merge
+  commits to your branch; squashing folds them into one commit.
+
+**PRs built on another PR:** add a line `Depends on #31` to the description
+(`Depends on #31, #30` for several). The `Dependencies` check stays red with
+"waiting for #31" until #31 is merged, so the PRs cannot land in the wrong
+order. After #31 is merged, update your branch; that push re-runs the check
+and it turns green. Editing the description also re-runs it.
 
 ## Rules enforced on GitHub
 
@@ -69,3 +96,16 @@ is for emergencies and repository maintenance, not for routine work.
 
 The release tooling (changelog generation, tagging) is set up in a later
 phase; see the [roadmap](ROADMAP.md).
+
+## After a hotfix: back-merge `main` → `develop`
+
+A hotfix lands on `main` first, so `develop` must receive it too. This has to
+be a real merge (a squash would make the branches diverge), and `develop`
+accepts only squash through PRs. The repository owner therefore does it
+directly, using the admin bypass:
+
+```bash
+git switch develop && git pull
+git merge --no-ff origin/main -m "chore: back-merge main into develop after vX.Y.Z"
+git push
+```

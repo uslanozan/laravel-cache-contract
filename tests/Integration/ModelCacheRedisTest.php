@@ -1,0 +1,99 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
+use Uslanozan\CacheContract\Facades\ModelCache;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Member;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\MemberStatus;
+use Uslanozan\CacheContract\Tests\Fixtures\Models\Project;
+use Uslanozan\CacheContract\Tests\Support\ModelCacheDatabase;
+use Uslanozan\CacheContract\Tests\Support\QueryCounter;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
+
+/*
+ * The model cache against real Redis (phpredis): the envelope and the
+ * attributes payload must survive Redis' own serialization, and a Redis
+ * outage must fall back to the database (ADR 0007, ADR 0008).
+ */
+
+beforeEach(function () {
+    config()->set('database.redis.client', RedisClient::name());
+
+    foreach (['model_cache' => true, 'unreachable' => false] as $connection => $reachable) {
+        config()->set("database.redis.{$connection}", RedisClient::connection($reachable));
+        config()->set("cache.stores.{$connection}", ['driver' => 'redis', 'connection' => $connection]);
+    }
+
+    config()->set('cache-contract.store', 'model_cache');
+    // A fresh prefix per test: nothing to clean up, nothing shared between runs.
+    config()->set('cache-contract.prefix', 'cc_test_'.bin2hex(random_bytes(6)));
+
+    ModelCacheDatabase::create();
+});
+
+it('round-trips a model with its casts through Redis', function () {
+    $loaded = ModelCache::for(Member::class)->find(1);
+    $cached = null;
+
+    expect(QueryCounter::count(function () use (&$cached) {
+        $cached = ModelCache::for(Member::class)->find(1);
+    }))->toBe(0)
+        ->and($cached->getAttributes())->toBe($loaded->getAttributes())
+        ->and($cached->is_admin)->toBeTrue()
+        ->and($cached->settings)->toBe(['theme' => 'dark'])
+        ->and($cached->status)->toBe(MemberStatus::Active)
+        ->and($cached->last_login_at)->toBeInstanceOf(Carbon::class);
+});
+
+it('stores the raw attributes in the envelope', function () {
+    ModelCache::for(Member::class)->find(1);
+
+    $entry = Cache::store('model_cache')->get(ModelCache::for(Member::class)->key(1));
+
+    expect($entry)->toBeArray()->toHaveCount(1)
+        ->and($entry[0])->toBeArray()->toHaveKeys(['id', 'name', 'settings'])
+        ->and($entry[0]['settings'])->toBe('{"theme":"dark"}');
+});
+
+it('caches an ID with no row as null', function () {
+    ModelCache::for(Member::class)->find(999);
+
+    expect(Cache::store('model_cache')->get(ModelCache::for(Member::class)->key(999)))->toBe([null])
+        ->and(QueryCounter::count(fn () => ModelCache::for(Member::class)->find(999)))->toBe(0);
+});
+
+it('keeps tenants apart in Redis', function () {
+    expect(ModelCache::for(Project::class)->withContext(['tenant_id' => 7])->find(5)?->name)->toBe('Apollo');
+
+    app()->instance('fixture.tenant', 8);
+
+    expect(ModelCache::for(Project::class)->withContext(['tenant_id' => 8])->find(5))->toBeNull();
+});
+
+it('loads from the database when Redis is unreachable', function () {
+    config()->set('cache-contract.store', 'unreachable');
+    Exceptions::fake();
+
+    expect(ModelCache::for(Member::class)->find(1)?->name)->toBe('Ada');
+
+    Exceptions::assertReported(RedisClient::connectionError());
+});
+
+it('leaves no uncommitted row in Redis after a rollback', function () {
+    DB::beginTransaction();
+    Member::create([
+        'id' => 50, 'organization_id' => 1, 'name' => 'Uncommitted', 'password' => 'x', 'settings' => [],
+        'is_admin' => false, 'status' => MemberStatus::Active, 'last_login_at' => '2026-10-13 21:00:00',
+    ]);
+    expect(ModelCache::for(Member::class)->find(50)?->name)->toBe('Uncommitted')
+        ->and(ModelCache::for(Member::class)->findMany([1, 50]))->toHaveCount(2);
+    DB::rollBack();
+
+    expect(Cache::store('model_cache')->has(ModelCache::for(Member::class)->key(50)))->toBeFalse()
+        ->and(Cache::store('model_cache')->has(ModelCache::for(Member::class)->key(1)))->toBeFalse()
+        ->and(ModelCache::for(Member::class)->find(50))->toBeNull();
+});

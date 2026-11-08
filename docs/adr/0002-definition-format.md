@@ -1,0 +1,181 @@
+# 0002. Definition format: one sectioned PHP file with subject + purpose
+
+- **Status:** accepted
+- **Date:** 2026-10-09
+
+## Context
+
+Every cache entry type in an application is declared once, centrally. The
+format decides how developers read the catalogue, how duplicates are found,
+and how the registry is loaded at runtime.
+
+## Options
+
+### Format
+
+- **JSON / YAML file.** Language-neutral, but needs its own loader and cache
+  layer, and is unfamiliar in Laravel config.
+- **PHP enum or one class per definition.** Good IDE autocompletion, but
+  carrying metadata is awkward, and a class per definition drifts towards the
+  "class per model" pattern the mission rules out.
+- **PHP config array.** Familiar to every Laravel developer; works with
+  `php artisan config:cache`, so definitions are not parsed on every request.
+
+### Layout
+
+- **One file per domain** (`config/cache-keys/user.php`, …). Smaller files,
+  fewer merge conflicts, per-domain code owners. But a large app ends up with
+  many files, and reviewing or searching the catalogue means opening all of them.
+- **One file, split into sections.** The whole catalogue is in one place;
+  one file to read, search and review.
+
+## Decision
+
+Definitions live in **one PHP config file**, grouped into **sections**:
+
+```php
+// config/cache-contract.php
+use App\Models\Company;
+use App\Models\User;
+
+return [
+    'definitions' => [
+
+        // ── user ─────────────────────────────────────────
+        'user' => [
+            'active_list' => [
+                'subject'     => User::class,        // model the data is about
+                'purpose'     => 'active_list',      // what it is for: English, snake_case
+                'type'        => 'collection',       // model | collection | array | int | bool | string …
+                'params'      => ['tenant_id' => 'int'],
+                'ttl'         => 300,                // seconds, required
+                'version'     => 1,                  // bump when the cached shape changes (ADR 0004)
+                'description' => 'Active users of a tenant.',  // required, free text, any language
+                'tags'        => ['users'],          // optional, must be declared centrally
+            ],
+            'profile' => [
+                'subject'        => User::class,
+                'purpose'        => 'profile',
+                'type'           => 'array',
+                'params'         => ['user_id' => 'int'],
+                'ttl'            => 3600,
+                'description'    => 'Profile page data, including the company name.',
+                'invalidated_by' => [Company::class],  // optional: clear when a Company changes
+            ],
+        ],
+
+        // ── external ─────────────────────────────────────
+        'external' => [
+            'exchange_rates' => [
+                // no subject: the data does not belong to a model
+                'purpose'     => 'exchange_rates',
+                'type'        => 'array',
+                'ttl'         => 600,
+                'description' => 'Rates fetched from the central bank API.',
+            ],
+        ],
+
+        // ── order ────────────────────────────────────────
+        'order' => [
+            // ...
+        ],
+    ],
+];
+```
+
+- **IDs** are `section.name`, both parts snake_case: `user.active_list`,
+  `user.price_number`. The same name in two sections never collides.
+- **`subject` + `purpose`** describe what the data is. The same pair on two
+  definitions is an **exact duplicate and an error**, regardless of their
+  names. This catches semantic duplicates that name similarity cannot.
+- `description` is required, but it is free text and is not used for
+  similarity.
+- Unknown fields (e.g. a typo like `ttll`) are rejected.
+
+### Fields
+
+| Field | Required | Rule |
+| :--- | :--- | :--- |
+| `purpose` | yes | English, snake_case |
+| `type` | yes | one of `model`, `collection`, `array`, `string`, `int`, `float`, `bool`. Used for structural similarity in v1. |
+| `ttl` | yes | positive integer, seconds. **No "forever" entries in v1**: a missed invalidation would serve stale data indefinitely. |
+| `description` | yes | non-empty free text, any language |
+| `subject` | no | an existing Eloquent model class. Omitted for data that does not belong to a model (external APIs, settings, cross-table reports); such definitions are compared by name and structure only. |
+| `params` | no | name → type (`int`, `string`, `bool`, `float`, `array`). **Every declared parameter is required at call time in v1.** Optional parameters would let the same data live under two keys (with and without the parameter); if needed later, they come as parameters with a default value, so the key stays the same. |
+| `version` | no | positive integer, default `1` (ADR 0004) |
+| `tags` | no | list of centrally declared tag names |
+| `invalidated_by` | no | list of existing Eloquent model classes whose changes clear this definition. Part of the schema from v1 so it is validated early; the invalidation behaviour arrives in Phase 3. |
+- Model by-id caching needs no definition (see ADR 0006); only custom data
+  (profiles, lists, statistics) is defined here.
+
+**Duplicates inside the file:** PHP silently keeps the last value when an
+array key appears twice, so the runtime loader cannot see it. `cache-contract:lint`
+parses the file and reports duplicate keys. Lint runs in CI, so this is enforced.
+
+## Update 2026-10-21: the `secret` parameter type
+
+`params` accepts one more type, `secret`, next to `int`, `string`, `bool`,
+`float` and `array`. It takes a string and writes a keyed hash of it into the
+key instead of the value. A definition with a secret parameter needs
+`APP_KEY`; without it the definitions fail to load. The key format is in
+ADR 0004 (update of the same date).
+
+## Consequences
+
+- The catalogue is readable top to bottom in one file; search is one `grep`.
+- Several people adding definitions at once will cause more merge conflicts
+  in this file. Keeping sections in a fixed order and definitions alphabetical
+  within a section limits this.
+- String IDs get no IDE autocompletion. Typos are caught by lint and by the
+  runtime exception for unknown IDs. A generated IDE helper is possible later.
+- If the single file becomes unmanageable in practice, splitting is a new ADR;
+  IDs (`section.name`) would not need to change.
+
+## Update 2026-10-21: TTLs with units
+
+`ttl` also accepts a duration with units, so the unit is visible where the
+value is written: `'ttl' => '15 minutes'`, `'1 day'`, `'1h 30m'`. The public
+scan found TTLs whose unit was guessed wrong (a value written as minutes but
+passed as seconds) and many bare numbers.
+
+- **Units:** seconds, minutes, hours, days and weeks, long or short
+  (`s`, `m`, `h`, `d`, `w`). Several parts add up.
+- **Months and years are rejected:** their length in seconds is not fixed.
+- **A bare numeric string (`'300'`) is rejected:** its unit is not visible.
+  An integer is still read as seconds.
+- **At most 365 days**, for integers and durations alike. Without a limit,
+  a huge duration grew past an int and failed at boot with a `TypeError`,
+  and `PHP_INT_MAX` passed validation but made every Redis write fail
+  (`SETEX`: invalid expire time). The limit also catches typos such as an
+  extra `* 1000`. Entries that change are cleared on change (ADR 0009), so
+  a long TTL is rarely needed; one year leaves room for data that never
+  changes.
+- **No change elsewhere:** zero, negative and missing TTLs are still
+  rejected. The loader turns every TTL into seconds, so `Definition::$ttl`
+  stays an integer. `models.ttl` and the model overrides accept the same
+  forms.
+
+## Update 2026-10-30: tags are declared under `tags` (LRVL-40)
+
+"Declared centrally" now has a shape: a `tags` section next to
+`definitions`, mapping each tag name to a description.
+
+```php
+'tags' => [
+    'users' => 'Data shown about users.',
+],
+```
+
+- **A description is required**, as for a definition: the list is where a
+  team reads what each tag groups before it flushes one.
+- **Names are snake_case.** A tag's name is also its generation counter's
+  name (ADR 0009), next to the package's `model:{connection}:{database}:{table}`
+  and `def:{id}` counters. snake_case has no `:`, so a tag can never take one
+  of those names; a name starting with `model:` or `def:` gets an error that
+  says so.
+- **A definition may only carry declared tags.** An undeclared one is a
+  definition error, reported with the others and with a suggestion for a
+  typo. `CacheContract::flushTag()` throws `UnknownTag` for an undeclared
+  tag, because a typo there would otherwise clear nothing, unnoticed.
+- The tag list is read by a plain `TagRegistry` class, not a contract: no
+  application needs to replace it, and `DefinitionRegistry` stays unchanged.

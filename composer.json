@@ -1,0 +1,88 @@
+{
+    "name": "uslanozan/laravel-cache-contract",
+    "description": "Central, reviewable cache definitions for Laravel: generated keys, duplicate detection, Eloquent model caching and CI enforcement on top of Laravel's cache and Redis.",
+    "keywords": [
+        "laravel",
+        "cache",
+        "redis",
+        "eloquent",
+        "cache-keys"
+    ],
+    "homepage": "https://github.com/uslanozan/laravel-cache-contract",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ozan Uslan",
+            "homepage": "https://github.com/uslanozan"
+        },
+        {
+            "name": "Barış Tepe",
+            "homepage": "https://github.com/baristp04"
+        },
+        {
+            "name": "Ayselin Aydoğdu",
+            "homepage": "https://github.com/ayselinaydogdu"
+        }
+    ],
+    "require": {
+        "php": "~8.3.36 || ~8.4.27 || ^8.5.12",
+        "illuminate/contracts": "^11.44.2 || ^12.0.1 || ^13.0",
+        "illuminate/database": "^11.44.2 || ^12.0.1 || ^13.0",
+        "illuminate/support": "^11.44.2 || ^12.0.1 || ^13.0",
+        "nikic/php-parser": "^5.4"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "pestphp/pest": "^3.8 || ^4.0",
+        "predis/predis": "^2.3"
+    },
+    "suggest": {
+        "ext-redis": "phpredis, one of the two supported Redis clients",
+        "predis/predis": "The other supported Redis client (^2.3)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Uslanozan\\CacheContract\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Uslanozan\\CacheContract\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:coverage": "@php -d memory_limit=1G vendor/bin/pest --coverage --min=95",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "lint": "pint --test",
+        "format": "pint"
+    },
+    "scripts-descriptions": {
+        "test": "Run the test suite",
+        "test:coverage": "Run the test suite with line coverage of src/ (pcov); fails below 95%",
+        "analyse": "Run static analysis (Larastan, level 8)",
+        "lint": "Check code style without changing files",
+        "format": "Fix code style"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Uslanozan\\CacheContract\\CacheContractServiceProvider"
+            ],
+            "aliases": {
+                "CacheContract": "Uslanozan\\CacheContract\\Facades\\CacheContract",
+                "ModelCache": "Uslanozan\\CacheContract\\Facades\\ModelCache"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -8,7 +8,7 @@ Thanks for helping! This guide gets you from a fresh clone to a merged PR.
 - Git
 
 PHP, Composer and Redis run inside containers, so you do not need them on your
-machine. (If you do have PHP 8.3+ locally, you can run the same commands
+machine. (If you do have PHP 8.3.36+, 8.4.27+ or 8.5.12+ locally, you can run the same commands
 without the `docker compose exec php` prefix.)
 
 ## Setup
@@ -34,27 +34,36 @@ docker compose exec redis redis-cli ping   # PONG
 | What | Command |
 | :--- | :--- |
 | Run tests | `docker compose exec php composer test` |
+| Run tests on predis | `docker compose exec -e REDIS_CLIENT=predis php composer test` |
+| Run tests with coverage | `docker compose exec php composer test:coverage` (fails below 95%) |
 | Static analysis | `docker compose exec php composer analyse` |
 | Check code style | `docker compose exec php composer lint` |
 | Fix code style | `docker compose exec php composer format` |
 | Shell inside the container | `docker compose exec php bash` |
-| Try another PHP version | `PHP_VERSION=8.5 docker compose up -d --build` |
+| Try another PHP version | `PHP_VERSION=8.5.12 docker compose up -d --build` |
 | Stop everything | `docker compose down` |
 
-> The Composer scripts arrive with the package skeleton (roadmap phase 0).
 > CI runs exactly these scripts, so a green run locally means a green run in CI.
+> The full matrix uses phpredis and Redis 7.4; five more jobs run predis on
+> each Laravel version and Redis 6.2 (the oldest supported) on both clients,
+> and one job measures coverage.
 
 ## Workflow
 
-1. Pick or create an issue in Linear (or GitHub). Larger design changes start
-   as a *Design proposal* issue and end as an ADR in `docs/adr/`.
-2. Branch from `develop`: `feat/CACHE-12-short-description`.
+1. Pick or create an issue in Linear (or GitHub) and move it to **In Progress**
+   before you start. Larger design changes start as a *Design proposal* issue
+   and end as an ADR in `docs/adr/`.
+2. Branch from `develop`: `feat/lrvl-12-short-description` (copy the name from
+   Linear with `Ctrl+Shift+.` and add the type prefix).
    See [docs/branching-strategy.md](docs/branching-strategy.md).
 3. Commit using [Conventional Commits](docs/commit-convention.md).
 4. Open a PR into `develop`. Fill in the template; the **Why?** section and the
    **Cache behaviour impact** section matter most.
 5. Get one approval, keep the checks green, resolve all threads, then merge
    (squash).
+
+The full set of working rules, also used by AI coding agents, is in
+[AGENTS.md](AGENTS.md).
 
 ## Standards
 

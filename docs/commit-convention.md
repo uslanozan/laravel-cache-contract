@@ -11,7 +11,7 @@ changelog.
 
 [optional body: why, not what]
 
-[optional footer: BREAKING CHANGE: …, Refs: CACHE-12]
+[optional footer: BREAKING CHANGE: …, Refs: LRVL-12]
 ```
 
 - **subject:** imperative, lowercase, no trailing period, about 72 characters max.
@@ -50,7 +50,7 @@ already stored in Redis unreachable.
 feat(keys)!: include definition version in generated keys
 
 BREAKING CHANGE: keys written by 0.x are no longer read. They expire by TTL;
-run `php artisan managed-cache:flush-legacy` to remove them earlier.
+run `php artisan cache-contract:flush-legacy` to remove them earlier.
 ```
 
 While the package is below `1.0.0`, breaking changes bump the **minor**
@@ -63,7 +63,7 @@ version (`0.3.0` → `0.4.0`), following SemVer's rule for initial development.
 | `definitions` | Definition schema, loading, validation |
 | `registry` | Definition registry |
 | `keys` | Key generation, canonicalization |
-| `api` | `ManagedCache` runtime API |
+| `api` | `CacheContract` runtime API |
 | `eloquent` | Model cache, bulk loading |
 | `invalidation` | Tags, versions, model events |
 | `scanner` | Source code scanning |

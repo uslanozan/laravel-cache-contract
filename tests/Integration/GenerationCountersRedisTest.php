@@ -1,0 +1,82 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
+use Uslanozan\CacheContract\Runtime\GenerationCounters;
+use Uslanozan\CacheContract\Runtime\RedisErrorMode;
+use Uslanozan\CacheContract\Runtime\RedisErrorPolicy;
+use Uslanozan\CacheContract\Runtime\RedisOperation;
+use Uslanozan\CacheContract\Tests\Support\RedisClient;
+
+/*
+ * Generation counters (ADR 0009) against real Redis: values are random ints
+ * that survive Redis (envelope), stay stable until bumped, and follow the
+ * Redis error policy when Redis is down.
+ */
+
+beforeEach(function () {
+    config()->set('database.redis.client', RedisClient::name());
+
+    foreach (['counters' => true, 'unreachable' => false] as $connection => $reachable) {
+        config()->set("database.redis.{$connection}", RedisClient::connection($reachable));
+        config()->set("cache.stores.{$connection}", ['driver' => 'redis', 'connection' => $connection]);
+    }
+
+    $this->prefix = 'cc_test_'.bin2hex(random_bytes(6));
+});
+
+function countersFor(string $store, string $prefix, RedisErrorPolicy $errors = new RedisErrorPolicy): GenerationCounters
+{
+    return new GenerationCounters(app('cache'), $errors, $prefix, $store);
+}
+
+it('creates a counter once, as an int, and keeps it until it is bumped', function () {
+    $counters = countersFor('counters', $this->prefix);
+
+    $first = $counters->currentOrFail(['users', 'def:company.summary']);
+    $again = $counters->currentOrFail(['users', 'def:company.summary']);
+
+    expect($first['users'])->toBeInt()->toBeGreaterThan(0)
+        ->and($again)->toBe($first)
+        // Stored in the envelope, so Redis gives back an int, not "8123".
+        ->and(Cache::store('counters')->get($this->prefix.':gen:users'))->toBe([$first['users']]);
+});
+
+it('gives a counter a new value when it is bumped', function () {
+    $counters = countersFor('counters', $this->prefix);
+    $before = $counters->currentOrFail(['users'])['users'];
+
+    expect($counters->bump(['users']))->toBeTrue()
+        ->and($counters->currentOrFail(['users'])['users'])->not->toBe($before);
+});
+
+it('uses a counter another process created first', function () {
+    Cache::store('counters')->put($this->prefix.':gen:users', [4242], 60);
+
+    expect(countersFor('counters', $this->prefix)->currentOrFail(['users']))->toBe(['users' => 4242]);
+});
+
+it('replaces an entry that is not a counter', function () {
+    Cache::store('counters')->put($this->prefix.':gen:users', 'garbage', 60);
+    $counters = countersFor('counters', $this->prefix);
+
+    $value = $counters->currentOrFail(['users'])['users'];
+
+    expect($value)->toBeInt()
+        ->and($counters->currentOrFail(['users'])['users'])->toBe($value);
+});
+
+it('follows the Redis error policy when Redis is unreachable', function () {
+    Exceptions::fake();
+    $counters = countersFor('unreachable', $this->prefix);
+    $throwing = countersFor('unreachable', $this->prefix, new RedisErrorPolicy(read: RedisErrorMode::Throw));
+
+    expect($counters->current(['users'], RedisOperation::Read))->toBeFalse()
+        ->and($counters->bump(['users']))->toBeFalse()
+        ->and(fn () => $throwing->current(['users'], RedisOperation::Read))->toThrow(RedisClient::connectionError())
+        ->and(fn () => $counters->currentOrFail(['users']))->toThrow(RedisClient::connectionError());
+
+    Exceptions::assertReported(RedisClient::connectionError());
+});

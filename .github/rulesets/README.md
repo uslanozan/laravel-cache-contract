@@ -12,8 +12,9 @@ and have a history.
 | Last push must be approved by someone else | ✅ | ✅ |
 | All review threads resolved | ✅ | ✅ |
 | Required checks: `CI result`, `PR title`, `Branch flow` | ✅ | ✅ |
+| Required check: `Dependencies` (`Depends on #N` merged first) | ✅ | ❌ |
 | Branch must be up to date with base | ✅ | ✅ |
-| Allowed merge methods | squash (features), merge (back-merges) | merge commit only |
+| Allowed merge methods | squash only | merge commit only |
 | Force push / deletion | ❌ | ❌ |
 | **Bypass** | Repository admin | Repository admin |
 
@@ -21,6 +22,13 @@ and have a history.
 built-in *Admin* repository role. On a personal repository only the owner
 (@uslanozan) is admin; collaborators get *Write*. The owner can therefore push
 directly and merge without approval; everyone else goes through a reviewed PR.
+
+**Why `develop` allows squash only:** each feature PR becomes exactly one
+Conventional Commit on `develop` (its title), which is what the changelog is
+generated from. Merge commits would bring every work-in-progress commit and
+`Merge branch 'develop' into …` along. The one case that needs a merge commit
+into `develop`, the back-merge of `main` after a hotfix, is done by the owner
+(see `docs/branching-strategy.md`).
 
 **Why `main` allows merge commits only:** `develop` → `main` must keep the
 individual commits. Squashing would give `main` a commit that `develop` does

@@ -129,6 +129,24 @@ describe('the model cache', function () {
         expect(Member::cachedMany([1, 2])->pluck('name')->all())->toBe(['Ada', 'Member 2']);
     });
 
+    it('accepts a models.ttl shorter than the default null_ttl in the config as shipped', function () {
+        // A published config file, with only models.ttl lowered: null_ttl is not set,
+        // so the 60 s default is shortened to the TTL instead of failing.
+        $shipped = require __DIR__.'/../../config/cache-contract.php';
+        config()->set('cache-contract.models', ['ttl' => 30] + $shipped['models']);
+
+        expect(array_key_exists('null_ttl', $shipped['models']))->toBeFalse();
+
+        ModelCache::for(Member::class)->find(2);
+        insertMemberQuietly(2);
+
+        $this->travel(29)->seconds();
+        expect(ModelCache::for(Member::class)->find(2))->toBeNull();
+
+        $this->travel(2)->seconds();
+        expect(ModelCache::for(Member::class)->find(2)?->name)->toBe('Member 2');
+    });
+
     it('takes models.null_ttl, a per-model override, and null for as long as a row', function (array $models, int $expiresAfter) {
         config()->set('cache-contract.models', $models + ['ttl' => 3600]);
 
